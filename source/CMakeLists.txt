@@ -101,6 +101,9 @@ ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_generator.h
+${CMAKE_CURRENT_LIST_DIR}/image_mask_generator.h
 )
 
 set(rme_SRC
@@ -201,4 +204,7 @@ ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_reader.cpp
 ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_value.cpp
 ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_writer.cpp
+${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/procedural_generator.cpp
+${CMAKE_CURRENT_LIST_DIR}/image_mask_generator.cpp
 )

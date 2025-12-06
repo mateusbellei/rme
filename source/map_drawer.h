@@ -68,6 +68,7 @@ struct DrawingOptions {
 	bool show_houses;
 	bool show_shade;
 	bool show_special_tiles;
+	bool show_zone_areas;
 	bool show_items;
 
 	bool highlight_items;

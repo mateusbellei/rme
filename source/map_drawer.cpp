@@ -66,6 +66,7 @@ void DrawingOptions::SetDefault() {
 	show_houses = true;
 	show_shade = true;
 	show_special_tiles = true;
+	show_zone_areas = true;
 	show_items = true;
 
 	highlight_items = false;
@@ -98,6 +99,7 @@ void DrawingOptions::SetIngame() {
 	show_houses = false;
 	show_shade = false;
 	show_special_tiles = false;
+	show_zone_areas = false;
 	show_items = true;
 
 	highlight_items = false;
@@ -407,6 +409,23 @@ void MapDrawer::DrawMap() {
 							}
 							if (options.show_special_tiles && tile->getMapFlags() & TILESTATE_NOPVP) {
 								g /= 2;
+							}
+							if (options.show_zone_areas && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
+								const std::vector<uint16_t>& zones = tile->getZoneIds();
+								if (!zones.empty()) {
+									uint32_t rSum = 0, gSum = 0, bSum = 0;
+									for (uint16_t zid : zones) {
+										// simple stable hash -> color mapping
+										uint8_t cr = static_cast<uint8_t>(100 + (zid * 73) % 156);
+										uint8_t cg = static_cast<uint8_t>(100 + (zid * 151) % 156);
+										uint8_t cb = static_cast<uint8_t>(100 + (zid * 197) % 156);
+										rSum += cr; gSum += cg; bSum += cb;
+									}
+									uint32_t n = static_cast<uint32_t>(zones.size());
+									r = static_cast<uint8_t>(rSum / n);
+									g = static_cast<uint8_t>(gSum / n);
+									b = static_cast<uint8_t>(bSum / n);
+								}
 							}
 							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, 160);
 						}

@@ -70,6 +70,7 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 
 	wxBitmap* border_bitmap = loadPNGFile(optional_border_small_png);
 	wxBitmap* eraser_bitmap = loadPNGFile(eraser_small_png);
+	wxBitmap* zone_brush_bitmap = loadPNGFile(pvp_zone_small_png);
 	wxBitmap pz_bitmap = wxArtProvider::GetBitmap(ART_PZ_BRUSH, wxART_TOOLBAR, icon_size);
 	wxBitmap nopvp_bitmap = wxArtProvider::GetBitmap(ART_NOPVP_BRUSH, wxART_TOOLBAR, icon_size);
 	wxBitmap nologout_bitmap = wxArtProvider::GetBitmap(ART_NOLOOUT_BRUSH, wxART_TOOLBAR, icon_size);
@@ -88,6 +89,8 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 	brushes_toolbar->SetToolBitmapSize(icon_size);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, wxEmptyString, *border_bitmap, wxNullBitmap, wxITEM_CHECK, "Border", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_ERASER, wxEmptyString, *eraser_bitmap, wxNullBitmap, wxITEM_CHECK, "Eraser", wxEmptyString, NULL);
+	brushes_toolbar->AddSeparator();
+	brushes_toolbar->AddTool(PALETTE_TERRAIN_ZONE_BRUSH, wxEmptyString, *zone_brush_bitmap, wxNullBitmap, wxITEM_CHECK, "Zone Brush", wxEmptyString, NULL);
 	brushes_toolbar->AddSeparator();
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_PZ_TOOL, wxEmptyString, pz_bitmap, wxNullBitmap, wxITEM_CHECK, "Protected Zone", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_NOPVP_TOOL, wxEmptyString, nopvp_bitmap, wxNullBitmap, wxITEM_CHECK, "No PvP Zone", wxEmptyString, NULL);
@@ -205,6 +208,7 @@ void MainToolBar::UpdateButtons() {
 
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_ERASER, has_map);
+	brushes_toolbar->EnableTool(PALETTE_TERRAIN_ZONE_BRUSH, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_PZ_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NOPVP_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, has_map);
@@ -244,6 +248,7 @@ void MainToolBar::UpdateBrushButtons() {
 	if (brush) {
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, brush == g_gui.optional_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ERASER, brush == g_gui.eraser);
+		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, brush == g_gui.zone_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PZ_TOOL, brush == g_gui.pz_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOPVP_TOOL, brush == g_gui.rook_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, brush == g_gui.nolog_brush);
@@ -259,6 +264,7 @@ void MainToolBar::UpdateBrushButtons() {
 	} else {
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ERASER, false);
+		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PZ_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOPVP_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, false);
@@ -463,6 +469,9 @@ void MainToolBar::OnBrushesButtonClick(wxCommandEvent& event) {
 			break;
 		case PALETTE_TERRAIN_ERASER:
 			g_gui.SelectBrush(g_gui.eraser);
+			break;
+		case PALETTE_TERRAIN_ZONE_BRUSH:
+			g_gui.SelectBrush(g_gui.zone_brush);
 			break;
 		case PALETTE_TERRAIN_PZ_TOOL:
 			g_gui.SelectBrush(g_gui.pz_brush);

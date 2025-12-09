@@ -27,6 +27,7 @@
 
 class GUI;
 class BrushButton;
+class wxSpinCtrl;
 class TilesetCategory;
 class BrushSizePanel;
 class BrushPalettePanel;
@@ -34,39 +35,6 @@ class PaletteWindow;
 
 typedef TilesetCategoryType PaletteType;
 
-class ZoneBrushPanel : public PalettePanel {
-public:
-	ZoneBrushPanel(wxWindow* parent);
-	~ZoneBrushPanel() { }
-
-	// Interface
-	void InvalidateContents();
-	void LoadCurrentContents();
-	void LoadAllContents();
-
-	Brush* GetSelectedBrush() const;
-	bool SelectBrush(const Brush* whatbrush);
-
-	wxString GetName() const;
-	void SetToolbarIconSize(bool large);
-	void OnZoneIdChange(wxCommandEvent& WXUNUSED(event));
-
-	// Called when this page is displayed
-	void OnSwitchIn();
-
-	// wxWidgets event handling
-	void OnClickZoneBrushButton(wxCommandEvent& event);
-	void DeselectAll();
-
-protected:
-	bool loaded;
-	bool large_icons;
-
-	BrushButton* zoneButton;
-	wxSpinCtrl* zoneIdSpin;
-
-	DECLARE_EVENT_TABLE()
-};
 class BrushButton : public ItemToggleButton {
 public:
 	BrushButton(wxWindow* parent, Brush* brush, RenderSize, uint32_t id = wxID_ANY);
@@ -289,6 +257,40 @@ public:
 public:
 	wxSlider* slider;
 	wxCheckBox* use_button;
+
+	DECLARE_EVENT_TABLE()
+};
+
+class ZoneBrushPanel : public PalettePanel {
+public:
+	ZoneBrushPanel(wxWindow* parent);
+	~ZoneBrushPanel() { }
+
+	// Interface
+	void InvalidateContents();
+	void LoadCurrentContents();
+	void LoadAllContents();
+
+	Brush* GetSelectedBrush() const;
+	bool SelectBrush(const Brush* whatbrush);
+
+	wxString GetName() const;
+	void SetToolbarIconSize(bool large);
+	void OnZoneIdChange(wxCommandEvent& WXUNUSED(event));
+
+	// Called when this page is displayed
+	void OnSwitchIn();
+
+	// wxWidgets event handling
+	void OnClickZoneBrushButton(wxCommandEvent& event);
+	void DeselectAll();
+
+protected:
+	bool loaded;
+	bool large_icons;
+
+	BrushButton* zoneButton;
+	wxSpinCtrl* zoneIdSpin;
 
 	DECLARE_EVENT_TABLE()
 };

@@ -24,12 +24,13 @@
 #include "common_windows.h"
 #include "application.h"
 #include "palette_waypoints.h"
+#include <wx/spinctrl.h>
 
 // ============================================================================
 // Palette Panel
 
 BEGIN_EVENT_TABLE(PalettePanel, wxPanel)
-EVT_TIMER(PALETTE_DELAYED_REFRESH_TIMER, WaypointPalettePanel::OnRefreshTimer)
+EVT_TIMER(PALETTE_DELAYED_REFRESH_TIMER, PalettePanel::OnRefreshTimer)
 END_EVENT_TABLE()
 
 PalettePanel::PalettePanel(wxWindow* parent, wxWindowID id, long style) :
@@ -170,7 +171,7 @@ void PalettePanel::OnRefreshTimer(wxTimerEvent&) {
 // ============================================================================
 // Zone brush Page
 
-BEGIN_EVENT_TABLE(ZoneBrushPanel, wxPanel)
+BEGIN_EVENT_TABLE(ZoneBrushPanel, PalettePanel)
 EVT_TOGGLEBUTTON(PALETTE_TERRAIN_ZONE_BRUSH, ZoneBrushPanel::OnClickZoneBrushButton)
 END_EVENT_TABLE()
 

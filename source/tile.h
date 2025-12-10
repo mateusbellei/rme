@@ -360,7 +360,7 @@ inline void Tile::setZoneIds(Tile* tile) {
 }
 
 inline void Tile::removeZoneId(uint16_t _zoneId) {
-	const auto itZone = std::find(zoneIds.begin(), zoneIds.end(), _zoneId);
+	const auto& itZone = std::find(zoneIds.begin(), zoneIds.end(), _zoneId);
 	if (itZone != zoneIds.end()) {
 		zoneIds.erase(itZone);
 	}
@@ -374,6 +374,7 @@ inline uint16_t Tile::getZoneId() const {
 	if (zoneIds.empty()) {
 		return 0;
 	}
+
 	return zoneIds.front();
 }
 

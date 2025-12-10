@@ -44,8 +44,44 @@
 #include "waypoint_brush.h"
 #include "light_drawer.h"
 
+using Color = std::tuple<int, int, int>;
+
+static std::vector<Color> colors;
+void GenerateColors() {
+	int r = 250, g = 100, b = 100;
+	const int step = 25;
+	bool incrementing = true;
+
+	while (true) {
+		if (std::find(colors.begin(), colors.end(), Color({ r, g, b })) == colors.end()) {
+			colors.push_back({ r, g, b });
+		}
+
+		if (g < 250 && incrementing) {
+			g += step;
+		} else if (r > 100 && !incrementing && g == 250) {
+			r -= step;
+		} else if (b < 250 && r == 100) {
+			b += step;
+		} else if (g > 100 && b == 250) {
+			g -= step;
+		} else if (r < 250 && g == 100) {
+			r += step;
+		} else if (b > 100 && r == 250) {
+			b -= step;
+		} else if (b == 100 && g == 250) {
+			incrementing = false;
+		}
+
+		if (r == 250 && g == 100 && b == 100 && !incrementing) {
+			break;
+		}
+	}
+}
+
 DrawingOptions::DrawingOptions() {
 	SetDefault();
+	GenerateColors();
 }
 
 void DrawingOptions::SetDefault() {
@@ -301,6 +337,7 @@ void MapDrawer::DrawMap() {
 			int nd_end_x = (end_x & ~3) + 4;
 			int nd_end_y = (end_y & ~3) + 4;
 
+			zoneTiles.clear();
 			for (int nd_map_x = nd_start_x; nd_map_x <= nd_end_x; nd_map_x += 4) {
 				for (int nd_map_y = nd_start_y; nd_map_y <= nd_end_y; nd_map_y += 4) {
 					QTreeNode* nd = editor.map.getLeaf(nd_map_x, nd_map_y);
@@ -341,6 +378,41 @@ void MapDrawer::DrawMap() {
 						glVertex2f(cx, cy);
 						glEnd();
 					}
+				}
+			}
+
+			for (auto& itZonePos : zoneTiles) {
+				ZoneFinder finder(itZonePos.second);
+				auto zones = finder.findZones();
+
+				for (const auto& itZone : zones) {
+					const FinderPosition center = finder.findClosestToCenter(itZone);
+
+					QTreeNode* nd = editor.getMap().getLeaf(center.x, center.y);
+					TileLocation* location = nd->getTile(center.x, center.y, center.z);
+
+					const Tile* tile = location->get();
+
+					std::ostringstream tooltip;
+					tooltip << "zone id: ";
+					size_t zones = tile->getZoneIds().size();
+					for (const auto& zoneId : tile->getZoneIds()) {
+						tooltip << zoneId;
+						if (--zones > 0) {
+							tooltip << "/";
+						}
+					}
+
+					int offset;
+					if (map_z <= GROUND_LAYER) {
+						offset = (GROUND_LAYER - map_z) * TileSize;
+					} else {
+						offset = TileSize * (floor - map_z);
+					}
+
+					int draw_x = ((tile->getX() * TileSize) - view_scroll_x) - offset;
+					int draw_y = ((tile->getY() * TileSize) - view_scroll_y) - offset;
+					MakeTooltip(draw_x, draw_y + 8, tooltip.str());
 				}
 			}
 		}
@@ -410,45 +482,23 @@ void MapDrawer::DrawMap() {
 							if (options.show_special_tiles && tile->getMapFlags() & TILESTATE_NOPVP) {
 								g /= 2;
 							}
-							if (options.show_zone_areas && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
-								const std::vector<uint16_t>& zones = tile->getZoneIds();
-								if (!zones.empty()) {
-									uint32_t rSum = 0, gSum = 0, bSum = 0;
-									for (uint16_t zid : zones) {
-										// simple stable hash -> color mapping
-										uint8_t cr = static_cast<uint8_t>(100 + (zid * 73) % 156);
-										uint8_t cg = static_cast<uint8_t>(100 + (zid * 151) % 156);
-										uint8_t cb = static_cast<uint8_t>(100 + (zid * 197) % 156);
-										rSum += cr; gSum += cg; bSum += cb;
-									}
-									uint32_t n = static_cast<uint32_t>(zones.size());
-									r = static_cast<uint8_t>(rSum / n);
-									g = static_cast<uint8_t>(gSum / n);
-									b = static_cast<uint8_t>(bSum / n);
+							if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
+								size_t zones = tile->getZoneIds().size();
+								uint16_t r16 = 0, g16 = 0, b16 = 0;
+								for (const auto& zoneId : tile->getZoneIds()) {
+									const uint16_t colorIndex = zoneId % colors.size();
+									const Color colour = colors.at(colorIndex);
+
+									r16 += std::get<0>(colour);
+									g16 += std::get<1>(colour);
+									b16 += std::get<2>(colour);
 								}
+
+								r = r16 / zones;
+								g = g16 / zones;
+								b = b16 / zones;
 							}
 							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, 160);
-						}
-						// If requested, also visualize zones even when there is no ground on this tile
-						if ((!tile->ground) && options.always_show_zones && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
-							const std::vector<uint16_t>& zones = tile->getZoneIds();
-							if (!zones.empty()) {
-								uint32_t rSum = 0, gSum = 0, bSum = 0;
-								for (uint16_t zid : zones) {
-									uint8_t cr = static_cast<uint8_t>(100 + (zid * 73) % 156);
-									uint8_t cg = static_cast<uint8_t>(100 + (zid * 151) % 156);
-									uint8_t cb = static_cast<uint8_t>(100 + (zid * 197) % 156);
-									rSum += cr; gSum += cg; bSum += cb;
-								}
-								uint32_t n = static_cast<uint32_t>(zones.size());
-								wxColor c(static_cast<uint8_t>(rSum / n),
-								          static_cast<uint8_t>(gSum / n),
-								          static_cast<uint8_t>(bSum / n),
-								          120);
-								glDisable(GL_TEXTURE_2D);
-								drawFilledRect(draw_x, draw_y, draw_x + TileSize, draw_y + TileSize, c);
-								glEnable(GL_TEXTURE_2D);
-							}
 						}
 
 						// Draw items on the tile
@@ -1449,7 +1499,7 @@ void MapDrawer::DrawRawBrush(int screenx, int screeny, ItemType* itemType, uint8
 	BlitSpriteType(screenx, screeny, spr, r, g, b, alpha);
 }
 
-void MapDrawer::WriteTooltip(Item* item, std::ostringstream& stream, bool isHouseTile) {
+void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream, bool isHouseTile) {
 	if (item == nullptr) {
 		return;
 	}
@@ -1459,6 +1509,7 @@ void MapDrawer::WriteTooltip(Item* item, std::ostringstream& stream, bool isHous
 		return;
 	}
 
+	const auto& zoneIds = tile->getZoneIds();
 	const uint16_t unique = item->getUniqueID();
 	const uint16_t action = item->getActionID();
 	const std::string& text = item->getText();
@@ -1473,7 +1524,7 @@ void MapDrawer::WriteTooltip(Item* item, std::ostringstream& stream, bool isHous
 	}
 
 	Teleport* tp = dynamic_cast<Teleport*>(item);
-	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp) {
+	if (unique == 0 && action == 0 && doorId == 0 && text.empty() && !tp && zoneIds.empty()) {
 		return;
 	}
 
@@ -1481,7 +1532,18 @@ void MapDrawer::WriteTooltip(Item* item, std::ostringstream& stream, bool isHous
 		stream << "\n";
 	}
 
-	stream << "id: " << id << "\n";
+	if (!zoneIds.empty()) {
+		for (auto& zoneId : zoneIds) {
+			auto itZone = zoneTiles.find(zoneId);
+			if (itZone == zoneTiles.end()) {
+				zoneTiles.emplace(zoneId, std::vector<FinderPosition>({ FinderPosition(tile->getX(), tile->getY(), tile->getZ()) }));
+			} else {
+				itZone->second.push_back(FinderPosition(tile->getX(), tile->getY(), tile->getZ()));
+			}
+		}
+	} else {
+		stream << "id: " << id << "\n";
+	}
 
 	if (action > 0) {
 		stream << "aid: " << action << "\n";
@@ -1599,22 +1661,21 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			g /= 2;
 		}
 
-		// Zone shading: colorize tile according to zone ids when enabled
-		if (options.show_zone_areas && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
-			const std::vector<uint16_t>& zones = tile->getZoneIds();
-			if (!zones.empty()) {
-				uint32_t rSum = 0, gSum = 0, bSum = 0;
-				for (uint16_t zid : zones) {
-					uint8_t cr = static_cast<uint8_t>(100 + (zid * 73) % 156);
-					uint8_t cg = static_cast<uint8_t>(100 + (zid * 151) % 156);
-					uint8_t cb = static_cast<uint8_t>(100 + (zid * 197) % 156);
-					rSum += cr; gSum += cg; bSum += cb;
-				}
-				uint32_t n = static_cast<uint32_t>(zones.size());
-				r = static_cast<uint8_t>(rSum / n);
-				g = static_cast<uint8_t>(gSum / n);
-				b = static_cast<uint8_t>(bSum / n);
+		if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
+			size_t zones = tile->getZoneIds().size();
+			uint16_t r16 = 0, g16 = 0, b16 = 0;
+			for (const auto& zoneId : tile->getZoneIds()) {
+				const uint16_t colorIndex = zoneId % colors.size();
+				const Color colour = colors.at(colorIndex);
+
+				r16 += std::get<0>(colour);
+				g16 += std::get<1>(colour);
+				b16 += std::get<2>(colour);
 			}
+
+			r = r16 / zones;
+			g = g16 / zones;
+			b = b16 / zones;
 		}
 	}
 
@@ -1635,14 +1696,13 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			}
 
 			BlitItem(draw_x, draw_y, tile, tile->ground, false, r, g, b);
-		} else if (options.always_show_zones && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
-			// Draw colored square for zone even without ground
+		} else if (options.always_show_zones && (r != 255 || g != 255 || b != 255)) {
 			DrawRawBrush(draw_x, draw_y, &g_items[SPRITE_ZONE], r, g, b, 60);
 		}
 	}
 
 	if (options.show_tooltips && map_z == floor && tile->ground) {
-		WriteTooltip(tile->ground, tooltip);
+		WriteTooltip(tile, tile->ground, tooltip, tile->isHouseTile());
 	}
 	// end filters for ground tile
 
@@ -1652,7 +1712,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			for (ItemVector::iterator it = tile->items.begin(); it != tile->items.end(); it++) {
 				// item tooltip
 				if (options.show_tooltips && map_z == floor) {
-					WriteTooltip(*it, tooltip, tile->isHouseTile());
+					WriteTooltip(tile, *it, tooltip, tile->isHouseTile());
 				}
 
 				// item animation
@@ -1714,20 +1774,6 @@ void MapDrawer::DrawTile(TileLocation* location) {
 
 			// tooltips
 			if (options.show_tooltips) {
-				// Append zone ids tooltip when present
-				if (tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
-					const auto& zones = tile->getZoneIds();
-					if (!zones.empty()) {
-						if (tooltip.tellp() > 0) {
-							tooltip << "\n";
-						}
-						tooltip << "zones: ";
-						for (size_t i = 0; i < zones.size(); ++i) {
-							if (i) tooltip << ", ";
-							tooltip << zones[i];
-						}
-					}
-				}
 				if (location->getWaypointCount() > 0) {
 					MakeTooltip(draw_x, draw_y, tooltip.str(), 0, 255, 0);
 				} else {

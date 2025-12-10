@@ -925,6 +925,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f) {
 										if (!tileNode->getU16(zoneId)) {
 											warning("Invalid zone id of tile on %d:%d:%d", pos.x, pos.y, pos.z);
 										}
+
 										if (zoneId != 0) {
 											tile->addZoneId(zoneId);
 										}

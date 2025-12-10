@@ -25,7 +25,6 @@
 #include "artprovider.h"
 #include <wx/artprov.h>
 #include <wx/mstream.h>
-#include <wx/filename.h>
 
 const wxString MainToolBar::STANDARD_BAR_NAME = "standard_toolbar";
 const wxString MainToolBar::BRUSHES_BAR_NAME = "brushes_toolbar";
@@ -71,22 +70,6 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 
 	wxBitmap* border_bitmap = loadPNGFile(optional_border_small_png);
 	wxBitmap* eraser_bitmap = loadPNGFile(eraser_small_png);
-	// Prefer custom zone icon from brushes/zone.png; fallback to embedded PVP zone icon if unavailable
-	wxBitmap* zone_brush_bitmap = nullptr;
-	{
-		wxFileName zoneIcon(g_gui.m_dataDirectory, "brushes/zone.png");
-		if (zoneIcon.FileExists()) {
-			wxBitmap* fileBmp = newd wxBitmap(zoneIcon.GetFullPath(), wxBITMAP_TYPE_PNG);
-			if (fileBmp->IsOk()) {
-				zone_brush_bitmap = fileBmp;
-			} else {
-				delete fileBmp;
-			}
-		}
-		if (!zone_brush_bitmap) {
-			zone_brush_bitmap = loadPNGFile(pvp_zone_small_png);
-		}
-	}
 	wxBitmap pz_bitmap = wxArtProvider::GetBitmap(ART_PZ_BRUSH, wxART_TOOLBAR, icon_size);
 	wxBitmap nopvp_bitmap = wxArtProvider::GetBitmap(ART_NOPVP_BRUSH, wxART_TOOLBAR, icon_size);
 	wxBitmap nologout_bitmap = wxArtProvider::GetBitmap(ART_NOLOOUT_BRUSH, wxART_TOOLBAR, icon_size);
@@ -106,12 +89,11 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, wxEmptyString, *border_bitmap, wxNullBitmap, wxITEM_CHECK, "Border", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_ERASER, wxEmptyString, *eraser_bitmap, wxNullBitmap, wxITEM_CHECK, "Eraser", wxEmptyString, NULL);
 	brushes_toolbar->AddSeparator();
-	brushes_toolbar->AddTool(PALETTE_TERRAIN_ZONE_BRUSH, wxEmptyString, *zone_brush_bitmap, wxNullBitmap, wxITEM_CHECK, "Zone Brush", wxEmptyString, NULL);
-	brushes_toolbar->AddSeparator();
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_PZ_TOOL, wxEmptyString, pz_bitmap, wxNullBitmap, wxITEM_CHECK, "Protected Zone", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_NOPVP_TOOL, wxEmptyString, nopvp_bitmap, wxNullBitmap, wxITEM_CHECK, "No PvP Zone", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, wxEmptyString, nologout_bitmap, wxNullBitmap, wxITEM_CHECK, "No Logout Zone", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_PVPZONE_TOOL, wxEmptyString, pvp_bitmap, wxNullBitmap, wxITEM_CHECK, "PvP Zone", wxEmptyString, NULL);
+	brushes_toolbar->AddTool(PALETTE_TERRAIN_ZONE_BRUSH, wxEmptyString, normal_bitmap, wxNullBitmap, wxITEM_CHECK, "Zone Brush", wxEmptyString, NULL);
 	brushes_toolbar->AddSeparator();
 
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_NORMAL_DOOR, wxEmptyString, normal_bitmap, wxNullBitmap, wxITEM_CHECK, "Normal Door", wxEmptyString, NULL);
@@ -224,11 +206,11 @@ void MainToolBar::UpdateButtons() {
 
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_ERASER, has_map);
-	brushes_toolbar->EnableTool(PALETTE_TERRAIN_ZONE_BRUSH, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_PZ_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NOPVP_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_PVPZONE_TOOL, has_map);
+	brushes_toolbar->EnableTool(PALETTE_TERRAIN_ZONE_BRUSH, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_NORMAL_DOOR, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_LOCKED_DOOR, has_map);
 	brushes_toolbar->EnableTool(PALETTE_TERRAIN_MAGIC_DOOR, has_map);
@@ -264,11 +246,11 @@ void MainToolBar::UpdateBrushButtons() {
 	if (brush) {
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, brush == g_gui.optional_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ERASER, brush == g_gui.eraser);
-		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, brush == g_gui.zone_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PZ_TOOL, brush == g_gui.pz_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOPVP_TOOL, brush == g_gui.rook_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, brush == g_gui.nolog_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PVPZONE_TOOL, brush == g_gui.pvp_brush);
+		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, brush == g_gui.zone_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NORMAL_DOOR, brush == g_gui.normal_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_LOCKED_DOOR, brush == g_gui.locked_door_brush);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_MAGIC_DOOR, brush == g_gui.magic_door_brush);
@@ -280,11 +262,11 @@ void MainToolBar::UpdateBrushButtons() {
 	} else {
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_OPTIONAL_BORDER_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ERASER, false);
-		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PZ_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOPVP_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NOLOGOUT_TOOL, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_PVPZONE_TOOL, false);
+		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_ZONE_BRUSH, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_NORMAL_DOOR, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_LOCKED_DOOR, false);
 		brushes_toolbar->ToggleTool(PALETTE_TERRAIN_MAGIC_DOOR, false);
@@ -486,9 +468,6 @@ void MainToolBar::OnBrushesButtonClick(wxCommandEvent& event) {
 		case PALETTE_TERRAIN_ERASER:
 			g_gui.SelectBrush(g_gui.eraser);
 			break;
-		case PALETTE_TERRAIN_ZONE_BRUSH:
-			g_gui.SelectBrush(g_gui.zone_brush);
-			break;
 		case PALETTE_TERRAIN_PZ_TOOL:
 			g_gui.SelectBrush(g_gui.pz_brush);
 			break;
@@ -524,6 +503,9 @@ void MainToolBar::OnBrushesButtonClick(wxCommandEvent& event) {
 			break;
 		case PALETTE_TERRAIN_WINDOW_DOOR:
 			g_gui.SelectBrush(g_gui.window_door_brush);
+			break;
+		case PALETTE_TERRAIN_ZONE_BRUSH:
+			g_gui.SelectBrush(g_gui.zone_brush);
 			break;
 		default:
 			break;

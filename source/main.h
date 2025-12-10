@@ -26,6 +26,10 @@
 	#define _WIN32_WINNT 0x0501
 #endif
 
+#ifndef BOOST_BIND_GLOBAL_PLACEHOLDERS
+	#define BOOST_BIND_GLOBAL_PLACEHOLDERS 1
+#endif
+
 #ifdef DEBUG_MEM
 
 	#define _CRTDBG_MAP_ALLOC

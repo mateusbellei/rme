@@ -24,13 +24,12 @@
 #include "common_windows.h"
 #include "application.h"
 #include "palette_waypoints.h"
-#include <wx/spinctrl.h>
 
 // ============================================================================
 // Palette Panel
 
 BEGIN_EVENT_TABLE(PalettePanel, wxPanel)
-EVT_TIMER(PALETTE_DELAYED_REFRESH_TIMER, PalettePanel::OnRefreshTimer)
+EVT_TIMER(PALETTE_DELAYED_REFRESH_TIMER, WaypointPalettePanel::OnRefreshTimer)
 END_EVENT_TABLE()
 
 PalettePanel::PalettePanel(wxWindow* parent, wxWindowID id, long style) :
@@ -171,7 +170,7 @@ void PalettePanel::OnRefreshTimer(wxTimerEvent&) {
 // ============================================================================
 // Zone brush Page
 
-BEGIN_EVENT_TABLE(ZoneBrushPanel, PalettePanel)
+BEGIN_EVENT_TABLE(ZoneBrushPanel, wxPanel)
 EVT_TOGGLEBUTTON(PALETTE_TERRAIN_ZONE_BRUSH, ZoneBrushPanel::OnClickZoneBrushButton)
 END_EVENT_TABLE()
 
@@ -208,8 +207,10 @@ void ZoneBrushPanel::LoadAllContents() {
 	RenderSize render_size;
 
 	if (large_icons) {
+		// 32x32
 		render_size = RENDER_SIZE_32x32;
 	} else {
+		// 16x16
 		render_size = RENDER_SIZE_16x16;
 	}
 
@@ -224,8 +225,8 @@ void ZoneBrushPanel::LoadAllContents() {
 	size_sizer->Add(sub_sizer);
 	SetSizerAndFit(size_sizer);
 
-	zoneIdSpin->Connect(wxEVT_SPINCTRL, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
-	zoneIdSpin->Connect(wxEVT_TEXT, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
+	zoneIdSpin->Connect(wxEVT_COMMAND_SPINCTRL_UPDATED, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
+	zoneIdSpin->Connect(wxEVT_COMMAND_TEXT_UPDATED, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
 
 	loaded = true;
 }
@@ -256,6 +257,7 @@ Brush* ZoneBrushPanel::GetSelectedBrush() const {
 	if (zoneButton->GetValue()) {
 		return g_gui.zone_brush;
 	}
+
 	return nullptr;
 }
 
@@ -265,6 +267,7 @@ bool ZoneBrushPanel::SelectBrush(const Brush* whatbrush) {
 		zoneButton->SetValue(true);
 		return true;
 	}
+
 	return false;
 }
 

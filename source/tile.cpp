@@ -81,7 +81,6 @@ Tile* Tile::deepCopy(BaseMap& map) {
 		copy->ground = ground->deepCopy();
 	}
 
-	// copy zone ids
 	copy->setZoneIds(this);
 
 	ItemVector::iterator it;

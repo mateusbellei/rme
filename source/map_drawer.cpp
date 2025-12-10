@@ -429,6 +429,27 @@ void MapDrawer::DrawMap() {
 							}
 							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, 160);
 						}
+						// If requested, also visualize zones even when there is no ground on this tile
+						if ((!tile->ground) && options.always_show_zones && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
+							const std::vector<uint16_t>& zones = tile->getZoneIds();
+							if (!zones.empty()) {
+								uint32_t rSum = 0, gSum = 0, bSum = 0;
+								for (uint16_t zid : zones) {
+									uint8_t cr = static_cast<uint8_t>(100 + (zid * 73) % 156);
+									uint8_t cg = static_cast<uint8_t>(100 + (zid * 151) % 156);
+									uint8_t cb = static_cast<uint8_t>(100 + (zid * 197) % 156);
+									rSum += cr; gSum += cg; bSum += cb;
+								}
+								uint32_t n = static_cast<uint32_t>(zones.size());
+								wxColor c(static_cast<uint8_t>(rSum / n),
+								          static_cast<uint8_t>(gSum / n),
+								          static_cast<uint8_t>(bSum / n),
+								          120);
+								glDisable(GL_TEXTURE_2D);
+								drawFilledRect(draw_x, draw_y, draw_x + TileSize, draw_y + TileSize, c);
+								glEnable(GL_TEXTURE_2D);
+							}
+						}
 
 						// Draw items on the tile
 						if (zoom <= 10.0 || !options.hide_items_when_zoomed) {
@@ -1577,6 +1598,24 @@ void MapDrawer::DrawTile(TileLocation* location) {
 		if (showspecial && tile->getMapFlags() & TILESTATE_NOPVP) {
 			g /= 2;
 		}
+
+		// Zone shading: colorize tile according to zone ids when enabled
+		if (options.show_zone_areas && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
+			const std::vector<uint16_t>& zones = tile->getZoneIds();
+			if (!zones.empty()) {
+				uint32_t rSum = 0, gSum = 0, bSum = 0;
+				for (uint16_t zid : zones) {
+					uint8_t cr = static_cast<uint8_t>(100 + (zid * 73) % 156);
+					uint8_t cg = static_cast<uint8_t>(100 + (zid * 151) % 156);
+					uint8_t cb = static_cast<uint8_t>(100 + (zid * 197) % 156);
+					rSum += cr; gSum += cg; bSum += cb;
+				}
+				uint32_t n = static_cast<uint32_t>(zones.size());
+				r = static_cast<uint8_t>(rSum / n);
+				g = static_cast<uint8_t>(gSum / n);
+				b = static_cast<uint8_t>(bSum / n);
+			}
+		}
 	}
 
 	if (only_colors) {
@@ -1596,7 +1635,8 @@ void MapDrawer::DrawTile(TileLocation* location) {
 			}
 
 			BlitItem(draw_x, draw_y, tile, tile->ground, false, r, g, b);
-		} else if (options.always_show_zones && (r != 255 || g != 255 || b != 255)) {
+		} else if (options.always_show_zones && (tile->getMapFlags() & TILESTATE_ZONE_BRUSH)) {
+			// Draw colored square for zone even without ground
 			DrawRawBrush(draw_x, draw_y, &g_items[SPRITE_ZONE], r, g, b, 60);
 		}
 	}
@@ -1674,6 +1714,20 @@ void MapDrawer::DrawTile(TileLocation* location) {
 
 			// tooltips
 			if (options.show_tooltips) {
+				// Append zone ids tooltip when present
+				if (tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
+					const auto& zones = tile->getZoneIds();
+					if (!zones.empty()) {
+						if (tooltip.tellp() > 0) {
+							tooltip << "\n";
+						}
+						tooltip << "zones: ";
+						for (size_t i = 0; i < zones.size(); ++i) {
+							if (i) tooltip << ", ";
+							tooltip << zones[i];
+						}
+					}
+				}
 				if (location->getWaypointCount() > 0) {
 					MakeTooltip(draw_x, draw_y, tooltip.str(), 0, 255, 0);
 				} else {

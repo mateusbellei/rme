@@ -371,10 +371,29 @@ bool GraphicManager::loadEditorSprites() {
 		loadPNGFile(pvp_zone_small_png),
 		loadPNGFile(pvp_zone_png)
 	);
-	sprite_space[EDITOR_SPRITE_ZONE_TOOL] = newd EditorSprite(
-		loadPNGFile(pvp_zone_small_png),
-		loadPNGFile(pvp_zone_png)
-	);
+	// Load custom zone brush icon from data/brushes/zone.png when available
+	{
+		wxFileName zoneIcon(g_gui.m_dataDirectory, "brushes/zone.png");
+		if (zoneIcon.FileExists()) {
+			wxBitmap* zSmall = newd wxBitmap(zoneIcon.GetFullPath(), wxBITMAP_TYPE_PNG);
+			wxBitmap* zLarge = newd wxBitmap(zoneIcon.GetFullPath(), wxBITMAP_TYPE_PNG);
+			if (zSmall->IsOk() && zLarge->IsOk()) {
+				sprite_space[EDITOR_SPRITE_ZONE_TOOL] = newd EditorSprite(zSmall, zLarge);
+			} else {
+				delete zSmall;
+				delete zLarge;
+				sprite_space[EDITOR_SPRITE_ZONE_TOOL] = newd EditorSprite(
+					loadPNGFile(pvp_zone_small_png),
+					loadPNGFile(pvp_zone_png)
+				);
+			}
+		} else {
+			sprite_space[EDITOR_SPRITE_ZONE_TOOL] = newd EditorSprite(
+				loadPNGFile(pvp_zone_small_png),
+				loadPNGFile(pvp_zone_png)
+			);
+		}
+	}
 	sprite_space[EDITOR_SPRITE_NOLOG_TOOL] = newd EditorSprite(
 		loadPNGFile(no_logout_small_png),
 		loadPNGFile(no_logout_png)

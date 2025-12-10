@@ -1048,6 +1048,8 @@ void Editor::moveSelection(Position offset) {
 			new_src_tile->house_id = 0;
 			tmp_storage_tile->setMapFlags(new_src_tile->getMapFlags());
 			new_src_tile->setMapFlags(TILESTATE_NONE);
+			tmp_storage_tile->setZoneIds(new_src_tile);
+			new_src_tile->clearZoneId();
 			doborders = true;
 		}
 

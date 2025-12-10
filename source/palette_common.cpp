@@ -224,8 +224,8 @@ void ZoneBrushPanel::LoadAllContents() {
 	size_sizer->Add(sub_sizer);
 	SetSizerAndFit(size_sizer);
 
-	zoneIdSpin->Connect(wxEVT_COMMAND_SPINCTRL_UPDATED, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
-	zoneIdSpin->Connect(wxEVT_COMMAND_TEXT_UPDATED, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
+	zoneIdSpin->Connect(wxEVT_SPINCTRL, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
+	zoneIdSpin->Connect(wxEVT_TEXT, wxCommandEventHandler(ZoneBrushPanel::OnZoneIdChange), NULL, this);
 
 	loaded = true;
 }

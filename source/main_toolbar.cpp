@@ -25,6 +25,7 @@
 #include "artprovider.h"
 #include <wx/artprov.h>
 #include <wx/mstream.h>
+#include <wx/filename.h>
 
 const wxString MainToolBar::STANDARD_BAR_NAME = "standard_toolbar";
 const wxString MainToolBar::BRUSHES_BAR_NAME = "brushes_toolbar";
@@ -70,7 +71,22 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager) {
 
 	wxBitmap* border_bitmap = loadPNGFile(optional_border_small_png);
 	wxBitmap* eraser_bitmap = loadPNGFile(eraser_small_png);
-	wxBitmap* zone_brush_bitmap = loadPNGFile(pvp_zone_small_png);
+	// Prefer custom zone icon from brushes/zone.png; fallback to embedded PVP zone icon if unavailable
+	wxBitmap* zone_brush_bitmap = nullptr;
+	{
+		wxFileName zoneIcon(g_gui.m_dataDirectory, "brushes/zone.png");
+		if (zoneIcon.FileExists()) {
+			wxBitmap* fileBmp = newd wxBitmap(zoneIcon.GetFullPath(), wxBITMAP_TYPE_PNG);
+			if (fileBmp->IsOk()) {
+				zone_brush_bitmap = fileBmp;
+			} else {
+				delete fileBmp;
+			}
+		}
+		if (!zone_brush_bitmap) {
+			zone_brush_bitmap = loadPNGFile(pvp_zone_small_png);
+		}
+	}
 	wxBitmap pz_bitmap = wxArtProvider::GetBitmap(ART_PZ_BRUSH, wxART_TOOLBAR, icon_size);
 	wxBitmap nopvp_bitmap = wxArtProvider::GetBitmap(ART_NOPVP_BRUSH, wxART_TOOLBAR, icon_size);
 	wxBitmap nologout_bitmap = wxArtProvider::GetBitmap(ART_NOLOOUT_BRUSH, wxART_TOOLBAR, icon_size);

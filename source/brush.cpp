@@ -239,7 +239,9 @@ bool TerrainBrush::friendOf(TerrainBrush* other) {
 // draws pz etc.
 
 FlagBrush::FlagBrush(uint32_t _flag) :
-	flag(_flag), zoneId(0) {
+	flag(_flag),
+	// Default non-zero zone id so toolbar selection works even if the panel isn't opened
+	zoneId((_flag & TILESTATE_ZONE_BRUSH) ? 1 : 0) {
 	////
 }
 

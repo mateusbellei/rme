@@ -8,6 +8,9 @@ on:
   push:
     paths:
       - "source/**"
+
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,31 +22,71 @@ jobs:
           concurrent_skipping: "same_content"
           cancel_others: true
 
-      - name: Set up Git
-        if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git (for auto-fix on push)
+        if: ${{ github.event_name == 'push' }}
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Actions checkout
-        if: ${{ github.ref != 'refs/heads/master' }}
-        uses: actions/checkout@v3
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install clang-format (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang-format-16
 
-      - name: Run clang format lint
-        if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Check formatting on changed files (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if [[ -z "$BASE_SHA" || -z "$HEAD_SHA" ]]; then
+            # Fallback for non-standard events
+            BASE_SHA="$(git merge-base origin/${{ github.base_ref }} HEAD || true)"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          mapfile -t FILES < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- \
+            'source/**/*.c' 'source/**/*.cc' 'source/**/*.cpp' 'source/**/*.cxx' \
+            'source/**/*.h' 'source/**/*.hh' 'source/**/*.hpp' | \
+            grep -Ev '^source/(ext|json)/')
+
+          if [[ ${#FILES[@]} -eq 0 ]]; then
+            echo "No relevant source file changes; skipping clang-format check."
+            exit 0
+          fi
+
+          # Run clang-format check (quiet, fail on changes)
+          FAILED=0
+          for f in "${FILES[@]}"; do
+            clang-format-16 -style=file -n -Werror "$f" 2>/tmp/clangfmt.err || FAILED=1
+          done
+
+          if [[ $FAILED -ne 0 ]]; then
+            echo "::error::clang-format found formatting issues in changed files."
+            echo "Run clang-format locally or push a commit with formatting fixes."
+            exit 1
+          fi
+
+          echo "clang-format check passed for changed files."
+
+      - name: Run clang format lint (auto-fix on push)
+        if: ${{ github.event_name == 'push' }}
         uses: DoozyX/clang-format-lint-action@v0.16.2
         with:
           source: "source"
           extensions: "cpp,hpp,h"
           clangFormatVersion: 16
           inplace: true
+          exclude: "source/ext/**,source/json/**"
 
-      - name: Run add and commit
-        if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Run add and commit (push only)
+        if: ${{ github.event_name == 'push' }}
         uses: EndBug/add-and-commit@v9
         with:
           author_name: GitHub Actions

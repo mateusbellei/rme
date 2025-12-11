@@ -22,6 +22,7 @@
 #include "preferences.h"
 #include "about_window.h"
 #include "minimap_window.h"
+#include "procedural_dialog.h"
 #include "dat_debug_view.h"
 #include "result_window.h"
 #include "extension_window.h"
@@ -329,7 +330,7 @@ void MainMenuBar::Update() {
 	EnableItem(CLOSE, is_local);
 	EnableItem(SAVE, is_host);
 	EnableItem(SAVE_AS, is_host);
-	EnableItem(GENERATE_MAP, false);
+	EnableItem(GENERATE_MAP, is_local);
 
 	EnableItem(IMPORT_MAP, is_local);
 	EnableItem(IMPORT_MONSTERS, is_local);
@@ -707,24 +708,13 @@ void MainMenuBar::OnNew(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnGenerateMap(wxCommandEvent& WXUNUSED(event)) {
-	/*
-	if(!DoQuerySave()) return;
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) {
+		return;
+	}
 
-	std::ostringstream os;
-	os << "Untitled-" << untitled_counter << ".otbm";
-	++untitled_counter;
-
-	editor.generateMap(wxstr(os.str()));
-
-	g_gui.SetStatusText("Generated newd map");
-
-	g_gui.UpdateTitle();
-	g_gui.RefreshPalettes();
-	g_gui.UpdateMinimap();
-	g_gui.FitViewToMap();
-	UpdateMenubar();
-	Refresh();
-	*/
+	ProceduralDialog dlg(frame, *editor);
+	dlg.ShowModal();
 }
 
 void MainMenuBar::OnOpenRecent(wxCommandEvent& event) {

@@ -8,6 +8,9 @@ on:
   push:
     paths:
       - "source/**"
+
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,22 +22,28 @@ jobs:
           concurrent_skipping: "same_content"
           cancel_others: true
 
-      - name: Set up Git
-        if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git (for auto-fix on push)
+        if: ${{ github.event_name == 'push' }}
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Actions checkout
-        if: ${{ github.ref != 'refs/heads/master' }}
-        uses: actions/checkout@v3
+      - name: Run clang format lint (check only on PR)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: DoozyX/clang-format-lint-action@v0.16.2
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          source: "source"
+          extensions: "cpp,hpp,h"
+          clangFormatVersion: 16
+          inplace: false
 
-      - name: Run clang format lint
-        if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Run clang format lint (auto-fix on push)
+        if: ${{ github.event_name == 'push' }}
         uses: DoozyX/clang-format-lint-action@v0.16.2
         with:
           source: "source"
@@ -42,8 +51,8 @@ jobs:
           clangFormatVersion: 16
           inplace: true
 
-      - name: Run add and commit
-        if: ${{ github.ref != 'refs/heads/master' }}
+      - name: Run add and commit (push only)
+        if: ${{ github.event_name == 'push' }}
         uses: EndBug/add-and-commit@v9
         with:
           author_name: GitHub Actions

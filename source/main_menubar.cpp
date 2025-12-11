@@ -983,10 +983,11 @@ namespace OnSearchForStuff {
 		}
 
 		void sort() {
-			if (search_unique || search_action) 
+			if (search_unique || search_action) {
 				std::sort(found.begin(), found.end(), Searcher::compare);
-			else if (search_zones)
+			} else if (search_zones) {
 				std::sort(found.begin(), found.end(), Searcher::compareZones);
+			}
 		}
 
 		static bool compare(const std::pair<Tile*, Item*>& pair1, const std::pair<Tile*, Item*>& pair2) {

@@ -145,5 +145,3 @@ void ProceduralDialog::OnGenerate(wxCommandEvent& event) {
 		g_gui.RefreshView();
 	}
 }
-
-

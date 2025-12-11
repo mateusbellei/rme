@@ -62,11 +62,19 @@ static GroundBrush* pickAnyGroundBrush() {
 static void chooseDefaultBiomes(GroundBrush*& land, GroundBrush*& water) {
 	// Try common names first, then fall back to any available.
 	land = findGroundBrushByName("grass");
-	if (!land) land = findGroundBrushByName("sand");
-	if (!land) land = pickAnyGroundBrush();
+	if (!land) {
+		land = findGroundBrushByName("sand");
+	}
+	if (!land) {
+		land = pickAnyGroundBrush();
+	}
 	water = findGroundBrushByName("water");
-	if (!water) water = findGroundBrushByName("ocean");
-	if (!water) water = land; // worst-case, same brush
+	if (!water) {
+		water = findGroundBrushByName("ocean");
+	}
+	if (!water) {
+		water = land; // worst-case, same brush
+	}
 }
 
 // Minimal MVP: Load image, rescale, pick two ground brushes (land/water) and paint layer z.
@@ -166,5 +174,3 @@ bool ProceduralBackends::GenerateFromPrompt(Editor& editor, const GenerationSpec
 	g_gui.PopupDialog("Procedural Generation (Prompt - stub)", msg, wxOK);
 	return true;
 }
-
-

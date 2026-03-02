@@ -29,6 +29,7 @@
 #include "settings.h"
 
 #include "gui.h"
+#include "data_editor_window.h"
 
 #include <wx/chartype.h>
 
@@ -107,6 +108,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(COPY, wxITEM_NORMAL, OnCopy);
 	MAKE_ACTION(PASTE, wxITEM_NORMAL, OnPaste);
 
+	MAKE_ACTION(DATA_EDITOR, wxITEM_NORMAL, OnDataEditor);
 	MAKE_ACTION(EDIT_TOWNS, wxITEM_NORMAL, OnMapEditTowns);
 	MAKE_ACTION(EDIT_ITEMS, wxITEM_NORMAL, OnMapEditItems);
 	MAKE_ACTION(EDIT_MONSTERS, wxITEM_NORMAL, OnMapEditMonsters);
@@ -372,6 +374,7 @@ void MainMenuBar::Update() {
 	EnableItem(CLEAR_INVALID_HOUSES, is_local);
 	EnableItem(CLEAR_MODIFIED_STATE, is_local);
 
+	EnableItem(DATA_EDITOR, is_local);
 	EnableItem(EDIT_TOWNS, is_local);
 	EnableItem(EDIT_ITEMS, false);
 	EnableItem(EDIT_MONSTERS, false);
@@ -1461,6 +1464,14 @@ void MainMenuBar::OnMapCleanHouseItems(wxCommandEvent& WXUNUSED(event)) {
 	}
 
 	g_gui.RefreshView();
+}
+
+void MainMenuBar::OnDataEditor(wxCommandEvent& WXUNUSED(event)) {
+	if (g_gui.GetCurrentEditor()) {
+		DataEditorWindow* data_editor = newd DataEditorWindow(frame, *g_gui.GetCurrentEditor());
+		data_editor->ShowModal();
+		data_editor->Destroy();
+	}
 }
 
 void MainMenuBar::OnMapEditTowns(wxCommandEvent& WXUNUSED(event)) {

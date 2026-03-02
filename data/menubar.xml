@@ -103,6 +103,9 @@
 		<separator/>
 		<item name="Find Everything" action="SEARCH_ON_MAP_EVERYTHING" help="Find all unique/action/text/container items."/>
 	</menu>
+	<menu name="Data Editor">
+		<item name="Data Editor..." action="DATA_EDITOR" help="Edit borders, grounds, tilesets and other material configs."/>
+	</menu>
 	<menu name="Map">
 		<item name="Edit Towns" hotkey="Ctrl+T" action="EDIT_TOWNS" help="Edit towns."/>
 		<!-- these were never implemented

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="common">
@@ -330,6 +330,9 @@
     <ClInclude Include="..\..\source\dat_debug_view.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\data_editor_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\live_packets.h">
       <Filter>live</Filter>
     </ClInclude>
@@ -423,6 +426,9 @@
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\dat_debug_view.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\data_editor_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\minimap_window.cpp">

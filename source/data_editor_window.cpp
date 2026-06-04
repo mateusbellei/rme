@@ -38,24 +38,30 @@ static const char* const borderEdgeNames[12] = {
 	"n", "e", "s", "w", "cnw", "cne", "csw", "cse", "dnw", "dne", "dse", "dsw"
 };
 
-// Mesmo layout do grid do painel: para Save XML, sync tiles[] a partir de gridTiles (uma célula canônica por edge).
+// Layout único do showoff (painel + Save XML). -2 = cruz/cantos vazios; 0..11 = edge.
 static const int BORDER_GRID[5][5] = {
-	{-2,  2,  5,  8, -2 },
+	{-2,  5,  2,  8, -2 },  // 1ª linha: 897, 893, 898
 	{ 7, 10, -2, 11,  6 },
 	{ 1, -2, -2, -2,  3 },
 	{ 5,  9, -2,  8,  4 },
 	{-2,  5,  0,  4, -2 }
 };
+
+// Ao salvar: para cada edge, usa o último gridTiles != 0 entre células que exibem esse edge (evita perder edição em duplicatas).
 static void SyncBorderTilesFromGrid(AutoBorder* border) {
 	for (int e = 0; e < 12; e++) {
+		uint32_t v = 0;
 		for (int r = 0; r < 5; r++)
 			for (int c = 0; c < 5; c++)
 				if (BORDER_GRID[r][c] == e) {
-					uint32_t v = border->gridTiles[r * 5 + c];
-					if (v != 0) border->tiles[e + 1] = v;
-					goto next_edge;
+					uint32_t gt = border->gridTiles[r * 5 + c];
+					if (gt != 0) {
+						v = gt;
+					}
 				}
-		next_edge:;
+		if (v != 0) {
+			border->tiles[e + 1] = v;
+		}
 	}
 }
 
@@ -70,18 +76,9 @@ END_EVENT_TABLE()
 BorderShowoffPanel::BorderShowoffPanel(wxWindow* parent, wxWindowID id, DataEditorWindow* data_editor) :
 	wxPanel(parent, id, wxDefaultPosition, wxSize(BorderShowoffPanel::GRID_COLS * CELL_SIZE, BorderShowoffPanel::GRID_ROWS * CELL_SIZE)),
 	data_editor(data_editor) {
-	// Grid: padrão para todas as borders (ex.: border 1). 893 no lugar de 895; 897 (2,2) sobe→(1,2); 898 (2,4) sobe→(1,4).
-	// (l,c) 1-based: 897(1,2), 893(1,3), 898(1,4), 901(2,2), 902(2,4). Cantos = neutro (-2).
-	static const int g[5][5] = {
-		{-2,  2,  5,  8, -2 },  // (0,1)=s 897, (0,2)=cne 893, (0,3)=dnw 898
-		{ 7, 10, -2, 11,  6 },  // (1,1)=dse 901, (1,3)=dsw 902; (1,0)=cse, (1,4)=csw
-		{ 1, -2, -2, -2,  3 },
-		{ 5,  9, -2,  8,  4 },
-		{-2,  5,  0,  4, -2 }   // (4,3)=cnw (duplicata 895)
-	};
 	for (int r = 0; r < GRID_ROWS; r++)
 		for (int c = 0; c < GRID_COLS; c++)
-			cell_type[r][c] = g[r][c];
+			cell_type[r][c] = BORDER_GRID[r][c];
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
 }
 
@@ -90,12 +87,6 @@ int BorderShowoffPanel::CellAt(int x, int y) const {
 	int row = y / CELL_SIZE;
 	if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return BORDER_CELL_CENTER;
 	return cell_type[row][col];
-}
-
-// Células vazias (neutras): cruz central (5) + 4 cantos do grid — todas pretas como a cruz.
-static bool IsEmptyCell(int row, int col) {
-	return (row == 1 && col == 2) || (row == 2 && col == 1) || (row == 2 && col == 2) || (row == 2 && col == 3) || (row == 3 && col == 2)
-		|| (row == 0 && col == 0) || (row == 0 && col == 4) || (row == 4 && col == 0) || (row == 4 && col == 4);
 }
 
 void BorderShowoffPanel::OnPaint(wxPaintEvent& WXUNUSED(event)) {
@@ -131,17 +122,6 @@ void BorderShowoffPanel::OnPaint(wxPaintEvent& WXUNUSED(event)) {
 				dc.SetBrush(*wxBLACK);
 				dc.SetPen(wxPen(wxColour(80, 80, 80)));
 				dc.DrawRectangle(x, y, CELL_SIZE, CELL_SIZE);
-			} else if (ct == BORDER_CELL_NEUTRAL) {
-				// Células neutras (1,0),(1,4),(3,0),(3,4): w ou e conforme coluna — borda contínua
-				dc.SetBrush(wxBrush(wxColour(45, 45, 45)));
-				dc.SetPen(wxPen(wxColour(100, 100, 100)));
-				dc.DrawRectangle(x, y, CELL_SIZE, CELL_SIZE);
-				int edge_for_side = (col == 0) ? 3 : 1; // w=3, e=1
-				if (border) {
-					int idx = row * 5 + col;
-					uint32_t item_id = border->gridTiles[idx] ? border->gridTiles[idx] : border->tiles[edge_for_side + 1];
-					DrawCellSprite(x, y, item_id);
-				}
 			} else {
 				// Por célula: gridTiles tem prioridade; 0 = fallback em tiles[edge+1]
 				int idx = row * 5 + col;

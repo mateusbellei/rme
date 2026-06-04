@@ -186,6 +186,28 @@ bool Brushes::unserializeBorder(pugi::xml_node node, wxArrayString& warnings) {
 	return true;
 }
 
+AutoBorder* Brushes::getBorder(uint32_t id) const {
+	auto it = borders.find(id);
+	return it != borders.end() ? it->second : nullptr;
+}
+
+void Brushes::addBorder(uint32_t id) {
+	if (borders[id]) {
+		return;
+	}
+	borders[id] = newd AutoBorder(id);
+}
+
+bool Brushes::removeBorder(uint32_t id) {
+	auto it = borders.find(id);
+	if (it == borders.end()) {
+		return false;
+	}
+	delete it->second;
+	borders.erase(it);
+	return true;
+}
+
 void Brushes::addBrush(Brush* brush) {
 	brushes.insert(std::make_pair(brush->getName(), brush));
 }

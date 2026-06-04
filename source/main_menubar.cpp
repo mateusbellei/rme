@@ -1469,8 +1469,8 @@ void MainMenuBar::OnMapCleanHouseItems(wxCommandEvent& WXUNUSED(event)) {
 void MainMenuBar::OnDataEditor(wxCommandEvent& WXUNUSED(event)) {
 	if (g_gui.GetCurrentEditor()) {
 		DataEditorWindow* data_editor = newd DataEditorWindow(frame, *g_gui.GetCurrentEditor());
-		data_editor->ShowModal();
-		data_editor->Destroy();
+		data_editor->Show();
+		// Modeless: user can click on RAW palette to select another item while Data Editor stays open
 	}
 }
 

@@ -38,16 +38,17 @@ static const char* const borderEdgeNames[12] = {
 	"n", "e", "s", "w", "cnw", "cne", "csw", "cse", "dnw", "dne", "dse", "dsw"
 };
 
-// Layout único do showoff (painel + Save XML). -2 = cruz/cantos vazios; 0..11 = edge.
+// Single showoff layout (panel + Save XML). -2 = empty cross/corners; 0..11 = edge index.
+// Row 0: (0,1)=cse, (0,2)=s, (0,3)=csw — standard for border 1 and all others.
 static const int BORDER_GRID[5][5] = {
-	{-2,  5,  2,  8, -2 },  // 1ª linha: 897, 893, 898
+	{-2,  7,  2,  6, -2 },
 	{ 7, 10, -2, 11,  6 },
 	{ 1, -2, -2, -2,  3 },
 	{ 5,  9, -2,  8,  4 },
 	{-2,  5,  0,  4, -2 }
 };
 
-// Ao salvar: para cada edge, usa o último gridTiles != 0 entre células que exibem esse edge (evita perder edição em duplicatas).
+// On save: for each edge, use the last non-zero gridTiles among cells displaying that edge (avoids losing edits on duplicates).
 static void SyncBorderTilesFromGrid(AutoBorder* border) {
 	for (int e = 0; e < 12; e++) {
 		uint32_t v = 0;
@@ -118,12 +119,12 @@ void BorderShowoffPanel::OnPaint(wxPaintEvent& WXUNUSED(event)) {
 			int ct = cell_type[row][col];
 
 			if (ct == BORDER_CELL_CENTER) {
-				// Cruz + 4 cantos: todas células -2 são neutras (pretas como a cruz)
+				// Cross + 4 corners: all -2 cells are neutral (black like the cross)
 				dc.SetBrush(*wxBLACK);
 				dc.SetPen(wxPen(wxColour(80, 80, 80)));
 				dc.DrawRectangle(x, y, CELL_SIZE, CELL_SIZE);
 			} else {
-				// Por célula: gridTiles tem prioridade; 0 = fallback em tiles[edge+1]
+				// Per cell: gridTiles takes priority; 0 = fallback to tiles[edge+1]
 				int idx = row * 5 + col;
 				uint32_t item_id = border ? (border->gridTiles[idx] ? border->gridTiles[idx] : border->tiles[ct + 1]) : 0;
 				dc.SetBrush(wxBrush(wxColour(45, 45, 45)));
@@ -351,7 +352,7 @@ void DataEditorWindow::OnBorderCellClicked(int edge_index, int cell_row, int cel
 		SetBorderStatus("Select a border first.");
 		return;
 	}
-	// If we had another cell selected and user picked a different RAW item, assign it to that cell only (por quadrante)
+	// If we had another cell selected and user picked a different RAW item, assign it to that cell only (by quadrant)
 	if (selected_cell_row >= 0 && selected_cell_col >= 0 && (selected_cell_row != cell_row || selected_cell_col != cell_col)) {
 		Brush* cur = g_gui.GetCurrentBrush();
 		if (cur && cur->isRaw()) {
@@ -366,7 +367,7 @@ void DataEditorWindow::OnBorderCellClicked(int edge_index, int cell_row, int cel
 	selected_cell_col = cell_col;
 	RefreshBorderGrid();
 
-	// Show RAW palette and select the item currently in this cell (por célula)
+	// Show RAW palette and select the item currently in this cell (per cell)
 	int idx = cell_row * 5 + cell_col;
 	uint32_t item_id = border->gridTiles[idx] ? border->gridTiles[idx] : border->tiles[edge_index + 1];
 	if (item_id != 0) {

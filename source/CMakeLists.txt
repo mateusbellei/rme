@@ -103,6 +103,8 @@ ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_generator.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_common.h
+${CMAKE_CURRENT_LIST_DIR}/prompt_generator.h
 ${CMAKE_CURRENT_LIST_DIR}/image_mask_generator.h
 )
 
@@ -206,5 +208,7 @@ ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_value.cpp
 ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_writer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_generator.cpp
+${CMAKE_CURRENT_LIST_DIR}/procedural_common.cpp
+${CMAKE_CURRENT_LIST_DIR}/prompt_generator.cpp
 ${CMAKE_CURRENT_LIST_DIR}/image_mask_generator.cpp
 )

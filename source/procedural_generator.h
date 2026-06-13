@@ -1,19 +1,6 @@
 //////////////////////////////////////////////////////////////////////
 // This file is part of Remere's Map Editor
 //////////////////////////////////////////////////////////////////////
-// Remere's Map Editor is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// Remere's Map Editor is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program. If not, see <http://www.gnu.org/licenses/>.
-//////////////////////////////////////////////////////////////////////
 
 #ifndef RME_PROCEDURAL_GENERATOR_H_
 #define RME_PROCEDURAL_GENERATOR_H_
@@ -24,11 +11,15 @@
 class Map;
 class Editor;
 
-// Simple structures to describe a generation request.
-struct GenerationSize {
+struct GenerationRegion {
+	int originX;
+	int originY;
+	int z;
 	int width;
 	int height;
-	int z;
+
+	GenerationRegion() :
+		originX(0), originY(0), z(7), width(512), height(512) { }
 };
 
 enum class GenerationSource {
@@ -36,9 +27,27 @@ enum class GenerationSource {
 	TextPrompt
 };
 
+enum class GenerationPreset {
+	Auto,
+	Forest,
+	Desert,
+	Cave,
+	City,
+	Coast
+};
+
+struct GenerationPipeline {
+	bool borderizeAfter;
+	bool randomizeGround;
+	bool placeWalls;
+
+	GenerationPipeline() :
+		borderizeAfter(true), randomizeGround(false), placeWalls(false) { }
+};
+
 struct ImageMaskRequest {
 	wxString imagePath;
-	wxString legendPath; // optional JSON mapping color->biome
+	wxString legendPath;
 };
 
 struct TextPromptRequest {
@@ -46,19 +55,22 @@ struct TextPromptRequest {
 };
 
 struct GenerationSpec {
-	GenerationSize size;
+	GenerationRegion region;
+	bool useSelection;
 	uint32_t seed;
 	GenerationSource source;
+	GenerationPreset preset;
+	GenerationPipeline pipeline;
 	ImageMaskRequest imageMask;
 	TextPromptRequest textPrompt;
+
+	GenerationSpec() :
+		useSelection(false), seed(1337), source(GenerationSource::ImageMask), preset(GenerationPreset::Auto) { }
 };
 
-// Thin façade: orchestrates specific backends and applies changes using ActionQueue.
 class ProceduralGenerator {
 public:
 	static bool Run(Editor& editor, const GenerationSpec& spec, wxString& error);
 };
 
 #endif
-
-

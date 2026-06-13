@@ -1,0 +1,15 @@
+{
+  "default": "grass",
+  "entries": [
+    { "color": "#008000", "brush": "grass" },
+    { "color": "#00FF00", "brush": "grass" },
+    { "color": "#0000FF", "brush": "water" },
+    { "color": "#808080", "brush": "stone" },
+    { "color": "#C0C0C0", "brush": "cave" },
+    { "color": "#FFD700", "brush": "sand" },
+    { "color": "#964B00", "brush": "earth" },
+    { "color": "#654321", "brush": "mountain" },
+    { "color": "#A0522D", "brush": "cobblestone" },
+    { "color": "#000000", "brush": "" }
+  ]
+}

@@ -9,13 +9,16 @@
 #include "brush.h"
 #include "ground_brush.h"
 #include "wall_brush.h"
+#include "doodad_brush.h"
 #include "map.h"
 #include "action.h"
 #include "editor.h"
 #include "gui.h"
 #include "settings.h"
 #include "json.h"
+#include "mt_rand.h"
 
+#include <algorithm>
 #include <fstream>
 #include <cctype>
 
@@ -69,6 +72,14 @@ namespace {
 		}
 		return name.find("cobble") != std::string::npos || name.find("grass") != std::string::npos || name.find("sand") != std::string::npos || name.find("earth") != std::string::npos || name.find("dirt") != std::string::npos;
 	}
+
+	static bool IsSnowGround(GroundBrush* brush) {
+		if (!brush) {
+			return false;
+		}
+		const std::string name = as_lower_str(brush->getName());
+		return name.find("snow") != std::string::npos || name.find("ice") != std::string::npos || name.find("frost") != std::string::npos || name.find("winter") != std::string::npos;
+	}
 }
 
 bool ProceduralCommon::ResolveRegion(Editor& editor, GenerationSpec& spec, wxString& error) {
@@ -99,6 +110,16 @@ bool ProceduralCommon::ResolveRegion(Editor& editor, GenerationSpec& spec, wxStr
 
 	if (spec.region.width > 65000 || spec.region.height > 65000) {
 		error = "Target area is too large.";
+		return false;
+	}
+
+	if (spec.elevation.maxLevels > 0 && spec.region.z < spec.elevation.maxLevels) {
+		error = wxString::Format(
+			"Base floor z=%d is too low for %d elevation levels. Use z >= %d (ground is usually z=7).",
+			spec.region.z,
+			spec.elevation.maxLevels,
+			spec.elevation.maxLevels
+		);
 		return false;
 	}
 
@@ -155,6 +176,91 @@ GroundBrush* ProceduralCommon::PickDefaultWaterBrush() {
 		brush = PickDefaultLandBrush();
 	}
 	return brush;
+}
+
+DoodadBrush* ProceduralCommon::FindDoodadBrush(const std::string& targetLower) {
+	for (const auto& kv : g_brushes.getMap()) {
+		Brush* brush = kv.second;
+		if (brush && brush->isDoodad()) {
+			const std::string name = as_lower_str(brush->getName());
+			if (name.find(targetLower) != std::string::npos) {
+				return brush->asDoodad();
+			}
+		}
+	}
+	return nullptr;
+}
+
+std::vector<DoodadBrush*> ProceduralCommon::FindDoodadBrushes(const std::vector<std::string>& keywords) {
+	std::vector<DoodadBrush*> result;
+	for (const auto& kv : g_brushes.getMap()) {
+		Brush* brush = kv.second;
+		if (!brush || !brush->isDoodad()) {
+			continue;
+		}
+		const std::string name = as_lower_str(brush->getName());
+		for (const std::string& keyword : keywords) {
+			if (name.find(keyword) != std::string::npos) {
+				result.push_back(brush->asDoodad());
+				break;
+			}
+		}
+	}
+	return result;
+}
+
+GroundBrush* ProceduralCommon::PickSnowBrush() {
+	GroundBrush* brush = FindGroundBrush("snow");
+	if (!brush) {
+		brush = FindGroundBrush("winter");
+	}
+	if (!brush) {
+		brush = FindGroundBrush("frost");
+	}
+	return brush;
+}
+
+GroundBrush* ProceduralCommon::PickIceBrush() {
+	GroundBrush* brush = FindGroundBrush("ice");
+	if (!brush) {
+		brush = PickSnowBrush();
+	}
+	return brush;
+}
+
+GroundBrush* ProceduralCommon::PickMountainBrush() {
+	GroundBrush* brush = FindGroundBrush("mountain");
+	if (!brush) {
+		brush = FindGroundBrush("stone");
+	}
+	return brush;
+}
+
+bool ProceduralCommon::PaintGroundTile(Editor& editor, Action* action, int x, int y, int z, GroundBrush* brush) {
+	if (!brush) {
+		return false;
+	}
+
+	Position pos(x, y, z);
+	TileLocation* location = editor.map.createTileL(pos);
+	Tile* existing = location->get();
+	Tile* newTile = existing ? existing->deepCopy(editor.map) : editor.map.allocator(location);
+
+	if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
+		newTile->cleanBorders();
+	}
+
+	if (newTile->ground) {
+		delete newTile->ground;
+		newTile->ground = nullptr;
+	}
+	brush->draw(&editor.map, newTile, nullptr);
+
+	if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
+		newTile->borderize(&editor.map);
+	}
+	action->addChange(newd Change(newTile));
+	return true;
 }
 
 bool ProceduralCommon::LoadLegend(const wxString& path, LegendMapping& mapping, wxString& error) {
@@ -317,7 +423,128 @@ bool ProceduralCommon::ApplyColorMask(Editor& editor, const GenerationSpec& spec
 	return true;
 }
 
-bool ProceduralCommon::PostProcess(Editor& editor, const GenerationSpec& spec, wxString& error) {
+bool ProceduralCommon::ApplyMountainElevation(Editor& editor, const GenerationSpec& spec, const std::vector<int>& heights, wxString& error) {
+	if (heights.size() != static_cast<size_t>(spec.region.width * spec.region.height)) {
+		error = "Heightmap size does not match target region.";
+		return false;
+	}
+
+	GroundBrush* mountainBrush = PickMountainBrush();
+	GroundBrush* grassBrush = PickDefaultLandBrush();
+	GroundBrush* earthBrush = FindGroundBrush("earth");
+	if (!mountainBrush || !grassBrush) {
+		error = "Could not find mountain/grass ground brushes for elevated terrain.";
+		return false;
+	}
+
+	const int baseZ = spec.region.z;
+	const int maxLevels = std::max(1, spec.elevation.maxLevels);
+	BatchAction* batch = editor.actionQueue->createBatch(ACTION_DRAW);
+	Action* action = editor.actionQueue->createAction(batch);
+
+	const int totalCells = spec.region.width * spec.region.height;
+	int processed = 0;
+
+	for (int y = 0; y < spec.region.height; ++y) {
+		if (y % 16 == 0) {
+			g_gui.SetLoadDone(static_cast<int>(100.0 * processed / totalCells));
+		}
+		for (int x = 0; x < spec.region.width; ++x) {
+			++processed;
+			const int mapX = spec.region.originX + x;
+			const int mapY = spec.region.originY + y;
+			int height = heights[y * spec.region.width + x];
+			height = std::max(0, std::min(height, maxLevels));
+
+			const int surfaceZ = baseZ - height;
+			GroundBrush* surfaceBrush = grassBrush;
+			if (spec.preset == GenerationPreset::Ice) {
+				surfaceBrush = PickSnowBrush();
+				if (!surfaceBrush) {
+					surfaceBrush = PickIceBrush();
+				}
+				if (!surfaceBrush) {
+					surfaceBrush = grassBrush;
+				}
+				if (height >= 2) {
+					surfaceBrush = mountainBrush;
+				}
+			} else if (height >= 2) {
+				surfaceBrush = mountainBrush;
+			} else if (height == 1 && earthBrush) {
+				surfaceBrush = earthBrush;
+			}
+
+			for (int z = surfaceZ + 1; z <= baseZ; ++z) {
+				PaintGroundTile(editor, action, mapX, mapY, z, mountainBrush);
+			}
+			PaintGroundTile(editor, action, mapX, mapY, surfaceZ, surfaceBrush);
+		}
+	}
+
+	batch->addAndCommitAction(action);
+	editor.addBatch(batch, 2);
+	return true;
+}
+
+bool ProceduralCommon::ScatterDoodads(Editor& editor, const GenerationSpec& spec, int surfaceFloor, const std::vector<int>* heights, const std::vector<std::string>& keywords, wxString& error) {
+	if (!spec.doodads.enabled || spec.doodads.density <= 0) {
+		return true;
+	}
+
+	std::vector<DoodadBrush*> brushes = FindDoodadBrushes(keywords);
+	if (brushes.empty()) {
+		return true;
+	}
+
+	const bool useHeights = heights && heights->size() == static_cast<size_t>(spec.region.width * spec.region.height);
+	mt_seed(spec.seed + 911);
+	BatchAction* batch = editor.actionQueue->createBatch(ACTION_DRAW);
+	Action* action = editor.actionQueue->createAction(batch);
+
+	for (int y = 0; y < spec.region.height; ++y) {
+		for (int x = 0; x < spec.region.width; ++x) {
+			if (static_cast<int>(mt_randi() % 100) >= spec.doodads.density) {
+				continue;
+			}
+
+			const int mapX = spec.region.originX + x;
+			const int mapY = spec.region.originY + y;
+			int floorZ = surfaceFloor;
+			if (useHeights) {
+				const int height = (*heights)[y * spec.region.width + x];
+				floorZ = spec.region.z - height;
+			}
+
+			Position pos(mapX, mapY, floorZ);
+			Tile* tile = editor.map.getTile(pos);
+			if (!tile || !tile->hasGround()) {
+				continue;
+			}
+
+			GroundBrush* groundBrush = tile->getGroundBrush();
+			const bool allowSnow = IsSnowGround(groundBrush);
+			const bool allowGreen = IsFloorGround(groundBrush);
+			if (!allowSnow && !allowGreen) {
+				continue;
+			}
+			if (spec.preset == GenerationPreset::Ice && !allowSnow) {
+				continue;
+			}
+
+			DoodadBrush* doodad = brushes[mt_randi() % brushes.size()];
+			Tile* newTile = tile->deepCopy(editor.map);
+			doodad->draw(&editor.map, newTile, nullptr);
+			action->addChange(newd Change(newTile));
+		}
+	}
+
+	batch->addAndCommitAction(action);
+	editor.addBatch(batch, 2);
+	return true;
+}
+
+bool ProceduralCommon::PostProcessFloors(Editor& editor, const GenerationSpec& spec, int minZ, int maxZ, wxString& error) {
 	if (!spec.pipeline.borderizeAfter && !spec.pipeline.randomizeGround && !spec.pipeline.placeWalls) {
 		return true;
 	}
@@ -330,28 +557,30 @@ bool ProceduralCommon::PostProcess(Editor& editor, const GenerationSpec& spec, w
 	const int x1 = spec.region.originX + spec.region.width - 1;
 	const int y1 = spec.region.originY + spec.region.height - 1;
 
-	for (int y = y0; y <= y1; ++y) {
-		for (int x = x0; x <= x1; ++x) {
-			Position pos(x, y, spec.region.z);
-			Tile* tile = editor.map.getTile(pos);
-			if (!tile) {
-				continue;
-			}
-
-			Tile* newTile = tile->deepCopy(editor.map);
-
-			if (spec.pipeline.randomizeGround) {
-				GroundBrush* groundBrush = newTile->getGroundBrush();
-				if (groundBrush && groundBrush->isReRandomizable()) {
-					groundBrush->draw(&editor.map, newTile, nullptr);
+	for (int z = minZ; z <= maxZ; ++z) {
+		for (int y = y0; y <= y1; ++y) {
+			for (int x = x0; x <= x1; ++x) {
+				Position pos(x, y, z);
+				Tile* tile = editor.map.getTile(pos);
+				if (!tile) {
+					continue;
 				}
-			}
 
-			if (spec.pipeline.borderizeAfter && g_settings.getInteger(Config::USE_AUTOMAGIC)) {
-				newTile->borderize(&editor.map);
-			}
+				Tile* newTile = tile->deepCopy(editor.map);
 
-			action->addChange(newd Change(newTile));
+				if (spec.pipeline.randomizeGround) {
+					GroundBrush* groundBrush = newTile->getGroundBrush();
+					if (groundBrush && groundBrush->isReRandomizable()) {
+						groundBrush->draw(&editor.map, newTile, nullptr);
+					}
+				}
+
+				if (spec.pipeline.borderizeAfter && g_settings.getInteger(Config::USE_AUTOMAGIC)) {
+					newTile->borderize(&editor.map);
+				}
+
+				action->addChange(newd Change(newTile));
+			}
 		}
 	}
 
@@ -366,50 +595,52 @@ bool ProceduralCommon::PostProcess(Editor& editor, const GenerationSpec& spec, w
 
 		if (wallBrush) {
 			Action* wallAction = editor.actionQueue->createAction(batch);
-			for (int y = y0; y <= y1; ++y) {
-				for (int x = x0; x <= x1; ++x) {
-					Position pos(x, y, spec.region.z);
-					Tile* tile = editor.map.getTile(pos);
-					if (!tile || !tile->hasGround()) {
-						continue;
-					}
-
-					GroundBrush* groundBrush = tile->getGroundBrush();
-					if (!IsWallGround(groundBrush)) {
-						continue;
-					}
-
-					bool touchesFloor = false;
-					static const int dx[] = {0, 1, 0, -1};
-					static const int dy[] = {-1, 0, 1, 0};
-					for (int dir = 0; dir < 4; ++dir) {
-						Position neighbor(x + dx[dir], y + dy[dir], spec.region.z);
-						if (neighbor.x < x0 || neighbor.x > x1 || neighbor.y < y0 || neighbor.y > y1) {
-							touchesFloor = true;
-							break;
+			for (int z = minZ; z <= maxZ; ++z) {
+				for (int y = y0; y <= y1; ++y) {
+					for (int x = x0; x <= x1; ++x) {
+						Position pos(x, y, z);
+						Tile* tile = editor.map.getTile(pos);
+						if (!tile || !tile->hasGround()) {
+							continue;
 						}
-						Tile* neighborTile = editor.map.getTile(neighbor);
-						if (!neighborTile || !neighborTile->hasGround()) {
-							touchesFloor = true;
-							break;
-						}
-						if (IsFloorGround(neighborTile->getGroundBrush())) {
-							touchesFloor = true;
-							break;
-						}
-					}
 
-					if (!touchesFloor) {
-						continue;
-					}
+						GroundBrush* groundBrush = tile->getGroundBrush();
+						if (!IsWallGround(groundBrush)) {
+							continue;
+						}
 
-					Tile* newTile = tile->deepCopy(editor.map);
-					newTile->cleanWalls(true);
-					wallBrush->draw(&editor.map, newTile, nullptr);
-					if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
-						newTile->wallize(&editor.map);
+						bool touchesFloor = false;
+						static const int dx[] = {0, 1, 0, -1};
+						static const int dy[] = {-1, 0, 1, 0};
+						for (int dir = 0; dir < 4; ++dir) {
+							Position neighbor(x + dx[dir], y + dy[dir], z);
+							if (neighbor.x < x0 || neighbor.x > x1 || neighbor.y < y0 || neighbor.y > y1) {
+								touchesFloor = true;
+								break;
+							}
+							Tile* neighborTile = editor.map.getTile(neighbor);
+							if (!neighborTile || !neighborTile->hasGround()) {
+								touchesFloor = true;
+								break;
+							}
+							if (IsFloorGround(neighborTile->getGroundBrush())) {
+								touchesFloor = true;
+								break;
+							}
+						}
+
+						if (!touchesFloor) {
+							continue;
+						}
+
+						Tile* newTile = tile->deepCopy(editor.map);
+						newTile->cleanWalls(true);
+						wallBrush->draw(&editor.map, newTile, nullptr);
+						if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
+							newTile->wallize(&editor.map);
+						}
+						wallAction->addChange(newd Change(newTile));
 					}
-					wallAction->addChange(newd Change(newTile));
 				}
 			}
 			batch->addAndCommitAction(wallAction);
@@ -419,4 +650,8 @@ bool ProceduralCommon::PostProcess(Editor& editor, const GenerationSpec& spec, w
 	batch->addAndCommitAction(action);
 	editor.addBatch(batch, 2);
 	return true;
+}
+
+bool ProceduralCommon::PostProcess(Editor& editor, const GenerationSpec& spec, wxString& error) {
+	return PostProcessFloors(editor, spec, spec.region.z, spec.region.z, error);
 }

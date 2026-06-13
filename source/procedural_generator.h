@@ -33,7 +33,24 @@ enum class GenerationPreset {
 	Desert,
 	Cave,
 	City,
-	Coast
+	Coast,
+	Mountain,
+	Ice
+};
+
+struct GenerationElevation {
+	int maxLevels;
+
+	GenerationElevation() :
+		maxLevels(0) { }
+};
+
+struct GenerationDoodads {
+	bool enabled;
+	int density;
+
+	GenerationDoodads() :
+		enabled(false), density(12) { }
 };
 
 struct GenerationPipeline {
@@ -60,6 +77,8 @@ struct GenerationSpec {
 	uint32_t seed;
 	GenerationSource source;
 	GenerationPreset preset;
+	GenerationElevation elevation;
+	GenerationDoodads doodads;
 	GenerationPipeline pipeline;
 	ImageMaskRequest imageMask;
 	TextPromptRequest textPrompt;

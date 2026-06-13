@@ -19,7 +19,10 @@ enum {
 	ID_BORDERIZE,
 	ID_RANDOMIZE,
 	ID_PLACE_WALLS,
-	ID_PRESET
+	ID_PRESET,
+	ID_ELEVATION,
+	ID_DOODADS,
+	ID_DOODAD_DENSITY
 };
 
 ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
@@ -34,7 +37,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	sbMode->Add(rbTextPrompt, 0, wxALL, 4);
 	top->Add(sbMode, 0, wxEXPAND | wxALL, 8);
 
-	wxFlexGridSizer* grid = new wxFlexGridSizer(6, 2, 6, 6);
+	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 6, 6);
 	grid->AddGrowableCol(1, 1);
 
 	grid->Add(new wxStaticText(this, wxID_ANY, "Image:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -64,8 +67,14 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	cboPreset->Append("Cave");
 	cboPreset->Append("City");
 	cboPreset->Append("Coast");
+	cboPreset->Append("Mountain (multi-floor)");
+	cboPreset->Append("Ice / Snow");
 	cboPreset->SetSelection(0);
 	grid->Add(cboPreset, 1, wxEXPAND);
+
+	grid->Add(new wxStaticText(this, wxID_ANY, "Elevation levels:"), 0, wxALIGN_CENTER_VERTICAL);
+	spnElevation = new wxSpinCtrl(this, ID_ELEVATION, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 6, 0);
+	grid->Add(spnElevation, 0, wxEXPAND);
 
 	grid->Add(new wxStaticText(this, wxID_ANY, "Size (w×h×z):"), 0, wxALIGN_CENTER_VERTICAL);
 	wxBoxSizer* sizeRow = new wxBoxSizer(wxHORIZONTAL);
@@ -86,16 +95,24 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	wxStaticBoxSizer* sbTarget = new wxStaticBoxSizer(wxVERTICAL, this, "Target area");
 	chkUseSelection = new wxCheckBox(this, ID_USE_SELECTION, "Use current map selection");
 	sbTarget->Add(chkUseSelection, 0, wxALL, 4);
+	sbTarget->Add(new wxStaticText(this, wxID_ANY, "Mountains/ice elevation stack upward from base z (ground is usually z=7)."), 0, wxALL, 4);
 	top->Add(sbTarget, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxStaticBoxSizer* sbPipeline = new wxStaticBoxSizer(wxVERTICAL, this, "Post-processing");
 	chkBorderize = new wxCheckBox(this, ID_BORDERIZE, "Borderize after generation");
 	chkRandomize = new wxCheckBox(this, ID_RANDOMIZE, "Randomize ground variants");
 	chkPlaceWalls = new wxCheckBox(this, ID_PLACE_WALLS, "Place walls on cave/city edges");
+	chkDoodads = new wxCheckBox(this, ID_DOODADS, "Place biome doodads (ice/snow props)");
 	chkBorderize->SetValue(true);
 	sbPipeline->Add(chkBorderize, 0, wxALL, 4);
 	sbPipeline->Add(chkRandomize, 0, wxALL, 4);
 	sbPipeline->Add(chkPlaceWalls, 0, wxALL, 4);
+	sbPipeline->Add(chkDoodads, 0, wxALL, 4);
+	wxBoxSizer* doodadRow = new wxBoxSizer(wxHORIZONTAL);
+	doodadRow->Add(new wxStaticText(this, wxID_ANY, "Doodad density %:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	spnDoodadDensity = new wxSpinCtrl(this, ID_DOODAD_DENSITY, "12", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 40, 12);
+	doodadRow->Add(spnDoodadDensity, 0);
+	sbPipeline->Add(doodadRow, 0, wxALL, 4);
 	top->Add(sbPipeline, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxBoxSizer* bottom = new wxBoxSizer(wxHORIZONTAL);
@@ -123,6 +140,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_IMAGE);
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_PROMPT);
 	Bind(wxEVT_CHECKBOX, &ProceduralDialog::OnUseSelectionChanged, this, ID_USE_SELECTION);
+	Bind(wxEVT_COMBOBOX, &ProceduralDialog::OnPresetChanged, this, ID_PRESET);
 }
 
 void ProceduralDialog::SyncFromSelection() {
@@ -155,6 +173,16 @@ void ProceduralDialog::OnModeChanged(wxCommandEvent& event) {
 	cboPreset->Enable(!imageMode);
 }
 
+void ProceduralDialog::OnPresetChanged(wxCommandEvent& event) {
+	const GenerationPreset preset = GetSelectedPreset();
+	if (preset == GenerationPreset::Mountain && spnElevation->GetValue() == 0) {
+		spnElevation->SetValue(4);
+	}
+	if (preset == GenerationPreset::Ice) {
+		chkDoodads->SetValue(true);
+	}
+}
+
 GenerationPreset ProceduralDialog::GetSelectedPreset() const {
 	switch (cboPreset->GetSelection()) {
 		case 1:
@@ -167,6 +195,10 @@ GenerationPreset ProceduralDialog::GetSelectedPreset() const {
 			return GenerationPreset::City;
 		case 5:
 			return GenerationPreset::Coast;
+		case 6:
+			return GenerationPreset::Mountain;
+		case 7:
+			return GenerationPreset::Ice;
 		default:
 			return GenerationPreset::Auto;
 	}
@@ -194,6 +226,9 @@ void ProceduralDialog::OnGenerate(wxCommandEvent& event) {
 	spec.useSelection = chkUseSelection->GetValue();
 	spec.seed = static_cast<uint32_t>(spnSeed->GetValue());
 	spec.preset = GetSelectedPreset();
+	spec.elevation.maxLevels = spnElevation->GetValue();
+	spec.doodads.enabled = chkDoodads->GetValue();
+	spec.doodads.density = spnDoodadDensity->GetValue();
 	spec.pipeline.borderizeAfter = chkBorderize->GetValue();
 	spec.pipeline.randomizeGround = chkRandomize->GetValue();
 	spec.pipeline.placeWalls = chkPlaceWalls->GetValue();

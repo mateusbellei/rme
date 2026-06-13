@@ -49,8 +49,15 @@ editor.addBatch(batch, 2);
 
 ### Brushes
 
-- Lookup: `ProceduralCommon::FindGroundBrush("grass")` — substring case-insensitive em `g_brushes`
+- Ground: `FindGroundBrush("grass")`, `PickSnowBrush()`, `PickMountainBrush()`
+- Doodads: `FindDoodadBrushes({"snow","ice","frost",...})` — scatter por densidade %
 - Paredes: `FindWallBrush("stone")` + `draw()` + `tile->wallize(&map)` se automagic
+
+### Elevação (Mountain / Ice)
+
+- `ApplyMountainElevation` empilha mountain nos andares abaixo da superfície
+- `PostProcessFloors(minZ, maxZ)` borderiza todos os andares
+- Base floor z=7 recomendado (`GROUND_LAYER` em `definitions.h`)
 
 ### Legend JSON
 

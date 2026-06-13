@@ -121,6 +121,8 @@ Arquivo exemplo: `data/procedural/default_legend.json`
 | Forest | floresta, forest, jungle, selva |
 | Desert | deserto, desert, sand |
 | Coast | costa, coast, beach, praia |
+| Mountain | montanha, mountain, peak, pico, elevado |
+| Ice | gelo, ice, neve, snow, winter, inverno, tundra, glacial |
 | Auto | inferir do texto; default Forest |
 
 ### Algoritmos de máscara
@@ -130,6 +132,20 @@ Arquivo exemplo: `data/procedural/default_legend.json`
 - **Forest**: ruído por célula + manchas de dirt/water
 - **Desert**: sand dominante + patches earth
 - **Coast**: gradiente horizontal water ↔ sand ↔ grass
+
+### Mountain (multi-floor)
+
+- Heightmap ridged + falloff radial
+- `baseZ = region.z` (ideal: **z=7** = ground layer)
+- Por célula: empilha `mountain` de `surfaceZ+1` até `baseZ`; superfície em `surfaceZ = baseZ - height`
+- Borderize em **todos os andares** afetados (`PostProcessFloors`)
+- Validação: `region.z >= elevation.maxLevels`
+
+### Ice / Snow
+
+- **Plano**: máscara snow/ice/water + `ice_legend.json` + doodads (`snow`, `ice`, `frost`, `winter`, …)
+- **Montanhoso**: heightmap + superfície snow + picos rock + doodads no andar walkable de cada célula
+- Prompt com "montanha"/"peak" força elevação mesmo com levels=0
 
 ---
 
@@ -157,7 +173,8 @@ Ordem de execução após pintura:
 
 - [ ] Gerar dentro da seleção retangular (single floor)
 - [ ] Legend JSON mapeia cores → ground brushes
-- [ ] Prompt "caverna escura" gera layout procedural com borderize
+- [ ] Prompt "montanha nevada" gera elevação multi-floor com snow
+- [ ] Prompt "tundra gelada" gera bioma ice com doodads
 - [ ] Prompt "cidade" gera grid com ruas e opcionalmente paredes
 - [ ] Undo funciona (single batch)
 - [ ] Dialog reflete seleção atual (auto-fill w×h)

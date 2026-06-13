@@ -11,6 +11,7 @@
 class Editor;
 class GroundBrush;
 class WallBrush;
+class DoodadBrush;
 
 struct LegendEntry {
 	uint8_t r;
@@ -33,14 +34,23 @@ namespace ProceduralCommon {
 
 	GroundBrush* FindGroundBrush(const std::string& targetLower);
 	WallBrush* FindWallBrush(const std::string& targetLower);
+	DoodadBrush* FindDoodadBrush(const std::string& targetLower);
+	std::vector<DoodadBrush*> FindDoodadBrushes(const std::vector<std::string>& keywords);
 	GroundBrush* PickDefaultLandBrush();
 	GroundBrush* PickDefaultWaterBrush();
+	GroundBrush* PickSnowBrush();
+	GroundBrush* PickIceBrush();
+	GroundBrush* PickMountainBrush();
 
 	GroundBrush* BrushForPixel(uint8_t r, uint8_t g, uint8_t b, const LegendMapping* legend, GroundBrush* landFallback, GroundBrush* waterFallback);
 	bool IsTransparentPixel(uint8_t r, uint8_t g, uint8_t b);
 
+	bool PaintGroundTile(Editor& editor, Action* action, int x, int y, int z, GroundBrush* brush);
 	bool ApplyColorMask(Editor& editor, const GenerationSpec& spec, const wxImage& mask, const LegendMapping* legend, wxString& error);
+	bool ApplyMountainElevation(Editor& editor, const GenerationSpec& spec, const std::vector<int>& heights, wxString& error);
+	bool ScatterDoodads(Editor& editor, const GenerationSpec& spec, int surfaceFloor, const std::vector<int>* heights, const std::vector<std::string>& keywords, wxString& error);
 	bool PostProcess(Editor& editor, const GenerationSpec& spec, wxString& error);
+	bool PostProcessFloors(Editor& editor, const GenerationSpec& spec, int minZ, int maxZ, wxString& error);
 }
 
 #endif

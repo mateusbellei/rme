@@ -10,6 +10,9 @@
     { "color": "#964B00", "brush": "earth" },
     { "color": "#654321", "brush": "mountain" },
     { "color": "#A0522D", "brush": "cobblestone" },
+    { "color": "#FFFFFF", "brush": "snow" },
+    { "color": "#F0F8FF", "brush": "snow" },
+    { "color": "#E0FFFF", "brush": "ice" },
     { "color": "#000000", "brush": "" }
   ]
 }

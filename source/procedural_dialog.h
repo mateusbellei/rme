@@ -20,6 +20,7 @@ private:
 	void OnGenerate(wxCommandEvent& event);
 	void OnModeChanged(wxCommandEvent& event);
 	void OnUseSelectionChanged(wxCommandEvent& event);
+	void OnPresetChanged(wxCommandEvent& event);
 	void SyncFromSelection();
 	GenerationPreset GetSelectedPreset() const;
 
@@ -43,6 +44,10 @@ private:
 	wxCheckBox* chkBorderize;
 	wxCheckBox* chkRandomize;
 	wxCheckBox* chkPlaceWalls;
+	wxCheckBox* chkDoodads;
+
+	wxSpinCtrl* spnElevation;
+	wxSpinCtrl* spnDoodadDensity;
 
 	wxButton* btnGenerate;
 };

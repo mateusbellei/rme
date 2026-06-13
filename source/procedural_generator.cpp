@@ -38,5 +38,3 @@ bool ProceduralGenerator::Run(Editor& editor, const GenerationSpec& spec, wxStri
 			return false;
 	}
 }
-
-

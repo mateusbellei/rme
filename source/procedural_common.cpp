@@ -380,8 +380,8 @@ bool ProceduralCommon::PostProcess(Editor& editor, const GenerationSpec& spec, w
 					}
 
 					bool touchesFloor = false;
-					static const int dx[] = {0, 1, 0, -1};
-					static const int dy[] = {-1, 0, 1, 0};
+					static const int dx[] = { 0, 1, 0, -1 };
+					static const int dy[] = { -1, 0, 1, 0 };
 					for (int dir = 0; dir < 4; ++dir) {
 						Position neighbor(x + dx[dir], y + dy[dir], spec.region.z);
 						if (neighbor.x < x0 || neighbor.x > x1 || neighbor.y < y0 || neighbor.y > y1) {

@@ -1,0 +1,16 @@
+{
+  "version": 3,
+  "source": "prompt_with_image",
+  "prompt": "floresta densa com rio",
+  "referenceImage": "",
+  "referenceWeight": 35,
+  "preset": "forest",
+  "seed": 1337,
+  "useSelection": true,
+  "region": { "width": 128, "height": 128, "z": 7 },
+  "elevation": 0,
+  "doodads": { "enabled": true, "density": 14 },
+  "pipeline": { "borderize": true, "randomize": false, "walls": false },
+  "legend": "procedural/default_legend.json",
+  "useSidecar": false
+}

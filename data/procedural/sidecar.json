@@ -1,0 +1,5 @@
+{
+  "enabled": false,
+  "script": "tools/procedural_sidecar.py",
+  "timeout_ms": 30000
+}

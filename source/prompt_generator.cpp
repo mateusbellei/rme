@@ -46,7 +46,7 @@ namespace {
 		return count;
 	}
 
-	static wxImage BuildCaveMask(int width, int height, uint32_t seed) {
+	static wxImage BuildCaveMaskInternal(int width, int height, uint32_t seed) {
 		wxImage image(width, height);
 		std::vector<uint8_t> grid(width * height, 0);
 		mt_seed(seed);
@@ -286,7 +286,7 @@ wxImage PromptGenerator::BuildIceMask(int width, int height, int maxLevels, uint
 wxImage PromptGenerator::BuildMask(GenerationPreset preset, int width, int height, uint32_t seed) {
 	switch (preset) {
 		case GenerationPreset::Cave:
-			return BuildCaveMask(width, height, seed);
+			return BuildCaveMaskInternal(width, height, seed);
 		case GenerationPreset::City:
 			return BuildCityMask(width, height, seed);
 		case GenerationPreset::Desert:
@@ -301,4 +301,16 @@ wxImage PromptGenerator::BuildMask(GenerationPreset preset, int width, int heigh
 		default:
 			return BuildForestMask(width, height, seed);
 	}
+}
+
+wxImage PromptGenerator::BuildCaveMask(int width, int height, uint32_t seed) {
+	return BuildMask(GenerationPreset::Cave, width, height, seed);
+}
+
+bool PromptGenerator::WantsDeepCave(const wxString& prompt, int configuredDepth) {
+	if (configuredDepth > 0) {
+		return true;
+	}
+	const wxString lower = prompt.Lower();
+	return lower.Contains("profunda") || lower.Contains("deep") || lower.Contains("depth") || lower.Contains("multi") || lower.Contains("subterrane");
 }

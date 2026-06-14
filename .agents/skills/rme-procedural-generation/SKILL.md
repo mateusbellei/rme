@@ -3,82 +3,72 @@ name: rme-procedural-generation
 description: >-
   Desenvolve a feature de geração procedural de mapas no Remere's Map Editor (RME).
   Use ao trabalhar em ProceduralDialog, ProceduralGenerator, image mask, prompt-to-map,
-  biomas, seleção de área, legend JSON, borderize ou paredes automáticas.
+  biomas, seleção de área, legend JSON, borderize, elevação, sidecar ou receitas JSON.
 ---
 
 # RME Procedural Generation
 
-## Quando usar
+## Documentação
 
-- Alterar geração de mapas por imagem ou prompt
-- Adicionar presets (caverna, cidade, floresta)
-- Integrar com seleção do editor ou pipeline de brushes
+| Versão | Spec |
+|--------|------|
+| v2 | `.agents/specs/procedural-generation-v2.md` |
+| v3 | `.agents/specs/procedural-generation-v3.md` |
 
-## Leitura obrigatória
+Branch: `feat/procedural-generation`
 
-1. Spec: `.agents/specs/procedural-generation-v2.md`
-2. Branch: `feat/procedural-generation`
-
-## Arquitetura
+## Arquitetura v3
 
 ```
-ProceduralDialog → ProceduralGenerator::Run → backends
-  ImageMask  → image_mask_generator.cpp → ProceduralCommon
-  TextPrompt → prompt_generator.cpp       → ProceduralCommon
+ProceduralDialog (recipe save/load, 3 modes)
+  → ProceduralSidecar::TryEnhance (opcional)
+  → ProceduralGenerator::Run
+       ├─ ImageMask
+       ├─ TextPrompt
+       └─ PromptWithImage (blend reference + procedural)
+            → preset router (Mountain/Ice/DeepCave/flat)
+            → ScatterPresetDoodads (biome_doodads.json)
 ```
 
-## Regras de implementação
+## Modos de geração
 
-### Undo / tiles
+| Modo | source | Comportamento |
+|------|--------|---------------|
+| Image mask | `ImageMask` | PNG + legend |
+| Text prompt | `TextPrompt` | preset procedural |
+| Prompt + image | `PromptWithImage` | imagem ± blend % com procedural |
 
-Sempre usar `ActionQueue`:
+## Elevação vs profundidade
 
-```cpp
-BatchAction* batch = editor.actionQueue->createBatch(ACTION_DRAW);
-Action* action = editor.actionQueue->createAction(batch);
-// ... deepCopy tile, modify, action->addChange(newd Change(newTile))
-batch->addAndCommitAction(action);
-editor.addBatch(batch, 2);
-```
+- **Mountain/Ice**: `elevation.maxLevels` → andares **acima** (z diminui: 7→6→5)
+- **Cave profunda**: mesmo spin = andares **abaixo** (z aumenta: 7→8→9) + shafts
+- Base ideal: **z=7** (`GROUND_LAYER`)
 
-### Região de geração
+## Dados em `data/procedural/`
 
-- `ProceduralCommon::ResolveRegion(editor, spec, error)` — preenche `spec.region`
-- Com `useSelection`: `selection.minPosition()` / `maxPosition()`, single floor only
-- Posição final: `originX + x`, `originY + y`, `region.z`
+- `default_legend.json`, `ice_legend.json`
+- `biome_doodads.json` — keywords por preset
+- `sidecar.json` — script Python
+- `recipes/` — receitas salvas
 
-### Brushes
+## Sidecar
 
-- Ground: `FindGroundBrush("grass")`, `PickSnowBrush()`, `PickMountainBrush()`
-- Doodads: `FindDoodadBrushes({"snow","ice","frost",...})` — scatter por densidade %
-- Paredes: `FindWallBrush("stone")` + `draw()` + `tile->wallize(&map)` se automagic
+Script: `tools/procedural_sidecar.py`  
+Habilitar em `sidecar.json` + checkbox no dialog.  
+Estende para LLM: script escreve `response.json` com `preset`, `elevation`, `depthLevels`, `maskPath`.
 
-### Elevação (Mountain / Ice)
+## Receitas
 
-- `ApplyMountainElevation` empilha mountain nos andares abaixo da superfície
-- `PostProcessFloors(minZ, maxZ)` borderiza todos os andares
-- Base floor z=7 recomendado (`GROUND_LAYER` em `definitions.h`)
+`ProceduralRecipe::Save` / `Load` — version 3 JSON.
 
-### Legend JSON
+## Teste manual v3
 
-Formato em `data/procedural/default_legend.json`. Parser em `procedural_common.cpp`.
+1. Load recipe `data/procedural/recipes/example_forest.json`
+2. Prompt + image com blend 35% na seleção
+3. "caverna profunda" + depth 3 → z 7–10
+4. Forest + doodads → árvores/props
+5. Sidecar enabled → preset refinado pelo script
 
-### Prompt
+## Próximo (v3.3)
 
-Keywords PT/EN em `PromptGenerator::DetectPreset()`. Não chamar APIs externas no v2.
-
-### Estilo
-
-- Tabs, `newd`, `wxString`, padrão RME existente
-- Não alterar arquivos unrelated (zones, items.otb, etc.)
-
-## Teste manual
-
-1. Abrir mapa, selecionar retângulo no floor 7
-2. File → Generate Map → Use selection → Image mask + legend
-3. Prompt: "caverna escura" com borderize + walls
-4. Ctrl+Z deve desfazer tudo
-
-## Próximos passos (v3)
-
-Ver roadmap em `.agents/specs/procedural-generation-v2.md`
+HTTP LLM, vision mask PNG, templates OTBM cidade, rampas automáticas.

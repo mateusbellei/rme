@@ -105,6 +105,8 @@ ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_generator.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_common.h
 ${CMAKE_CURRENT_LIST_DIR}/prompt_generator.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_recipe.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_sidecar.h
 ${CMAKE_CURRENT_LIST_DIR}/image_mask_generator.h
 )
 
@@ -210,5 +212,7 @@ ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_generator.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_common.cpp
 ${CMAKE_CURRENT_LIST_DIR}/prompt_generator.cpp
+${CMAKE_CURRENT_LIST_DIR}/procedural_recipe.cpp
+${CMAKE_CURRENT_LIST_DIR}/procedural_sidecar.cpp
 ${CMAKE_CURRENT_LIST_DIR}/image_mask_generator.cpp
 )

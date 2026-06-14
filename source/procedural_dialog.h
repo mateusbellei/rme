@@ -17,37 +17,47 @@ public:
 private:
 	void OnBrowseImage(wxCommandEvent& event);
 	void OnBrowseLegend(wxCommandEvent& event);
+	void OnSaveRecipe(wxCommandEvent& event);
+	void OnLoadRecipe(wxCommandEvent& event);
 	void OnGenerate(wxCommandEvent& event);
 	void OnModeChanged(wxCommandEvent& event);
 	void OnUseSelectionChanged(wxCommandEvent& event);
 	void OnPresetChanged(wxCommandEvent& event);
 	void SyncFromSelection();
+	void UpdateElevationLabel();
+	void ApplySpecToDialog(const GenerationSpec& spec);
+	GenerationSpec BuildSpecFromDialog() const;
 	GenerationPreset GetSelectedPreset() const;
+	void SetPresetSelection(GenerationPreset preset);
 
 private:
 	Editor& editor;
 
 	wxRadioButton* rbImageMask;
 	wxRadioButton* rbTextPrompt;
+	wxRadioButton* rbPromptWithImage;
 
 	wxTextCtrl* txtImagePath;
 	wxTextCtrl* txtLegendPath;
 	wxTextCtrl* txtPrompt;
 	wxComboBox* cboPreset;
 
+	wxStaticText* lblElevation;
+
 	wxSpinCtrl* spnWidth;
 	wxSpinCtrl* spnHeight;
 	wxSpinCtrl* spnZ;
 	wxSpinCtrl* spnSeed;
+	wxSpinCtrl* spnElevation;
+	wxSpinCtrl* spnReferenceWeight;
+	wxSpinCtrl* spnDoodadDensity;
 
 	wxCheckBox* chkUseSelection;
 	wxCheckBox* chkBorderize;
 	wxCheckBox* chkRandomize;
 	wxCheckBox* chkPlaceWalls;
 	wxCheckBox* chkDoodads;
-
-	wxSpinCtrl* spnElevation;
-	wxSpinCtrl* spnDoodadDensity;
+	wxCheckBox* chkSidecar;
 
 	wxButton* btnGenerate;
 };

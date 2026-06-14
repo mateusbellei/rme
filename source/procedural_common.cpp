@@ -16,10 +16,12 @@
 #include "gui.h"
 #include "settings.h"
 #include "json.h"
+#include "prompt_generator.h"
 #include "mt_rand.h"
 
 #include <algorithm>
 #include <fstream>
+#include <map>
 #include <cctype>
 
 namespace {
@@ -79,6 +81,18 @@ namespace {
 		}
 		const std::string name = as_lower_str(brush->getName());
 		return name.find("snow") != std::string::npos || name.find("ice") != std::string::npos || name.find("frost") != std::string::npos || name.find("winter") != std::string::npos;
+	}
+
+	static GenerationPreset PresetKeyFromString(const std::string& value) {
+		const std::string lower = as_lower_str(value);
+		if (lower == "forest") return GenerationPreset::Forest;
+		if (lower == "desert") return GenerationPreset::Desert;
+		if (lower == "cave") return GenerationPreset::Cave;
+		if (lower == "city") return GenerationPreset::City;
+		if (lower == "coast") return GenerationPreset::Coast;
+		if (lower == "mountain") return GenerationPreset::Mountain;
+		if (lower == "ice") return GenerationPreset::Ice;
+		return GenerationPreset::Auto;
 	}
 }
 
@@ -644,6 +658,167 @@ bool ProceduralCommon::PostProcessFloors(Editor& editor, const GenerationSpec& s
 				}
 			}
 			batch->addAndCommitAction(wallAction);
+		}
+	}
+
+	batch->addAndCommitAction(action);
+	editor.addBatch(batch, 2);
+	return true;
+}
+
+wxImage ProceduralCommon::BlendMasks(const wxImage& reference, const wxImage& procedural, int proceduralWeight) {
+	const int weight = std::max(0, std::min(100, proceduralWeight));
+	if (weight <= 0) {
+		return reference;
+	}
+	if (weight >= 100) {
+		return procedural;
+	}
+
+	wxImage blended(reference.GetWidth(), reference.GetHeight());
+	const double procFactor = weight / 100.0;
+	const double refFactor = 1.0 - procFactor;
+	for (int y = 0; y < blended.GetHeight(); ++y) {
+		for (int x = 0; x < blended.GetWidth(); ++x) {
+			const uint8_t r = static_cast<uint8_t>(reference.GetRed(x, y) * refFactor + procedural.GetRed(x, y) * procFactor);
+			const uint8_t g = static_cast<uint8_t>(reference.GetGreen(x, y) * refFactor + procedural.GetGreen(x, y) * procFactor);
+			const uint8_t b = static_cast<uint8_t>(reference.GetBlue(x, y) * refFactor + procedural.GetBlue(x, y) * procFactor);
+			blended.SetRGB(x, y, r, g, b);
+		}
+	}
+	return blended;
+}
+
+bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec& spec, GenerationPreset preset, const std::vector<int>* heights, wxString& error) {
+	if (!spec.doodads.enabled) {
+		return true;
+	}
+
+	static std::map<GenerationPreset, std::vector<std::string>> cachedKeywords;
+	static std::map<GenerationPreset, int> cachedDensity;
+	static bool loaded = false;
+
+	if (!loaded) {
+		const wxString path = wxstr(g_gui.GetDataDirectory()) + "procedural/biome_doodads.json";
+		std::ifstream input(nstr(path).c_str());
+		if (input.good()) {
+			json::mValue root;
+			if (json::read(input, root) && root.type() == json::obj_type) {
+				json::mObject::const_iterator presetsIt = root.get_obj().find("presets");
+				if (presetsIt != root.get_obj().end() && presetsIt->second.type() == json::obj_type) {
+					const json::mObject& presets = presetsIt->second.get_obj();
+					for (json::mObject::const_iterator it = presets.begin(); it != presets.end(); ++it) {
+						if (it->second.type() != json::obj_type) {
+							continue;
+						}
+						const GenerationPreset parsed = PresetKeyFromString(it->first);
+						if (parsed == GenerationPreset::Auto) {
+							continue;
+						}
+						const json::mObject& entry = it->second.get_obj();
+						json::mObject::const_iterator kwIt = entry.find("keywords");
+						if (kwIt != entry.end() && kwIt->second.type() == json::array_type) {
+							for (const json::mValue& value : kwIt->second.get_array()) {
+								if (value.type() == json::str_type) {
+									cachedKeywords[parsed].push_back(value.get_str());
+								}
+							}
+						}
+						json::mObject::const_iterator denIt = entry.find("density");
+						if (denIt != entry.end() && denIt->second.type() == json::int_type) {
+							cachedDensity[parsed] = denIt->second.get_int();
+						}
+					}
+				}
+			}
+		}
+		loaded = true;
+	}
+
+	const std::map<GenerationPreset, std::vector<std::string>>::iterator kw = cachedKeywords.find(preset);
+	if (kw == cachedKeywords.end() || kw->second.empty()) {
+		return true;
+	}
+
+	GenerationSpec doodadSpec = spec;
+	if (doodadSpec.doodads.density <= 0) {
+		const std::map<GenerationPreset, int>::iterator den = cachedDensity.find(preset);
+		doodadSpec.doodads.density = den != cachedDensity.end() ? den->second : 10;
+	}
+	return ScatterDoodads(editor, doodadSpec, spec.region.z, heights, kw->second, error);
+}
+
+bool ProceduralCommon::ApplyDeepCave(Editor& editor, const GenerationSpec& spec, int depthLevels, uint32_t seed, wxString& error) {
+	if (depthLevels <= 0) {
+		return true;
+	}
+
+	if (spec.region.z + depthLevels > MAP_MAX_LAYER) {
+		error = wxString::Format("Cave depth exceeds map layer limit (max z=%d).", MAP_MAX_LAYER);
+		return false;
+	}
+
+	LegendMapping legend;
+	wxString legendPath = spec.imageMask.legendPath;
+	if (legendPath.empty()) {
+		legendPath = wxstr(g_gui.GetDataDirectory()) + "procedural/default_legend.json";
+	}
+	if (!LoadLegend(legendPath, legend, error)) {
+		return false;
+	}
+	ResolveLegendBrushes(legend);
+
+	GroundBrush* earthBrush = FindGroundBrush("earth");
+	GroundBrush* stoneBrush = FindGroundBrush("stone");
+	if (!stoneBrush) {
+		stoneBrush = PickMountainBrush();
+	}
+
+	const int baseZ = spec.region.z;
+	BatchAction* batch = editor.actionQueue->createBatch(ACTION_DRAW);
+	Action* action = editor.actionQueue->createAction(batch);
+
+	for (int floor = 0; floor <= depthLevels; ++floor) {
+		const int z = baseZ + floor;
+		const wxImage mask = PromptGenerator::BuildCaveMask(spec.region.width, spec.region.height, seed + floor * 7919);
+		for (int y = 0; y < spec.region.height; ++y) {
+			for (int x = 0; x < spec.region.width; ++x) {
+				const uint8_t r = mask.GetRed(x, y);
+				const uint8_t g = mask.GetGreen(x, y);
+				const uint8_t b = mask.GetBlue(x, y);
+				GroundBrush* target = BrushForPixel(r, g, b, &legend, earthBrush, stoneBrush);
+				if (!target) {
+					continue;
+				}
+				PaintGroundTile(editor, action, spec.region.originX + x, spec.region.originY + y, z, target);
+			}
+		}
+	}
+
+	for (int y = 1; y < spec.region.height - 1; ++y) {
+		for (int x = 1; x < spec.region.width - 1; ++x) {
+			for (int floor = 0; floor < depthLevels; ++floor) {
+				const int upperZ = baseZ + floor;
+				const int lowerZ = upperZ + 1;
+				Position upper(spec.region.originX + x, spec.region.originY + y, upperZ);
+				Position lower(spec.region.originX + x, spec.region.originY + y, lowerZ);
+				Tile* upperTile = editor.map.getTile(upper);
+				if (!upperTile || !upperTile->hasGround() || !upperTile->getGroundBrush()) {
+					continue;
+				}
+				const std::string upperName = as_lower_str(upperTile->getGroundBrush()->getName());
+				const bool isFloor = upperName.find("cave") != std::string::npos || upperName.find("stone") != std::string::npos;
+				if (!isFloor && ((x + y + floor) % 6 != 0)) {
+					continue;
+				}
+				GroundBrush* floorBrush = FindGroundBrush("cave");
+				if (!floorBrush) {
+					floorBrush = stoneBrush;
+				}
+				if (floorBrush) {
+					PaintGroundTile(editor, action, lower.x, lower.y, lowerZ, floorBrush);
+				}
+			}
 		}
 	}
 

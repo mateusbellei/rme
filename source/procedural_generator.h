@@ -24,7 +24,8 @@ struct GenerationRegion {
 
 enum class GenerationSource {
 	ImageMask,
-	TextPrompt
+	TextPrompt,
+	PromptWithImage
 };
 
 enum class GenerationPreset {
@@ -71,6 +72,13 @@ struct TextPromptRequest {
 	wxString prompt;
 };
 
+struct GenerationReference {
+	int blendWeight;
+
+	GenerationReference() :
+		blendWeight(0) { }
+};
+
 struct GenerationSpec {
 	GenerationRegion region;
 	bool useSelection;
@@ -80,11 +88,13 @@ struct GenerationSpec {
 	GenerationElevation elevation;
 	GenerationDoodads doodads;
 	GenerationPipeline pipeline;
+	GenerationReference reference;
+	bool useSidecar;
 	ImageMaskRequest imageMask;
 	TextPromptRequest textPrompt;
 
 	GenerationSpec() :
-		useSelection(false), seed(1337), source(GenerationSource::ImageMask), preset(GenerationPreset::Auto) { }
+		useSelection(false), seed(1337), source(GenerationSource::ImageMask), preset(GenerationPreset::Auto), useSidecar(false) { }
 };
 
 class ProceduralGenerator {

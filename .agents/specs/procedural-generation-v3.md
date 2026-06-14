@@ -19,7 +19,7 @@ Elevar a feature de **geração mínima** para **workflow de produção**: combi
 |------|---------|--------|
 | **3.1** | Prompt + imagem de referência, receitas JSON, doodads por bioma | Implementado |
 | **3.2** | Caverna profunda multi-floor (z+1…), sidecar Python | Implementado |
-| **3.3** | LLM HTTP (OpenAI-compatible), vision → mask PNG | Planejado |
+| **3.3** | LLM HTTP (OpenAI-compatible), vision → mask PNG | Implementado |
 | **3.4** | Templates OTBM (city chunks), rampas entre andares | Planejado |
 
 ---
@@ -115,33 +115,45 @@ Config: `data/procedural/sidecar.json`
 {
   "enabled": false,
   "script": "tools/procedural_sidecar.py",
-  "timeout_ms": 30000
+  "timeout_ms": 60000,
+  "llm": {
+    "enabled": false,
+    "base_url": "https://api.openai.com/v1",
+    "api_key_env": "OPENAI_API_KEY",
+    "model": "gpt-4o",
+    "vision": true,
+    "timeout_sec": 60
+  }
 }
 ```
 
 Fluxo:
-1. RME grava `request.json` em temp
-2. `wxExecute` roda script
-3. Script lê request, grava `response.json` (preset, maskPath, depth, etc.)
-4. RME merge no `GenerationSpec`
+1. RME resolve região (seleção ou spin W×H)
+2. RME grava `request.json` em temp (inclui bloco `llm` do config)
+3. `wxExecute` roda script Python
+4. Script: stub keywords **ou** HTTP chat completions (vision se imagem referência)
+5. Resposta → `response.json` (`preset`, `elevation`, `depthLevels`, `doodadDensity`, `maskPath`, `legendPath`)
+6. RME merge no `GenerationSpec`; `maskPath` promove modo TextPrompt → PromptWithImage
 
-Script exemplo incluído — ponto de extensão para LLM local/remota.
+**LLM mask:** resposta JSON com `maskRegions` (retângulos RGB) ou `maskBase64` (PNG).  
+Script grava `%TEMP%/rme_pg_mask.png`. Requer `pip install Pillow` para renderizar máscara.
+
+**Sem API key:** deixe `llm.enabled: false` — stub por keywords continua funcionando.
 
 ---
 
-## Critérios de aceite v3.1–3.2
+## Critérios de aceite v3.1–3.3
 
 - [ ] Modo prompt + imagem gera bioma na seleção
 - [ ] Salvar/carregar receita reproduz mesma config
 - [ ] Forest com doodads espalha árvores/props
 - [ ] Prompt "caverna profunda" gera z=7…10 com shafts
 - [ ] Sidecar desabilitado = no-op; habilitado = script roda sem crash
+- [ ] Sidecar + `llm.enabled` + `OPENAI_API_KEY` refinam preset e opcionalmente geram `maskPath`
 
 ---
 
-## v3.3+ (próximo)
+## v3.4 (próximo)
 
-- HTTP POST OpenAI-compatible (`/v1/chat/completions` + image)
-- Resposta → `mask.png` + `GenerationSpec` parcial
 - Import de chunk OTBM como stamp de cidade
 - Auto-ramp entre diferenças de heightmap adjacentes

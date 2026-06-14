@@ -101,6 +101,14 @@ bool ProceduralSidecar::TryEnhance(GenerationSpec& spec, wxString& error) {
 	request["seed"] = json::mValue(static_cast<int>(spec.seed));
 	request["elevation"] = json::mValue(spec.elevation.maxLevels);
 	request["referenceImage"] = json::mValue(nstr(spec.imageMask.imagePath));
+	request["regionWidth"] = json::mValue(spec.region.width);
+	request["regionHeight"] = json::mValue(spec.region.height);
+	request["outputDir"] = json::mValue(nstr(tempDir));
+
+	json::mObject::const_iterator llmIt = config.find("llm");
+	if (llmIt != config.end() && llmIt->second.type() == json::obj_type) {
+		request["llm"] = llmIt->second;
+	}
 
 	std::ofstream requestOut(nstr(requestPath).c_str());
 	if (!requestOut.good()) {
@@ -133,7 +141,12 @@ bool ProceduralSidecar::TryEnhance(GenerationSpec& spec, wxString& error) {
 	const json::mObject& response = responseRoot.get_obj();
 	json::mObject::const_iterator okIt = response.find("ok");
 	if (okIt != response.end() && okIt->second.type() == json::bool_type && !okIt->second.get_bool()) {
-		error = "Sidecar returned ok=false.";
+		json::mObject::const_iterator errIt = response.find("error");
+		if (errIt != response.end() && errIt->second.type() == json::str_type) {
+			error = wxstr(errIt->second.get_str());
+		} else {
+			error = "Sidecar returned ok=false.";
+		}
 		return false;
 	}
 
@@ -155,6 +168,20 @@ bool ProceduralSidecar::TryEnhance(GenerationSpec& spec, wxString& error) {
 	json::mObject::const_iterator maskIt = response.find("maskPath");
 	if (maskIt != response.end() && maskIt->second.type() == json::str_type) {
 		spec.imageMask.imagePath = wxstr(maskIt->second.get_str());
+		if (spec.source == GenerationSource::TextPrompt && !spec.imageMask.imagePath.empty()) {
+			spec.source = GenerationSource::PromptWithImage;
+		}
+	}
+
+	json::mObject::const_iterator doodadIt = response.find("doodadDensity");
+	if (doodadIt != response.end() && doodadIt->second.type() == json::int_type) {
+		spec.doodads.density = std::max(0, std::min(100, doodadIt->second.get_int()));
+		spec.doodads.enabled = spec.doodads.density > 0;
+	}
+
+	json::mObject::const_iterator legendIt = response.find("legendPath");
+	if (legendIt != response.end() && legendIt->second.type() == json::str_type) {
+		spec.imageMask.legendPath = wxstr(legendIt->second.get_str());
 	}
 
 	return true;

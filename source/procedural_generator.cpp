@@ -6,6 +6,7 @@
 
 #include "procedural_generator.h"
 #include "procedural_sidecar.h"
+#include "procedural_common.h"
 #include "editor.h"
 #include "gui.h"
 
@@ -16,7 +17,11 @@ namespace ProceduralBackends {
 
 bool ProceduralGenerator::Run(Editor& editor, const GenerationSpec& spec, wxString& error) {
 	GenerationSpec resolved = spec;
+
 	if (resolved.useSidecar) {
+		if (!ProceduralCommon::ResolveRegion(editor, resolved, error)) {
+			return false;
+		}
 		if (!ProceduralSidecar::TryEnhance(resolved, error)) {
 			return false;
 		}

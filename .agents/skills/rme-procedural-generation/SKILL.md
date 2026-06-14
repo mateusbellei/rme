@@ -51,11 +51,19 @@ ProceduralDialog (recipe save/load, 3 modes)
 - `sidecar.json` — script Python
 - `recipes/` — receitas salvas
 
-## Sidecar
+## Sidecar (v3.3)
 
 Script: `tools/procedural_sidecar.py`  
-Habilitar em `sidecar.json` + checkbox no dialog.  
-Estende para LLM: script escreve `response.json` com `preset`, `elevation`, `depthLevels`, `maskPath`.
+Habilitar em `sidecar.json` (`enabled: true`) + checkbox no dialog.
+
+| Modo | Config | Comportamento |
+|------|--------|---------------|
+| Stub | `llm.enabled: false` | Keywords PT/EN → preset, elevation, depth |
+| LLM | `llm.enabled: true` + env `OPENAI_API_KEY` | Chat vision → JSON spec + optional `maskPath` |
+
+Resposta merge: `preset`, `elevation`, `depthLevels`, `doodadDensity`, `maskPath`, `legendPath`.
+
+Dependência Python opcional: `pip install Pillow` (render `maskRegions` / `maskBase64`).
 
 ## Receitas
 
@@ -67,8 +75,9 @@ Estende para LLM: script escreve `response.json` com `preset`, `elevation`, `dep
 2. Prompt + image com blend 35% na seleção
 3. "caverna profunda" + depth 3 → z 7–10
 4. Forest + doodads → árvores/props
-5. Sidecar enabled → preset refinado pelo script
+5. Sidecar stub: `sidecar.json` enabled, `llm.enabled` false → keywords refinam preset
+6. Sidecar LLM: `llm.enabled` true + `OPENAI_API_KEY` → mask/spec via API
 
-## Próximo (v3.3)
+## Próximo (v3.4)
 
-HTTP LLM, vision mask PNG, templates OTBM cidade, rampas automáticas.
+Templates OTBM cidade, rampas automáticas entre andares de montanha.

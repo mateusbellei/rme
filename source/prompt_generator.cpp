@@ -214,10 +214,10 @@ GenerationPreset PromptGenerator::DetectPreset(const wxString& prompt, Generatio
 	if (ContainsAny(lower, { "floresta", "forest", "jungle", "selva", "woods" })) {
 		return GenerationPreset::Forest;
 	}
-	if (ContainsAny(lower, {"montanha", "mountain", "montanhas", "mountains", "alps", "peak", "pico", "elevado", "elevation"})) {
+	if (ContainsAny(lower, { "montanha", "mountain", "montanhas", "mountains", "alps", "peak", "pico", "elevado", "elevation" })) {
 		return GenerationPreset::Mountain;
 	}
-	if (ContainsAny(lower, {"gelo", "ice", "neve", "snow", "winter", "inverno", "frozen", "congelado", "glacial", "tundra"})) {
+	if (ContainsAny(lower, { "gelo", "ice", "neve", "snow", "winter", "inverno", "frozen", "congelado", "glacial", "tundra" })) {
 		return GenerationPreset::Ice;
 	}
 	return GenerationPreset::Forest;

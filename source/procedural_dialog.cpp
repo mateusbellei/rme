@@ -223,27 +223,51 @@ void ProceduralDialog::OnPresetChanged(wxCommandEvent& event) {
 
 GenerationPreset ProceduralDialog::GetSelectedPreset() const {
 	switch (cboPreset->GetSelection()) {
-		case 1: return GenerationPreset::Forest;
-		case 2: return GenerationPreset::Desert;
-		case 3: return GenerationPreset::Cave;
-		case 4: return GenerationPreset::City;
-		case 5: return GenerationPreset::Coast;
-		case 6: return GenerationPreset::Mountain;
-		case 7: return GenerationPreset::Ice;
-		default: return GenerationPreset::Auto;
+		case 1:
+			return GenerationPreset::Forest;
+		case 2:
+			return GenerationPreset::Desert;
+		case 3:
+			return GenerationPreset::Cave;
+		case 4:
+			return GenerationPreset::City;
+		case 5:
+			return GenerationPreset::Coast;
+		case 6:
+			return GenerationPreset::Mountain;
+		case 7:
+			return GenerationPreset::Ice;
+		default:
+			return GenerationPreset::Auto;
 	}
 }
 
 void ProceduralDialog::SetPresetSelection(GenerationPreset preset) {
 	switch (preset) {
-		case GenerationPreset::Forest: cboPreset->SetSelection(1); break;
-		case GenerationPreset::Desert: cboPreset->SetSelection(2); break;
-		case GenerationPreset::Cave: cboPreset->SetSelection(3); break;
-		case GenerationPreset::City: cboPreset->SetSelection(4); break;
-		case GenerationPreset::Coast: cboPreset->SetSelection(5); break;
-		case GenerationPreset::Mountain: cboPreset->SetSelection(6); break;
-		case GenerationPreset::Ice: cboPreset->SetSelection(7); break;
-		default: cboPreset->SetSelection(0); break;
+		case GenerationPreset::Forest:
+			cboPreset->SetSelection(1);
+			break;
+		case GenerationPreset::Desert:
+			cboPreset->SetSelection(2);
+			break;
+		case GenerationPreset::Cave:
+			cboPreset->SetSelection(3);
+			break;
+		case GenerationPreset::City:
+			cboPreset->SetSelection(4);
+			break;
+		case GenerationPreset::Coast:
+			cboPreset->SetSelection(5);
+			break;
+		case GenerationPreset::Mountain:
+			cboPreset->SetSelection(6);
+			break;
+		case GenerationPreset::Ice:
+			cboPreset->SetSelection(7);
+			break;
+		default:
+			cboPreset->SetSelection(0);
+			break;
 	}
 	UpdateElevationLabel();
 }

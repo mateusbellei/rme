@@ -12,41 +12,70 @@
 namespace {
 	static std::string PresetToString(GenerationPreset preset) {
 		switch (preset) {
-			case GenerationPreset::Forest: return "forest";
-			case GenerationPreset::Desert: return "desert";
-			case GenerationPreset::Cave: return "cave";
-			case GenerationPreset::City: return "city";
-			case GenerationPreset::Coast: return "coast";
-			case GenerationPreset::Mountain: return "mountain";
-			case GenerationPreset::Ice: return "ice";
-			default: return "auto";
+			case GenerationPreset::Forest:
+				return "forest";
+			case GenerationPreset::Desert:
+				return "desert";
+			case GenerationPreset::Cave:
+				return "cave";
+			case GenerationPreset::City:
+				return "city";
+			case GenerationPreset::Coast:
+				return "coast";
+			case GenerationPreset::Mountain:
+				return "mountain";
+			case GenerationPreset::Ice:
+				return "ice";
+			default:
+				return "auto";
 		}
 	}
 
 	static GenerationPreset PresetFromString(const std::string& value) {
 		const std::string lower = as_lower_str(value);
-		if (lower == "forest") return GenerationPreset::Forest;
-		if (lower == "desert") return GenerationPreset::Desert;
-		if (lower == "cave") return GenerationPreset::Cave;
-		if (lower == "city") return GenerationPreset::City;
-		if (lower == "coast") return GenerationPreset::Coast;
-		if (lower == "mountain") return GenerationPreset::Mountain;
-		if (lower == "ice") return GenerationPreset::Ice;
+		if (lower == "forest") {
+			return GenerationPreset::Forest;
+		}
+		if (lower == "desert") {
+			return GenerationPreset::Desert;
+		}
+		if (lower == "cave") {
+			return GenerationPreset::Cave;
+		}
+		if (lower == "city") {
+			return GenerationPreset::City;
+		}
+		if (lower == "coast") {
+			return GenerationPreset::Coast;
+		}
+		if (lower == "mountain") {
+			return GenerationPreset::Mountain;
+		}
+		if (lower == "ice") {
+			return GenerationPreset::Ice;
+		}
 		return GenerationPreset::Auto;
 	}
 
 	static std::string SourceToString(GenerationSource source) {
 		switch (source) {
-			case GenerationSource::ImageMask: return "image";
-			case GenerationSource::PromptWithImage: return "prompt_with_image";
-			default: return "prompt";
+			case GenerationSource::ImageMask:
+				return "image";
+			case GenerationSource::PromptWithImage:
+				return "prompt_with_image";
+			default:
+				return "prompt";
 		}
 	}
 
 	static GenerationSource SourceFromString(const std::string& value) {
 		const std::string lower = as_lower_str(value);
-		if (lower == "image" || lower == "image_mask") return GenerationSource::ImageMask;
-		if (lower == "prompt_with_image" || lower == "combined") return GenerationSource::PromptWithImage;
+		if (lower == "image" || lower == "image_mask") {
+			return GenerationSource::ImageMask;
+		}
+		if (lower == "prompt_with_image" || lower == "combined") {
+			return GenerationSource::PromptWithImage;
+		}
 		return GenerationSource::TextPrompt;
 	}
 

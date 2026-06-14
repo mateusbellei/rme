@@ -199,19 +199,19 @@ GenerationPreset PromptGenerator::DetectPreset(const wxString& prompt, Generatio
 	}
 
 	const wxString lower = prompt.Lower();
-	if (ContainsAny(lower, {"caverna", "cave", "dungeon", "masmorra", "gruta"})) {
+	if (ContainsAny(lower, { "caverna", "cave", "dungeon", "masmorra", "gruta" })) {
 		return GenerationPreset::Cave;
 	}
-	if (ContainsAny(lower, {"cidade", "city", "town", "vila", "urbano"})) {
+	if (ContainsAny(lower, { "cidade", "city", "town", "vila", "urbano" })) {
 		return GenerationPreset::City;
 	}
-	if (ContainsAny(lower, {"deserto", "desert", "areia", "sand"})) {
+	if (ContainsAny(lower, { "deserto", "desert", "areia", "sand" })) {
 		return GenerationPreset::Desert;
 	}
-	if (ContainsAny(lower, {"costa", "coast", "beach", "praia", "oceano"})) {
+	if (ContainsAny(lower, { "costa", "coast", "beach", "praia", "oceano" })) {
 		return GenerationPreset::Coast;
 	}
-	if (ContainsAny(lower, {"floresta", "forest", "jungle", "selva", "woods"})) {
+	if (ContainsAny(lower, { "floresta", "forest", "jungle", "selva", "woods" })) {
 		return GenerationPreset::Forest;
 	}
 	if (ContainsAny(lower, {"montanha", "mountain", "montanhas", "mountains", "alps", "peak", "pico", "elevado", "elevation"})) {

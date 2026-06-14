@@ -609,13 +609,27 @@ bool ProceduralCommon::PostProcessFloors(Editor& editor, const GenerationSpec& s
 
 		if (wallBrush) {
 			Action* wallAction = editor.actionQueue->createAction(batch);
-			for (int z = minZ; z <= maxZ; ++z) {
-				for (int y = y0; y <= y1; ++y) {
-					for (int x = x0; x <= x1; ++x) {
-						Position pos(x, y, z);
-						Tile* tile = editor.map.getTile(pos);
-						if (!tile || !tile->hasGround()) {
-							continue;
+			for (int y = y0; y <= y1; ++y) {
+				for (int x = x0; x <= x1; ++x) {
+					Position pos(x, y, spec.region.z);
+					Tile* tile = editor.map.getTile(pos);
+					if (!tile || !tile->hasGround()) {
+						continue;
+					}
+
+					GroundBrush* groundBrush = tile->getGroundBrush();
+					if (!IsWallGround(groundBrush)) {
+						continue;
+					}
+
+					bool touchesFloor = false;
+					static const int dx[] = { 0, 1, 0, -1 };
+					static const int dy[] = { -1, 0, 1, 0 };
+					for (int dir = 0; dir < 4; ++dir) {
+						Position neighbor(x + dx[dir], y + dy[dir], spec.region.z);
+						if (neighbor.x < x0 || neighbor.x > x1 || neighbor.y < y0 || neighbor.y > y1) {
+							touchesFloor = true;
+							break;
 						}
 
 						GroundBrush* groundBrush = tile->getGroundBrush();

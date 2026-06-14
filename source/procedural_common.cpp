@@ -85,13 +85,27 @@ namespace {
 
 	static GenerationPreset PresetKeyFromString(const std::string& value) {
 		const std::string lower = as_lower_str(value);
-		if (lower == "forest") return GenerationPreset::Forest;
-		if (lower == "desert") return GenerationPreset::Desert;
-		if (lower == "cave") return GenerationPreset::Cave;
-		if (lower == "city") return GenerationPreset::City;
-		if (lower == "coast") return GenerationPreset::Coast;
-		if (lower == "mountain") return GenerationPreset::Mountain;
-		if (lower == "ice") return GenerationPreset::Ice;
+		if (lower == "forest") {
+			return GenerationPreset::Forest;
+		}
+		if (lower == "desert") {
+			return GenerationPreset::Desert;
+		}
+		if (lower == "cave") {
+			return GenerationPreset::Cave;
+		}
+		if (lower == "city") {
+			return GenerationPreset::City;
+		}
+		if (lower == "coast") {
+			return GenerationPreset::Coast;
+		}
+		if (lower == "mountain") {
+			return GenerationPreset::Mountain;
+		}
+		if (lower == "ice") {
+			return GenerationPreset::Ice;
+		}
 		return GenerationPreset::Auto;
 	}
 }
@@ -638,8 +652,8 @@ bool ProceduralCommon::PostProcessFloors(Editor& editor, const GenerationSpec& s
 						}
 
 						bool touchesFloor = false;
-						static const int dx[] = {0, 1, 0, -1};
-						static const int dy[] = {-1, 0, 1, 0};
+						static const int dx[] = { 0, 1, 0, -1 };
+						static const int dy[] = { -1, 0, 1, 0 };
 						for (int dir = 0; dir < 4; ++dir) {
 							Position neighbor(x + dx[dir], y + dy[dir], z);
 							if (neighbor.x < x0 || neighbor.x > x1 || neighbor.y < y0 || neighbor.y > y1) {

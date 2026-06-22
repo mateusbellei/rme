@@ -1,0 +1,14 @@
+{
+  "default": "snow",
+  "entries": [
+    { "color": "#FFFFFF", "brush": "snow" },
+    { "color": "#F0F8FF", "brush": "snow" },
+    { "color": "#E0FFFF", "brush": "ice" },
+    { "color": "#ADD8E6", "brush": "water" },
+    { "color": "#87CEEB", "brush": "ice" },
+    { "color": "#008000", "brush": "grass" },
+    { "color": "#654321", "brush": "mountain" },
+    { "color": "#808080", "brush": "stone" },
+    { "color": "#000000", "brush": "" }
+  ]
+}

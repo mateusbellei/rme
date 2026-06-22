@@ -1,0 +1,28 @@
+{
+  "presets": {
+    "forest": {
+      "keywords": ["tree", "bush", "fern", "mushroom", "log", "forest", "jungle"],
+      "density": 14
+    },
+    "desert": {
+      "keywords": ["cactus", "desert", "dead", "sand", "palm"],
+      "density": 8
+    },
+    "coast": {
+      "keywords": ["palm", "coral", "shell", "seaweed", "beach"],
+      "density": 10
+    },
+    "cave": {
+      "keywords": ["stalagmite", "stalactite", "crystal", "rock", "stone"],
+      "density": 6
+    },
+    "city": {
+      "keywords": ["barrel", "crate", "lamp", "bench", "fountain"],
+      "density": 5
+    },
+    "ice": {
+      "keywords": ["snow", "ice", "frost", "winter", "crystal", "frozen", "pine", "fir"],
+      "density": 12
+    }
+  }
+}

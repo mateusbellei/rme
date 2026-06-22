@@ -55,6 +55,7 @@ class PaletteWindow;
 class OldPropertiesWindow;
 class TilesetWindow;
 class EditTownsDialog;
+class DataEditorWindow;
 class ItemButton;
 
 class LiveSocket;

@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <cctype>
 
@@ -155,16 +156,23 @@ bool ProceduralCommon::ResolveRegion(Editor& editor, GenerationSpec& spec, wxStr
 }
 
 GroundBrush* ProceduralCommon::FindGroundBrush(const std::string& targetLower) {
+	GroundBrush* best = nullptr;
+	size_t bestLen = std::numeric_limits<size_t>::max();
 	for (const auto& kv : g_brushes.getMap()) {
 		Brush* brush = kv.second;
-		if (brush && brush->isGround()) {
-			const std::string name = as_lower_str(brush->getName());
-			if (name.find(targetLower) != std::string::npos) {
-				return brush->asGround();
-			}
+		if (!brush || !brush->isGround()) {
+			continue;
+		}
+		const std::string name = as_lower_str(brush->getName());
+		if (name == targetLower) {
+			return brush->asGround();
+		}
+		if (name.find(targetLower) != std::string::npos && name.length() < bestLen) {
+			bestLen = name.length();
+			best = brush->asGround();
 		}
 	}
-	return nullptr;
+	return best;
 }
 
 WallBrush* ProceduralCommon::FindWallBrush(const std::string& targetLower) {
@@ -351,15 +359,52 @@ bool ProceduralCommon::LoadLegend(const wxString& path, LegendMapping& mapping, 
 	return true;
 }
 
-void ProceduralCommon::ResolveLegendBrushes(LegendMapping& mapping) {
+wxString ProceduralCommon::ResolveLegendBrushes(LegendMapping& mapping) {
 	mapping.defaultBrush = FindGroundBrush(as_lower_str(mapping.defaultBrushName));
+
+	wxString warnings;
+	if (!mapping.defaultBrushName.empty() && !mapping.defaultBrush) {
+		warnings << "Default brush \"" << wxstr(mapping.defaultBrushName) << "\" not found.\n";
+	}
+
 	for (LegendEntry& entry : mapping.entries) {
 		if (entry.brushName.empty()) {
 			entry.brush = nullptr;
 			continue;
 		}
 		entry.brush = FindGroundBrush(as_lower_str(entry.brushName));
+		if (!entry.brush) {
+			warnings << "Legend brush \"" << wxstr(entry.brushName) << "\" not found.\n";
+		}
 	}
+	return warnings;
+}
+
+bool ProceduralCommon::LoadLegendForPreset(const wxString& path, GenerationPreset preset, LegendMapping& mapping, wxString& resolvedPath, wxString& error) {
+	auto defaultPath = [&]() -> wxString {
+		if (preset == GenerationPreset::Ice) {
+			return g_gui.GetProceduralDataDirectory() + wxString("ice_legend.json");
+		}
+		return g_gui.GetProceduralDataDirectory() + wxString("default_legend.json");
+	};
+
+	wxString tryPath = path;
+	if (tryPath.empty()) {
+		tryPath = defaultPath();
+	}
+
+	if (LoadLegend(tryPath, mapping, error)) {
+		resolvedPath = tryPath;
+		return true;
+	}
+
+	const wxString fallback = defaultPath();
+	if (tryPath != fallback && LoadLegend(fallback, mapping, error)) {
+		resolvedPath = fallback;
+		return true;
+	}
+
+	return false;
 }
 
 bool ProceduralCommon::IsTransparentPixel(uint8_t r, uint8_t g, uint8_t b) {
@@ -711,7 +756,7 @@ bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec
 	static bool loaded = false;
 
 	if (!loaded) {
-		const wxString path = g_gui.GetDataDirectory() + wxString("procedural/biome_doodads.json");
+		const wxString path = g_gui.GetProceduralDataDirectory() + wxString("biome_doodads.json");
 		std::ifstream input(nstr(path).c_str());
 		if (input.good()) {
 			json::mValue root;
@@ -749,6 +794,11 @@ bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec
 
 	const std::map<GenerationPreset, std::vector<std::string>>::iterator kw = cachedKeywords.find(preset);
 	if (kw == cachedKeywords.end() || kw->second.empty()) {
+		wxLogWarning(
+			"Procedural generation: could not load doodad keywords (expected %sprocedural/biome_doodads.json). "
+			"No trees/props will be placed.",
+			g_gui.GetProceduralDataDirectory().c_str()
+		);
 		return true;
 	}
 
@@ -757,6 +807,16 @@ bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec
 		const std::map<GenerationPreset, int>::iterator den = cachedDensity.find(preset);
 		doodadSpec.doodads.density = den != cachedDensity.end() ? den->second : 10;
 	}
+
+	std::vector<DoodadBrush*> brushes = FindDoodadBrushes(kw->second);
+	if (brushes.empty()) {
+		wxLogWarning(
+			"Procedural generation: no doodad brushes matched preset keywords in the loaded client. "
+			"Ground tiles were generated but trees/props were skipped."
+		);
+		return true;
+	}
+
 	return ScatterDoodads(editor, doodadSpec, spec.region.z, heights, kw->second, error);
 }
 
@@ -773,8 +833,7 @@ bool ProceduralCommon::ApplyDeepCave(Editor& editor, const GenerationSpec& spec,
 	LegendMapping legend;
 	wxString legendPath = spec.imageMask.legendPath;
 	if (legendPath.empty()) {
-		legendPath = g_gui.GetDataDirectory();
-		legendPath += wxString("procedural/default_legend.json");
+		legendPath = g_gui.GetProceduralDataDirectory() + wxString("default_legend.json");
 	}
 	if (!LoadLegend(legendPath, legend, error)) {
 		return false;

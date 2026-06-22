@@ -279,6 +279,8 @@ public:
 	// Fetch different useful directories
 	static wxString GetExecDirectory();
 	static wxString GetDataDirectory();
+	static wxString GetActiveDataDirectory();
+	static wxString GetProceduralDataDirectory();
 	static wxString GetLocalDataDirectory();
 	static wxString GetLocalDirectory();
 	static wxString GetExtensionsDirectory();

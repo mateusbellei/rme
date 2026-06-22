@@ -142,6 +142,28 @@ wxString GUI::GetDataDirectory() {
 	return exec_directory.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
 }
 
+wxString GUI::GetActiveDataDirectory() {
+	const wxString discovered = g_gui.getFoundDataDirectory();
+	if (!discovered.empty() && wxFileName(discovered + wxString("clients.xml")).FileExists()) {
+		return discovered;
+	}
+	return GetDataDirectory();
+}
+
+wxString GUI::GetProceduralDataDirectory() {
+	const wxString candidates[] = {
+		GetActiveDataDirectory() + wxString("procedural/"),
+		GetExecDirectory() + wxString("procedural/"),
+		GetDataDirectory() + wxString("procedural/"),
+	};
+	for (const wxString& path : candidates) {
+		if (wxFileName(path + wxString("default_legend.json")).FileExists()) {
+			return path;
+		}
+	}
+	return GetActiveDataDirectory() + wxString("procedural/");
+}
+
 wxString GUI::GetExecDirectory() {
 	// Silently reset directory
 	FileName exec_directory;

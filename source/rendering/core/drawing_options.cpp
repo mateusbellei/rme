@@ -134,6 +134,8 @@ bool DrawingOptions::shouldDrawDetailedItems(float zoom) const noexcept {
 	if (!hide_items_when_zoomed) {
 		return true;
 	}
-	// Skip item/creature layers when zoomed far out or far in (legacy RME hid only zoom > 10x).
-	return zoom >= 1.0f && zoom <= 10.0f;
+	// RME zoom factor is inverse to the status-bar percentage (1/zoom * 100).
+	// Low zoom value = zoomed in (status > 100%); high zoom value = zoomed out.
+	// Hide items/creatures when zoomed far out to keep panning responsive.
+	return zoom <= 6.0f;
 }

@@ -88,7 +88,7 @@ bool ProceduralSidecar::TryEnhance(GenerationSpec& spec, wxString& error) {
 		return true;
 	}
 
-	const wxString configPath = g_gui.GetDataDirectory() + wxString("procedural/sidecar.json");
+	const wxString configPath = g_gui.GetProceduralDataDirectory() + wxString("sidecar.json");
 	std::ifstream configInput(nstr(configPath).c_str());
 	if (!configInput.good()) {
 		error = "Sidecar config not found: " + configPath;

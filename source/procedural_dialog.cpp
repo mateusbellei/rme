@@ -57,7 +57,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 
 	grid->Add(new wxStaticText(this, wxID_ANY, "Legend (JSON):"), 0, wxALIGN_CENTER_VERTICAL);
 	wxBoxSizer* legendRow = new wxBoxSizer(wxHORIZONTAL);
-	txtLegendPath = new wxTextCtrl(this, wxID_ANY, g_gui.GetDataDirectory() + wxString("procedural/default_legend.json"));
+	txtLegendPath = new wxTextCtrl(this, wxID_ANY, g_gui.GetProceduralDataDirectory() + wxString("default_legend.json"));
 	legendRow->Add(txtLegendPath, 1, wxEXPAND | wxRIGHT, 4);
 	legendRow->Add(new wxButton(this, ID_BROWSE_LEGEND, "Browse..."), 0);
 	grid->Add(legendRow, 1, wxEXPAND);
@@ -350,7 +350,7 @@ void ProceduralDialog::OnBrowseLegend(wxCommandEvent& event) {
 }
 
 void ProceduralDialog::OnSaveRecipe(wxCommandEvent& event) {
-	wxFileDialog dlg(this, "Save generation recipe", g_gui.GetDataDirectory() + wxString("procedural/recipes"), "recipe.json", "JSON (*.json)|*.json", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+	wxFileDialog dlg(this, "Save generation recipe", g_gui.GetProceduralDataDirectory() + wxString("recipes"), "recipe.json", "JSON (*.json)|*.json", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 	if (dlg.ShowModal() != wxID_OK) {
 		return;
 	}
@@ -361,7 +361,7 @@ void ProceduralDialog::OnSaveRecipe(wxCommandEvent& event) {
 }
 
 void ProceduralDialog::OnLoadRecipe(wxCommandEvent& event) {
-	wxFileDialog dlg(this, "Load generation recipe", g_gui.GetDataDirectory() + wxString("procedural/recipes"), "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+	wxFileDialog dlg(this, "Load generation recipe", g_gui.GetProceduralDataDirectory() + wxString("recipes"), "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 	if (dlg.ShowModal() != wxID_OK) {
 		return;
 	}

@@ -22,6 +22,7 @@
 #include <wx/wfstream.h>
 
 #include "gui.h"
+#include "settings.h"
 #include "editor.h"
 #include "brush.h"
 #include "sprites.h"
@@ -33,6 +34,9 @@
 #include "palette_window.h"
 #include "map_display.h"
 #include "map_drawer.h"
+#include "rendering/modern_map_drawer.h"
+#include "rendering/gl_context_manager.h"
+#include "rendering/utilities/frame_pacer.h"
 #include "application.h"
 #include "live_server.h"
 #include "browse_tile_window.h"
@@ -142,22 +146,43 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	popup_menu = newd MapPopupMenu(editor);
 	animation_timer = newd AnimationTimer(this);
 	drawer = new MapDrawer(this);
+	modern_drawer = new ModernMapDrawer(this);
+	frame_pacer_.SetStatusCallback([](const wxString& status) {
+		if (g_settings.getBoolean(Config::SHOW_FPS) && g_gui.root) {
+			g_gui.root->SetStatusText(status, 4);
+		}
+	});
+	frame_start_ = std::chrono::steady_clock::now();
 	keyCode = WXK_NONE;
 }
 
 MapCanvas::~MapCanvas() {
+	g_gl_context.UnregisterCanvas(this);
 	delete popup_menu;
 	delete animation_timer;
 	delete drawer;
+	delete modern_drawer;
 	free(screenshot_buffer);
 }
 
 void MapCanvas::Refresh() {
-	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
+	if (repaint_reason_ == RepaintReason::MapRegion || refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
 		refresh_watch.Start();
 		wxGLCanvas::Update();
 	}
 	wxGLCanvas::Refresh();
+	repaint_reason_ = RepaintReason::Full;
+}
+
+void MapCanvas::RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1) {
+	(void)map_x0;
+	(void)map_y0;
+	(void)map_x1;
+	(void)map_y1;
+	repaint_reason_ = RepaintReason::MapRegion;
+	refresh_watch.Start();
+	wxGLCanvas::Update();
+	wxGLCanvas::Refresh(false);
 }
 
 void MapCanvas::SetZoom(double value) {
@@ -188,12 +213,21 @@ void MapCanvas::GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensi
 }
 
 void MapCanvas::OnPaint(wxPaintEvent& event) {
-	SetCurrent(*g_gui.GetGLContext(this));
+	frame_start_ = std::chrono::steady_clock::now();
+	const bool use_modern_renderer = g_settings.getBoolean(Config::USE_MODERN_RENDERER);
+	if (use_modern_renderer) {
+		SetCurrent(*g_gl_context.GetGLContext(this));
+		g_gl_context.ApplyVSyncIfNeeded(*this);
+	} else {
+		SetCurrent(*g_gui.GetGLContext(this));
+	}
 
 	if (g_gui.IsRenderingEnabled()) {
-		DrawingOptions& options = drawer->getOptions();
+		DrawingOptions& options = use_modern_renderer ? modern_drawer->getOptions() : drawer->getOptions();
 		if (screenshot_buffer) {
 			options.SetIngame();
+		} else if (use_modern_renderer) {
+			options.Update();
 		} else {
 			options.transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
 			options.transparent_items = g_settings.getBoolean(Config::TRANSPARENT_ITEMS);
@@ -237,15 +271,30 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			animation_timer->Stop();
 		}
 
-		drawer->SetupVars();
-		drawer->SetupGL();
-		drawer->Draw();
+		if (use_modern_renderer) {
+			modern_drawer->SetupVars();
+			modern_drawer->SetupGL();
+			modern_drawer->Draw();
+			modern_drawer->Release();
+		} else {
+			drawer->SetupVars();
+			drawer->SetupGL();
+			drawer->Draw();
 
-		if (screenshot_buffer) {
-			drawer->TakeScreenshot(screenshot_buffer);
+			if (screenshot_buffer) {
+				drawer->TakeScreenshot(screenshot_buffer);
+			}
+
+			drawer->Release();
 		}
+	}
 
-		drawer->Release();
+	wxPaintDC dc(this);
+	if (g_gui.IsRenderingEnabled() && g_settings.getBoolean(Config::USE_MODERN_RENDERER)) {
+		DrawingOptions& options = modern_drawer->getOptions();
+		if (options.show_tooltips) {
+			modern_drawer->DrawTooltips(dc);
+		}
 	}
 
 	// Clean unused textures
@@ -256,6 +305,15 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 	// Send newd node requests
 	editor.SendNodeRequests();
+
+	if (g_settings.getBoolean(Config::SHOW_FPS)) {
+		const auto frame_end = std::chrono::steady_clock::now();
+		const double frame_ms = std::chrono::duration<double, std::milli>(frame_end - frame_start_).count();
+		frame_pacer_.SetLastFrameMs(frame_ms);
+		frame_pacer_.UpdateAndLimit(0, true);
+	}
+
+	event.Skip();
 }
 
 void MapCanvas::TakeScreenshot(wxFileName path, wxString format) {

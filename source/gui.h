@@ -303,6 +303,7 @@ public:
 	void SetScreenCenterPosition(Position pos);
 	// Refresh the view canvas
 	void RefreshView();
+	void RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1);
 	// Fit all/specified current map view to map dimensions
 	void FitViewToMap();
 	void FitViewToMap(MapTab* mt);

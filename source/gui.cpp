@@ -1045,6 +1045,18 @@ void GUI::RefreshView() {
 	}
 }
 
+void GUI::RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1) {
+	for (int32_t index = 0; index < tabbook->GetTabCount(); ++index) {
+		auto* mapTab = dynamic_cast<MapTab*>(tabbook->GetTab(index));
+		if (!mapTab) {
+			continue;
+		}
+		if (MapCanvas* canvas = mapTab->GetCanvas()) {
+			canvas->RefreshMapRegion(map_x0, map_y0, map_x1, map_y1);
+		}
+	}
+}
+
 void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 	progressText = message;
 

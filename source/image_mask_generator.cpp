@@ -22,9 +22,9 @@ namespace {
 
 	static wxString DefaultLegendForPreset(GenerationPreset preset) {
 		if (preset == GenerationPreset::Ice) {
-			return wxstr(g_gui.GetDataDirectory()) + "procedural/ice_legend.json";
+			return g_gui.GetDataDirectory() + wxString("procedural/ice_legend.json");
 		}
-		return wxstr(g_gui.GetDataDirectory()) + "procedural/default_legend.json";
+		return g_gui.GetDataDirectory() + wxString("procedural/default_legend.json");
 	}
 
 	static int EffectiveElevationLevels(const GenerationSpec& spec, GenerationPreset preset) {

@@ -18,9 +18,12 @@
 #ifndef RME_DISPLAY_WINDOW_H_
 #define RME_DISPLAY_WINDOW_H_
 
+#include <chrono>
+
 #include "action.h"
 #include "tile.h"
 #include "creature.h"
+#include "rendering/utilities/frame_pacer.h"
 
 class Item;
 class Creature;
@@ -28,6 +31,7 @@ class MapWindow;
 class MapPopupMenu;
 class AnimationTimer;
 class MapDrawer;
+class ModernMapDrawer;
 
 class MapCanvas : public wxGLCanvas {
 public:
@@ -93,6 +97,13 @@ public:
 	void OnProperties(wxCommandEvent& event);
 
 	void Refresh();
+	void RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1);
+
+	enum class RepaintReason {
+		Full,
+		MapRegion,
+		Overlay
+	};
 
 	void ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y);
 	void MouseToMap(int* map_x, int* map_y) {
@@ -139,6 +150,10 @@ private:
 
 	Editor& editor;
 	MapDrawer* drawer;
+	ModernMapDrawer* modern_drawer;
+	FramePacer frame_pacer_;
+	std::chrono::steady_clock::time_point frame_start_;
+	RepaintReason repaint_reason_ = RepaintReason::Full;
 	int keyCode;
 	int countMaxFills = 0;
 
@@ -187,6 +202,7 @@ private:
 	AnimationTimer* animation_timer;
 
 	friend class MapDrawer;
+	friend class ModernMapDrawer;
 
 	DECLARE_EVENT_TABLE()
 };

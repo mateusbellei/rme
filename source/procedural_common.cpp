@@ -645,44 +645,28 @@ bool ProceduralCommon::PostProcessFloors(Editor& editor, const GenerationSpec& s
 							touchesFloor = true;
 							break;
 						}
-
-						GroundBrush* groundBrush = tile->getGroundBrush();
-						if (!IsWallGround(groundBrush)) {
-							continue;
+						Tile* neighborTile = editor.map.getTile(neighbor);
+						if (!neighborTile || !neighborTile->hasGround()) {
+							touchesFloor = true;
+							break;
 						}
-
-						bool touchesFloor = false;
-						static const int dx[] = { 0, 1, 0, -1 };
-						static const int dy[] = { -1, 0, 1, 0 };
-						for (int dir = 0; dir < 4; ++dir) {
-							Position neighbor(x + dx[dir], y + dy[dir], z);
-							if (neighbor.x < x0 || neighbor.x > x1 || neighbor.y < y0 || neighbor.y > y1) {
-								touchesFloor = true;
-								break;
-							}
-							Tile* neighborTile = editor.map.getTile(neighbor);
-							if (!neighborTile || !neighborTile->hasGround()) {
-								touchesFloor = true;
-								break;
-							}
-							if (IsFloorGround(neighborTile->getGroundBrush())) {
-								touchesFloor = true;
-								break;
-							}
+						if (IsFloorGround(neighborTile->getGroundBrush())) {
+							touchesFloor = true;
+							break;
 						}
-
-						if (!touchesFloor) {
-							continue;
-						}
-
-						Tile* newTile = tile->deepCopy(editor.map);
-						newTile->cleanWalls(true);
-						wallBrush->draw(&editor.map, newTile, nullptr);
-						if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
-							newTile->wallize(&editor.map);
-						}
-						wallAction->addChange(newd Change(newTile));
 					}
+
+					if (!touchesFloor) {
+						continue;
+					}
+
+					Tile* newTile = tile->deepCopy(editor.map);
+					newTile->cleanWalls(true);
+					wallBrush->draw(&editor.map, newTile, nullptr);
+					if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
+						newTile->wallize(&editor.map);
+					}
+					wallAction->addChange(newd Change(newTile));
 				}
 			}
 			batch->addAndCommitAction(wallAction);
@@ -727,7 +711,7 @@ bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec
 	static bool loaded = false;
 
 	if (!loaded) {
-		const wxString path = wxstr(g_gui.GetDataDirectory()) + "procedural/biome_doodads.json";
+		const wxString path = g_gui.GetDataDirectory() + wxString("procedural/biome_doodads.json");
 		std::ifstream input(nstr(path).c_str());
 		if (input.good()) {
 			json::mValue root;
@@ -789,7 +773,8 @@ bool ProceduralCommon::ApplyDeepCave(Editor& editor, const GenerationSpec& spec,
 	LegendMapping legend;
 	wxString legendPath = spec.imageMask.legendPath;
 	if (legendPath.empty()) {
-		legendPath = wxstr(g_gui.GetDataDirectory()) + "procedural/default_legend.json";
+		legendPath = g_gui.GetDataDirectory();
+		legendPath += wxString("procedural/default_legend.json");
 	}
 	if (!LoadLegend(legendPath, legend, error)) {
 		return false;

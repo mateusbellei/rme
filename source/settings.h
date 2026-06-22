@@ -181,6 +181,9 @@ namespace Config {
 		ALWAYS_SHOW_ZONES,
 		EXT_HOUSE_SHADER,
 
+		USE_MODERN_RENDERER,
+		SHOW_FPS,
+
 		LAST,
 	};
 }

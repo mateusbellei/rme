@@ -43,116 +43,8 @@
 #include "table_brush.h"
 #include "waypoint_brush.h"
 #include "light_drawer.h"
-
-using Color = std::tuple<int, int, int>;
-
-static std::vector<Color> colors;
-void GenerateColors() {
-	int r = 250, g = 100, b = 100;
-	const int step = 25;
-	bool incrementing = true;
-
-	while (true) {
-		if (std::find(colors.begin(), colors.end(), Color({ r, g, b })) == colors.end()) {
-			colors.push_back({ r, g, b });
-		}
-
-		if (g < 250 && incrementing) {
-			g += step;
-		} else if (r > 100 && !incrementing && g == 250) {
-			r -= step;
-		} else if (b < 250 && r == 100) {
-			b += step;
-		} else if (g > 100 && b == 250) {
-			g -= step;
-		} else if (r < 250 && g == 100) {
-			r += step;
-		} else if (b > 100 && r == 250) {
-			b -= step;
-		} else if (b == 100 && g == 250) {
-			incrementing = false;
-		}
-
-		if (r == 250 && g == 100 && b == 100 && !incrementing) {
-			break;
-		}
-	}
-}
-
-DrawingOptions::DrawingOptions() {
-	SetDefault();
-	GenerateColors();
-}
-
-void DrawingOptions::SetDefault() {
-	transparent_floors = false;
-	transparent_items = false;
-	show_ingame_box = false;
-	show_lights = false;
-	show_light_str = true;
-	show_tech_items = true;
-	show_waypoints = true;
-	ingame = false;
-	dragging = false;
-
-	show_grid = 0;
-	show_all_floors = true;
-	show_creatures = true;
-	show_spawns = true;
-	show_houses = true;
-	show_shade = true;
-	show_special_tiles = true;
-	show_zone_areas = true;
-	show_items = true;
-
-	highlight_items = false;
-	highlight_locked_doors = true;
-	show_blocking = false;
-	show_tooltips = false;
-	show_as_minimap = false;
-	show_only_colors = false;
-	show_only_modified = false;
-	show_preview = false;
-	show_hooks = false;
-	hide_items_when_zoomed = true;
-}
-
-void DrawingOptions::SetIngame() {
-	transparent_floors = false;
-	transparent_items = false;
-	show_ingame_box = false;
-	show_lights = false;
-	show_light_str = false;
-	show_tech_items = false;
-	show_waypoints = false;
-	ingame = true;
-	dragging = false;
-
-	show_grid = 0;
-	show_all_floors = true;
-	show_creatures = true;
-	show_spawns = false;
-	show_houses = false;
-	show_shade = false;
-	show_special_tiles = false;
-	show_zone_areas = false;
-	show_items = true;
-
-	highlight_items = false;
-	highlight_locked_doors = false;
-	show_blocking = false;
-	show_tooltips = false;
-	show_as_minimap = false;
-	show_only_colors = false;
-	show_only_modified = false;
-	show_preview = false;
-	show_hooks = false;
-	hide_items_when_zoomed = false;
-}
-
-bool DrawingOptions::isDrawLight() const noexcept {
-	return show_lights;
-}
+#include "rendering/core/drawing_options.h"
+#include "rendering/core/zone_colors.h"
 
 MapDrawer::MapDrawer(MapCanvas* canvas) :
 	canvas(canvas), editor(canvas->editor) {
@@ -483,20 +375,7 @@ void MapDrawer::DrawMap() {
 								g /= 2;
 							}
 							if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
-								size_t zones = tile->getZoneIds().size();
-								uint16_t r16 = 0, g16 = 0, b16 = 0;
-								for (const auto& zoneId : tile->getZoneIds()) {
-									const uint16_t colorIndex = zoneId % colors.size();
-									const Color colour = colors.at(colorIndex);
-
-									r16 += std::get<0>(colour);
-									g16 += std::get<1>(colour);
-									b16 += std::get<2>(colour);
-								}
-
-								r = r16 / zones;
-								g = g16 / zones;
-								b = b16 / zones;
+								ComputeZoneTint(tile->getZoneIds(), r, g, b);
 							}
 							BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, 160);
 						}
@@ -1558,7 +1437,7 @@ void MapDrawer::WriteTooltip(Tile* tile, Item* item, std::ostringstream& stream,
 		stream << "text: " << text << "\n";
 	}
 	if (tp) {
-		Position& dest = tp->getDestination();
+		Position dest = tp->getDestination();
 		stream << "destination: " << dest.x << ", " << dest.y << ", " << dest.z << "\n";
 	}
 }
@@ -1662,20 +1541,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 		}
 
 		if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
-			size_t zones = tile->getZoneIds().size();
-			uint16_t r16 = 0, g16 = 0, b16 = 0;
-			for (const auto& zoneId : tile->getZoneIds()) {
-				const uint16_t colorIndex = zoneId % colors.size();
-				const Color colour = colors.at(colorIndex);
-
-				r16 += std::get<0>(colour);
-				g16 += std::get<1>(colour);
-				b16 += std::get<2>(colour);
-			}
-
-			r = r16 / zones;
-			g = g16 / zones;
-			b = b16 / zones;
+			ComputeZoneTint(tile->getZoneIds(), r, g, b);
 		}
 	}
 
@@ -1989,7 +1855,7 @@ void MapDrawer::AddLight(TileLocation* location) {
 		return;
 	}
 
-	auto& position = location->getPosition();
+	const Position& position = location->getPosition();
 
 	if (tile->ground) {
 		if (tile->ground->hasLight()) {

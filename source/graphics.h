@@ -77,6 +77,10 @@ protected:
 
 class GameSprite : public Sprite {
 public:
+	friend class TextureGarbageCollector;
+	friend class SpritePreloader;
+	friend class ModernSpriteBridge;
+
 	GameSprite();
 	~GameSprite();
 

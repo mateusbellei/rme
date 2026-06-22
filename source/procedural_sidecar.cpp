@@ -71,11 +71,11 @@ namespace {
 		if (wxFileName(script).IsAbsolute() && wxFileName::FileExists(script)) {
 			return script;
 		}
-		const wxString execPath = wxstr(g_gui.GetExecDirectory()) + script;
+		const wxString execPath = g_gui.GetExecDirectory() + script;
 		if (wxFileName::FileExists(execPath)) {
 			return execPath;
 		}
-		const wxString dataPath = wxstr(g_gui.GetDataDirectory()) + "../" + script;
+		const wxString dataPath = g_gui.GetDataDirectory() + "../" + script;
 		if (wxFileName::FileExists(dataPath)) {
 			return dataPath;
 		}
@@ -88,7 +88,7 @@ bool ProceduralSidecar::TryEnhance(GenerationSpec& spec, wxString& error) {
 		return true;
 	}
 
-	const wxString configPath = wxstr(g_gui.GetDataDirectory()) + "procedural/sidecar.json";
+	const wxString configPath = g_gui.GetDataDirectory() + wxString("procedural/sidecar.json");
 	std::ifstream configInput(nstr(configPath).c_str());
 	if (!configInput.good()) {
 		error = "Sidecar config not found: " + configPath;

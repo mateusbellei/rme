@@ -1803,6 +1803,7 @@ void MainMenuBar::OnZoomNormal(wxCommandEvent& event) {
 }
 
 void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event) {
+	const bool was_modern = g_settings.getBoolean(Config::USE_MODERN_RENDERER);
 	g_settings.setInteger(Config::SHOW_ALL_FLOORS, IsItemChecked(MenuBar::SHOW_ALL_FLOORS));
 	if (IsItemChecked(MenuBar::SHOW_ALL_FLOORS)) {
 		EnableItem(MenuBar::SELECT_MODE_VISIBLE, true);
@@ -1814,6 +1815,10 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event) {
 		g_settings.setInteger(Config::SELECTION_TYPE, SELECT_CURRENT_FLOOR);
 	}
 	MenuBarViewHandler::SyncViewSettingsFromMenu(this);
+	const bool now_modern = g_settings.getBoolean(Config::USE_MODERN_RENDERER);
+	if (was_modern != now_modern) {
+		g_gui.OnRendererSwitched(now_modern);
+	}
 	g_gui.RefreshView();
 }
 

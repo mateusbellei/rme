@@ -19,8 +19,7 @@
 
 #include <wx/display.h>
 
-#include "gui.h"
-#include "main_menubar.h"
+#include "map_tab.h"
 
 #include "editor.h"
 #include "brush.h"
@@ -36,6 +35,7 @@
 #include "palette_window.h"
 #include "map_display.h"
 #include "application.h"
+#include "main_menubar.h"
 #include "welcome_dialog.h"
 
 #include "live_client.h"

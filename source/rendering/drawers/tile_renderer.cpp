@@ -30,8 +30,7 @@ namespace {
 		if (!spr) {
 			return nullptr;
 		}
-		const GLuint part_id = spr->getHardwareID(cx, cy, cf, subtype, pattern_x, pattern_y, pattern_z, frame);
-		return ModernSpriteBridge::get().ensureAtlasSprite(gfx, part_id);
+		return ModernSpriteBridge::get().ensureAtlasSpritePart(gfx, *spr, cx, cy, cf, subtype, pattern_x, pattern_y, pattern_z, frame);
 	}
 
 	void blitAtlasQuad(SpriteBatch& batch, int sx, int sy, const AtlasRegion* region, float r, float g, float b, float a) {
@@ -409,7 +408,7 @@ void TileRenderer::DrawTile(
 	}
 
 	if (!only_colors) {
-		if (view.zoom < 10.0 || !options.hide_items_when_zoomed) {
+		if (options.shouldDrawDetailedItems(view.zoom)) {
 			for (Item* item : tile->items) {
 				if (options.show_tooltips && map_z == view.floor) {
 					writeItemTooltip(tile, item, tooltip_drawer, tile->isHouseTile(), map_z, view);

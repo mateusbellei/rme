@@ -381,7 +381,7 @@ void MapDrawer::DrawMap() {
 						}
 
 						// Draw items on the tile
-						if (zoom <= 10.0 || !options.hide_items_when_zoomed) {
+						if (options.shouldDrawDetailedItems(static_cast<float>(zoom))) {
 							ItemVector::iterator it;
 							for (it = tile->items.begin(); it != tile->items.end(); it++) {
 								if ((*it)->isBorder()) {
@@ -1573,7 +1573,7 @@ void MapDrawer::DrawTile(TileLocation* location) {
 	// end filters for ground tile
 
 	if (!only_colors) {
-		if (zoom < 10.0 || !options.hide_items_when_zoomed) {
+		if (options.shouldDrawDetailedItems(static_cast<float>(zoom))) {
 			// items on tile
 			for (ItemVector::iterator it = tile->items.begin(); it != tile->items.end(); it++) {
 				// item tooltip

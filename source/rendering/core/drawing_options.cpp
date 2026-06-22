@@ -129,3 +129,11 @@ void DrawingOptions::Update() {
 bool DrawingOptions::isDrawLight() const noexcept {
 	return show_lights;
 }
+
+bool DrawingOptions::shouldDrawDetailedItems(float zoom) const noexcept {
+	if (!hide_items_when_zoomed) {
+		return true;
+	}
+	// Skip item/creature layers when zoomed far out or far in (legacy RME hid only zoom > 10x).
+	return zoom >= 1.0f && zoom <= 10.0f;
+}

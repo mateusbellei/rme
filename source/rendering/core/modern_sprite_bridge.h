@@ -31,6 +31,19 @@ public:
 		std::function<uint8_t*()> rgba_provider = nullptr
 	);
 
+	const AtlasRegion* ensureAtlasSpritePart(
+		GraphicManager& gfx,
+		GameSprite& spr,
+		int cx,
+		int cy,
+		int cf,
+		int subtype,
+		int pattern_x,
+		int pattern_y,
+		int pattern_z,
+		int frame
+	);
+
 	std::unique_ptr<uint8_t[]> loadCompressedDump(GraphicManager& gfx, uint32_t sprite_id, uint16_t& size);
 	std::unique_ptr<uint8_t[]> decompressToRGBA(const uint8_t* dump, uint16_t size, bool has_transparency);
 

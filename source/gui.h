@@ -304,6 +304,7 @@ public:
 	// Refresh the view canvas
 	void RefreshView();
 	void RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1);
+	void OnRendererSwitched(bool now_modern);
 	// Fit all/specified current map view to map dimensions
 	void FitViewToMap();
 	void FitViewToMap(MapTab* mt);
@@ -476,8 +477,7 @@ protected:
 	int disabled_counter;
 
 	friend class RenderingLock;
-	friend MapTab::MapTab(MapTabbook*, Editor*);
-	friend MapTab::MapTab(const MapTab*);
+	friend class MapTab;
 };
 
 extern GUI g_gui;

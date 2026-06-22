@@ -260,6 +260,7 @@ ${CMAKE_CURRENT_LIST_DIR}/rendering/core/light_buffer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/core/zone_colors.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/core/atlas_manager.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/core/modern_sprite_bridge.cpp
+${CMAKE_CURRENT_LIST_DIR}/rendering/renderer_switch_handler.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/core/multi_draw_indirect_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/core/pixel_buffer_object.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/core/ring_buffer.cpp

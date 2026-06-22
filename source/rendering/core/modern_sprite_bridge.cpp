@@ -208,6 +208,34 @@ const AtlasRegion* ModernSpriteBridge::ensureAtlasSprite(
 	return region;
 }
 
+const AtlasRegion* ModernSpriteBridge::ensureAtlasSpritePart(
+	GraphicManager& gfx,
+	GameSprite& spr,
+	int cx,
+	int cy,
+	int cf,
+	int subtype,
+	int pattern_x,
+	int pattern_y,
+	int pattern_z,
+	int frame
+) {
+	const int part_index = spr.getIndex(cx, cy, cf, pattern_x, pattern_y, pattern_z, frame);
+	if (part_index < 0 || part_index >= spr.numsprites) {
+		return nullptr;
+	}
+
+	auto* image = static_cast<GameSprite::NormalImage*>(spr.spriteList[part_index]);
+	if (!image) {
+		return nullptr;
+	}
+
+	const uint32_t dump_id = static_cast<uint32_t>(image->id);
+	return ensureAtlasSprite(gfx, dump_id, [image]() -> uint8_t* {
+		return image->getRGBAData();
+	});
+}
+
 void ModernSpriteBridge::clear(GraphicManager& /*gfx*/) {
 	if (atlas_manager_) {
 		atlas_manager_->clear();

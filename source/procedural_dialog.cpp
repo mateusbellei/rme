@@ -32,20 +32,20 @@ enum {
 };
 
 ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
-	wxDialog(parent, wxID_ANY, "Procedural Generation", wxDefaultPosition, wxSize(580, 600), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+	wxDialog(parent, wxID_ANY, "Procedural Generation", wxDefaultPosition, wxSize(560, 680), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	editor(editor) {
 	wxBoxSizer* top = new wxBoxSizer(wxVERTICAL);
 
 	wxStaticBoxSizer* sbMode = new wxStaticBoxSizer(wxVERTICAL, this, "Mode");
-	rbImageMask = new wxRadioButton(this, ID_MODE_IMAGE, "Image mask → biomes", wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
-	rbTextPrompt = new wxRadioButton(this, ID_MODE_PROMPT, "Text prompt → map");
+	rbImageMask = new wxRadioButton(this, ID_MODE_IMAGE, "Image mask -> biomes", wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
+	rbTextPrompt = new wxRadioButton(this, ID_MODE_PROMPT, "Text prompt -> map");
 	rbPromptWithImage = new wxRadioButton(this, ID_MODE_PROMPT_IMAGE, "Prompt + reference image");
 	sbMode->Add(rbImageMask, 0, wxALL, 4);
 	sbMode->Add(rbTextPrompt, 0, wxALL, 4);
 	sbMode->Add(rbPromptWithImage, 0, wxALL, 4);
 	top->Add(sbMode, 0, wxEXPAND | wxALL, 8);
 
-	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 6, 6);
+	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 8, 8);
 	grid->AddGrowableCol(1, 1);
 
 	grid->Add(new wxStaticText(this, wxID_ANY, "Image:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -63,8 +63,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	grid->Add(legendRow, 1, wxEXPAND);
 
 	grid->Add(new wxStaticText(this, wxID_ANY, "Prompt:"), 0, wxALIGN_TOP);
-	txtPrompt = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE);
-	txtPrompt->SetMinSize(wxSize(-1, 72));
+	txtPrompt = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(-1, 72), wxTE_MULTILINE);
 	grid->Add(txtPrompt, 1, wxEXPAND);
 
 	grid->Add(new wxStaticText(this, wxID_ANY, "Preset:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -80,7 +79,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	cboPreset->SetSelection(0);
 	grid->Add(cboPreset, 1, wxEXPAND);
 
-	lblElevation = new wxStaticText(this, wxID_ANY, "Elevation / depth levels:");
+	lblElevation = new wxStaticText(this, wxID_ANY, "Elevation / depth (0 = auto/off):");
 	grid->Add(lblElevation, 0, wxALIGN_CENTER_VERTICAL);
 	spnElevation = new wxSpinCtrl(this, ID_ELEVATION, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 6, 0);
 	grid->Add(spnElevation, 0, wxEXPAND);
@@ -89,7 +88,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	spnReferenceWeight = new wxSpinCtrl(this, ID_REFERENCE_WEIGHT, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 35);
 	grid->Add(spnReferenceWeight, 0, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Size (w×h×z):"), 0, wxALIGN_CENTER_VERTICAL);
+	grid->Add(new wxStaticText(this, wxID_ANY, "Size (w x h x z):"), 0, wxALIGN_CENTER_VERTICAL);
 	wxBoxSizer* sizeRow = new wxBoxSizer(wxHORIZONTAL);
 	spnWidth = new wxSpinCtrl(this, wxID_ANY, "512", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 8, 65000, 512);
 	spnHeight = new wxSpinCtrl(this, wxID_ANY, "512", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 8, 65000, 512);
@@ -103,12 +102,12 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	spnSeed = new wxSpinCtrl(this, wxID_ANY, "1337", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::numeric_limits<int>::max(), 1337);
 	grid->Add(spnSeed, 0, wxEXPAND);
 
-	top->Add(grid, 1, wxEXPAND | wxALL, 8);
+	top->Add(grid, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxStaticBoxSizer* sbTarget = new wxStaticBoxSizer(wxVERTICAL, this, "Target area");
 	chkUseSelection = new wxCheckBox(this, ID_USE_SELECTION, "Use current map selection");
 	sbTarget->Add(chkUseSelection, 0, wxALL, 4);
-	sbTarget->Add(new wxStaticText(this, wxID_ANY, "Mountains stack up (z↓); caves stack down (z↑). Ground is usually z=7."), 0, wxALL, 4);
+	sbTarget->Add(new wxStaticText(this, wxID_ANY, "Mountains stack up (z+); caves stack down (z-). Ground is usually z=7."), 0, wxALL, 4);
 	top->Add(sbTarget, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxStaticBoxSizer* sbPipeline = new wxStaticBoxSizer(wxVERTICAL, this, "Post-processing");
@@ -141,8 +140,10 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	SetSizer(top);
 	Layout();
 	Centre(wxBOTH);
+	SetMinSize(wxSize(520, 640));
 
 	rbImageMask->SetValue(true);
+	UpdateElevationLabel();
 	{
 		wxCommandEvent modeEvent;
 		OnModeChanged(modeEvent);

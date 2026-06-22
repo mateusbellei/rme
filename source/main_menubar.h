@@ -76,6 +76,7 @@ namespace MenuBar {
 		CUT,
 		COPY,
 		PASTE,
+		DATA_EDITOR,
 		EDIT_TOWNS,
 		EDIT_ITEMS,
 		EDIT_MONSTERS,
@@ -247,6 +248,9 @@ public:
 	void OnSearchForItemOnSelection(wxCommandEvent& event);
 	void OnReplaceItemsOnSelection(wxCommandEvent& event);
 	void OnRemoveItemOnSelection(wxCommandEvent& event);
+
+	// Data Editor menu
+	void OnDataEditor(wxCommandEvent& event);
 
 	// Map menu
 	void OnMapEditTowns(wxCommandEvent& event);

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -243,6 +243,8 @@
     <ClCompile Include="..\..\source\creature_brush.cpp" />
     <ClInclude Include="..\..\source\dat_debug_view.h" />
     <ClCompile Include="..\..\source\dat_debug_view.cpp" />
+    <ClInclude Include="..\..\source\data_editor_window.h" />
+    <ClCompile Include="..\..\source\data_editor_window.cpp" />
     <ClInclude Include="..\..\source\definitions.h" />
     <ClInclude Include="..\..\source\doodad_brush.h" />
     <ClCompile Include="..\..\source\doodad_brush.cpp" />

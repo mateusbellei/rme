@@ -76,8 +76,16 @@ public:
 		return brushes;
 	}
 
-protected:
+	// Border map access for Data Editor
 	typedef std::map<uint32_t, AutoBorder*> BorderMap;
+	const BorderMap& getBorders() const {
+		return borders;
+	}
+	AutoBorder* getBorder(uint32_t id) const;
+	void addBorder(uint32_t id);
+	bool removeBorder(uint32_t id);
+
+protected:
 	BrushMap brushes;
 	BorderMap borders;
 
@@ -437,6 +445,9 @@ public:
 		for (int i = 0; i < 13; i++) {
 			tiles[i] = 0;
 		}
+		for (int i = 0; i < 25; i++) {
+			gridTiles[i] = 0;
+		}
 	}
 	~AutoBorder() { }
 
@@ -444,6 +455,7 @@ public:
 	bool load(pugi::xml_node node, wxArrayString& warnings, GroundBrush* owner = nullptr, uint16_t ground_equivalent = 0);
 
 	uint32_t tiles[13];
+	uint32_t gridTiles[25];  // per-cell storage for Data Editor (row*5+col); 0 = use tiles[edge+1]
 	uint32_t id;
 	uint16_t group;
 	bool ground;

@@ -203,6 +203,7 @@ private:
 
 	friend class MapDrawer;
 	friend class ModernMapDrawer;
+	friend class MapOverlayDrawer;
 
 	DECLARE_EVENT_TABLE()
 };

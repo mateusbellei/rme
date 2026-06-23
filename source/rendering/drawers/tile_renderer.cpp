@@ -481,6 +481,47 @@ void TileRenderer::DrawTile(
 	}
 }
 
+void TileRenderer::DrawTileGhost(
+	SpriteBatch& sprite_batch,
+	AtlasManager& atlas,
+	GraphicManager& gfx,
+	const TileLocation* location,
+	const RenderView& view,
+	const DrawingOptions& options,
+	int draw_x,
+	int draw_y,
+	uint8_t alpha
+) {
+	if (!location) {
+		return;
+	}
+
+	const Tile* tile = location->get();
+	if (!tile) {
+		return;
+	}
+
+	uint8_t r = 255;
+	uint8_t g = 255;
+	uint8_t b = 255;
+	if (tile->isPZ()) {
+		g = 255;
+		b = 128;
+	}
+
+	if (tile->ground) {
+		blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, tile->ground, options, r, g, b, alpha, nullptr, view);
+	}
+
+	if (!options.shouldDrawDetailedItems(view.zoom)) {
+		return;
+	}
+
+	for (Item* item : tile->items) {
+		blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, item, options, 255, 255, 255, alpha, nullptr, view);
+	}
+}
+
 void TileRenderer::FinishLayer(const RenderView& view, TooltipDrawer* tooltip_drawer) {
 	if (!tooltip_drawer || !editor_) {
 		return;
@@ -499,7 +540,7 @@ void TileRenderer::FinishLayer(const RenderView& view, TooltipDrawer* tooltip_dr
 			if (!location) {
 				continue;
 			}
-			const Tile* tile = location->get();
+			Tile* tile = location->get();
 			if (!tile) {
 				continue;
 			}

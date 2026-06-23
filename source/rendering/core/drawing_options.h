@@ -11,6 +11,8 @@ struct DrawingOptions {
 	void Update();
 	bool isDrawLight() const noexcept;
 	bool shouldDrawDetailedItems(float zoom) const noexcept;
+	bool shouldDrawHeavyOverlays(float zoom) const noexcept;
+	bool shouldDrawTransparentHigherFloors(float zoom) const noexcept;
 
 	bool transparent_floors;
 	bool transparent_items;

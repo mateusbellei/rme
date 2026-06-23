@@ -7,6 +7,7 @@
 
 class MapCanvas;
 class wxDC;
+class AtlasManager;
 
 class ModernMapDrawer {
 public:
@@ -26,6 +27,7 @@ public:
 private:
 	void DrawBackground();
 	void DrawMap();
+	void DrawHigherFloors(AtlasManager& atlas);
 	void DrawLight();
 
 	struct Impl;

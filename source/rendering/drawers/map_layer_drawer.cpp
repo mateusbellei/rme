@@ -41,7 +41,7 @@ void MapLayerDrawer::Draw(
 	const int visibility_margin_pixels = PAINTERS_ALGORITHM_SAFETY_MARGIN_PIXELS;
 	const SpatialHashGrid::NodeBounds node_bounds = SpatialHashGrid::computeNodeBounds(view.start_x, view.start_y, view.end_x, view.end_y);
 
-	const bool draw_lights = options.isDrawLight() && view.zoom <= 10.0f;
+	const bool draw_lights = options.isDrawLight() && view.zoom <= 10.0f && options.shouldDrawHeavyOverlays(view.zoom);
 	tile_renderer_->BeginLayer();
 
 	for (int nd_map_x = node_bounds.start_x; nd_map_x <= node_bounds.end_x; nd_map_x += SpatialHashGrid::NODE_SIZE) {

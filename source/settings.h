@@ -183,6 +183,7 @@ namespace Config {
 
 		USE_MODERN_RENDERER,
 		SHOW_FPS,
+		UI_APPEARANCE,
 
 		LAST,
 	};

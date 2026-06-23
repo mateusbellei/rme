@@ -3,6 +3,7 @@
 #include "map_display.h"
 #include "rendering/core/drawing_options.h"
 #include "rendering/core/render_view.h"
+#include "ui_theme.h"
 
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
@@ -102,6 +103,7 @@ void RenderView::ReleaseGL() {
 }
 
 void RenderView::Clear() {
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	const glm::vec4 clear_color = UiTheme::GetMapClearColor();
+	glClearColor(clear_color.r, clear_color.g, clear_color.b, clear_color.a);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }

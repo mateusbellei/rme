@@ -66,8 +66,22 @@ void GLContextManager::UnregisterCanvas(wxGLCanvas* canvas) {
 	}
 }
 
-void GLContextManager::ApplyVSyncIfNeeded(wxGLCanvas& /*canvas*/) {
-	// Stub: VSYNC via g_settings can be added later.
+void GLContextManager::ApplyVSyncIfNeeded(wxGLCanvas& canvas) {
+	if (!OGLContext) {
+		return;
+	}
+
+	if (!EnsureContextCurrent(*OGLContext, &canvas)) {
+		return;
+	}
+
+#ifdef __WXMSW__
+	using SwapIntervalProc = BOOL(APIENTRY*)(int);
+	static SwapIntervalProc swap_interval = reinterpret_cast<SwapIntervalProc>(gladLoadProc("wglSwapIntervalEXT"));
+	if (swap_interval) {
+		swap_interval(1);
+	}
+#endif
 }
 
 bool GLContextManager::EnsureContextCurrent(wxGLContext& ctx, wxGLCanvas* preferredCanvas) {

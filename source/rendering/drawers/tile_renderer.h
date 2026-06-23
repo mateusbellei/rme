@@ -38,6 +38,17 @@ public:
 		LightBuffer* light_buffer = nullptr
 	);
 	void FinishLayer(const RenderView& view, TooltipDrawer* tooltip_drawer);
+	void DrawTileGhost(
+		SpriteBatch& sprite_batch,
+		AtlasManager& atlas,
+		GraphicManager& gfx,
+		const TileLocation* location,
+		const RenderView& view,
+		const DrawingOptions& options,
+		int draw_x,
+		int draw_y,
+		uint8_t alpha
+	);
 
 private:
 	void calculateTileColor(const Tile* tile, const TileLocation* location, const DrawingOptions& options, uint32_t current_house_id, uint8_t& r, uint8_t& g, uint8_t& b) const;

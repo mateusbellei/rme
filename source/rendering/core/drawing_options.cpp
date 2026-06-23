@@ -139,3 +139,15 @@ bool DrawingOptions::shouldDrawDetailedItems(float zoom) const noexcept {
 	// Hide items/creatures when zoomed far out to keep panning responsive.
 	return zoom <= 6.0f;
 }
+
+bool DrawingOptions::shouldDrawHeavyOverlays(float zoom) const noexcept {
+	// Skip grid/brush overlays when zoomed far out — they add little value and cost fill rate.
+	return zoom <= 8.0f;
+}
+
+bool DrawingOptions::shouldDrawTransparentHigherFloors(float zoom) const noexcept {
+	if (!transparent_floors) {
+		return false;
+	}
+	return zoom <= 8.0f;
+}

@@ -6,12 +6,14 @@
 #include "gui.h"
 #include "house_brush.h"
 #include "house_exit_brush.h"
+#include "map.h"
 #include "map_display.h"
 #include "rendering/core/light_buffer.h"
 #include "rendering/core/modern_sprite_bridge.h"
 #include "rendering/core/render_view.h"
 #include "rendering/core/sprite_batch.h"
 #include "rendering/drawers/map_layer_drawer.h"
+#include "rendering/drawers/map_overlay_drawer.h"
 #include "rendering/drawers/tile_renderer.h"
 #include "rendering/modern_map_drawer.h"
 #include "rendering/utilities/modern_light_drawer.h"
@@ -104,6 +106,8 @@ void ModernMapDrawer::Draw() {
 
 	impl_->sprite_batch->begin(impl_->view.projectionMatrix, *atlas);
 	DrawMap();
+	DrawHigherFloors(*atlas);
+	MapOverlayDrawer::Draw(*impl_->sprite_batch, *atlas, canvas_, impl_->editor, impl_->view, options_);
 	impl_->sprite_batch->end(*atlas);
 
 	if (options_.isDrawLight()) {
@@ -145,6 +149,50 @@ void ModernMapDrawer::DrawMap() {
 		--layer_view.start_y;
 		++layer_view.end_x;
 		++layer_view.end_y;
+	}
+}
+
+void ModernMapDrawer::DrawHigherFloors(AtlasManager& atlas) {
+	if (!options_.shouldDrawTransparentHigherFloors(impl_->view.zoom)) {
+		return;
+	}
+
+	const RenderView& view = impl_->view;
+	if (view.floor == 8 || view.floor == 0) {
+		return;
+	}
+
+	const int map_z = view.floor - 1;
+	for (int map_x = view.start_x; map_x <= view.end_x; ++map_x) {
+		for (int map_y = view.start_y; map_y <= view.end_y; ++map_y) {
+			QTreeNode* node = impl_->editor.map.getLeaf(map_x, map_y);
+			if (!node) {
+				continue;
+			}
+
+			TileLocation* location = node->getTile(map_x, map_y, map_z);
+			if (!location || !location->get()) {
+				continue;
+			}
+
+			int draw_x = 0;
+			int draw_y = 0;
+			if (!view.IsTileVisible(map_x, map_y, map_z, draw_x, draw_y)) {
+				continue;
+			}
+
+			impl_->tile_renderer->DrawTileGhost(
+				*impl_->sprite_batch,
+				atlas,
+				g_gui.gfx,
+				location,
+				view,
+				options_,
+				draw_x,
+				draw_y,
+				96
+			);
+		}
 	}
 }
 

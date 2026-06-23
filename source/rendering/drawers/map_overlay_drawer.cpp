@@ -1,7 +1,8 @@
 #include "rendering/rendering_gl_first.h"
 
-#include "brush.h"
-#include "brush_enums.h"
+#include "creature_brush.h"
+#include "raw_brush.h"
+#include "wall_brush.h"
 #include "editor.h"
 #include "gui.h"
 #include "live_socket.h"
@@ -14,6 +15,7 @@
 #include "rendering/drawers/map_overlay_drawer.h"
 #include "settings.h"
 #include "ui_theme.h"
+#include "rendering/drawers/tile_renderer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -59,6 +61,26 @@ glm::vec4 tileCheckColor(Brush* brush, Editor& editor, const Position& pos) {
 	return glm::vec4(166.0f / 255.0f, 0.0f, 0.0f, 128.0f / 255.0f);
 }
 
+void drawWallBrushQuads(SpriteBatch& batch, AtlasManager& atlas, float start_sx, float start_sy, float end_sx, float end_sy, const glm::vec4& color) {
+	const float ts = static_cast<float>(TILE_SIZE);
+	const float delta_x = end_sx - start_sx;
+	const float delta_y = end_sy - start_sy;
+
+	batch.drawRect(start_sx, start_sy, end_sx - start_sx, ts, color, atlas);
+
+	if (delta_y > ts) {
+		batch.drawRect(start_sx, start_sy + ts, ts, end_sy - start_sy - ts, color, atlas);
+	}
+
+	if (delta_x > ts && delta_y > ts) {
+		batch.drawRect(end_sx - ts, start_sy + ts, ts, end_sy - start_sy - ts, color, atlas);
+	}
+
+	if (delta_y > ts) {
+		batch.drawRect(start_sx, end_sy - ts, end_sx - start_sx, ts, color, atlas);
+	}
+}
+
 void drawHorizontalLine(SpriteBatch& batch, AtlasManager& atlas, float x, float y, float width, const glm::vec4& color) {
 	batch.drawRect(x, y, width, kLineThickness, color, atlas);
 }
@@ -85,6 +107,22 @@ void MapOverlayDrawer::DrawGrid(SpriteBatch& batch, AtlasManager& atlas, const R
 		const float line_x = static_cast<float>(x * TILE_SIZE - view.view_scroll_x);
 		drawVerticalLine(batch, atlas, line_x, start_screen_y, end_screen_y - start_screen_y, color);
 	}
+}
+
+void MapOverlayDrawer::DrawFloorShade(SpriteBatch& batch, AtlasManager& atlas, const RenderView& view, const DrawingOptions& options) {
+	if (!options.show_shade || view.start_z == view.end_z || options.show_as_minimap || options.show_only_colors) {
+		return;
+	}
+
+	const glm::vec4 shade(0.0f, 0.0f, 0.0f, 128.0f / 255.0f);
+	batch.drawRect(
+		0.0f,
+		0.0f,
+		static_cast<float>(view.screensize_x * view.zoom),
+		static_cast<float>(view.screensize_y * view.zoom),
+		shade,
+		atlas
+	);
 }
 
 void MapOverlayDrawer::DrawSelectionBox(SpriteBatch& batch, AtlasManager& atlas, MapCanvas* canvas, const RenderView& view) {
@@ -194,6 +232,8 @@ void MapOverlayDrawer::DrawIngameBox(SpriteBatch& batch, AtlasManager& atlas, co
 void MapOverlayDrawer::DrawBrush(
 	SpriteBatch& batch,
 	AtlasManager& atlas,
+	GraphicManager& gfx,
+	TileRenderer& tile_renderer,
 	MapCanvas* canvas,
 	Editor& editor,
 	const RenderView& view,
@@ -221,14 +261,70 @@ void MapOverlayDrawer::DrawBrush(
 		const int end_map_x = std::max(canvas->last_click_map_x, mouse_map_x) + 1;
 		const int end_map_y = std::max(canvas->last_click_map_y, mouse_map_y) + 1;
 
-		const float start_x = static_cast<float>(start_map_x * TILE_SIZE - view.view_scroll_x - floor_adjustment);
-		const float start_y = static_cast<float>(start_map_y * TILE_SIZE - view.view_scroll_y - floor_adjustment);
-		const float width = static_cast<float>((end_map_x - start_map_x) * TILE_SIZE);
-		const float height = static_cast<float>((end_map_y - start_map_y) * TILE_SIZE);
-		batch.drawRect(start_x, start_y, width, height, brush_color, atlas);
+		const float start_sx = static_cast<float>(start_map_x * TILE_SIZE - view.view_scroll_x - floor_adjustment);
+		const float start_sy = static_cast<float>(start_map_y * TILE_SIZE - view.view_scroll_y - floor_adjustment);
+		const float end_sx = static_cast<float>(end_map_x * TILE_SIZE - view.view_scroll_x - floor_adjustment);
+		const float end_sy = static_cast<float>(end_map_y * TILE_SIZE - view.view_scroll_y - floor_adjustment);
+
+		if (brush->isWall()) {
+			drawWallBrushQuads(batch, atlas, start_sx, start_sy, end_sx, end_sy, brush_color);
+			return;
+		}
+
+		if (g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE && (brush->isRaw() || brush->isOptionalBorder())) {
+			for (int y = start_map_y; y <= end_map_y; ++y) {
+				const int cy = y * TILE_SIZE - view.view_scroll_y - floor_adjustment;
+				for (int x = start_map_x; x <= end_map_x; ++x) {
+					const int cx = x * TILE_SIZE - view.view_scroll_x - floor_adjustment;
+					if (brush->isOptionalBorder()) {
+						const glm::vec4 color = tileCheckColor(brush, editor, Position(x, y, floor));
+						batch.drawRect(static_cast<float>(cx), static_cast<float>(cy), static_cast<float>(TILE_SIZE), static_cast<float>(TILE_SIZE), color, atlas);
+					} else {
+						tile_renderer.DrawRawBrushPreview(batch, atlas, gfx, cx, cy, brush->asRaw()->getItemType(), 160, 160, 160, 160);
+					}
+				}
+			}
+			return;
+		}
+
+		batch.drawRect(start_sx, start_sy, end_sx - start_sx, end_sy - start_sy, brush_color, atlas);
 		return;
 	}
 
+	if (brush->isWall()) {
+		const int start_map_x = mouse_map_x - g_gui.GetBrushSize();
+		const int start_map_y = mouse_map_y - g_gui.GetBrushSize();
+		const int end_map_x = mouse_map_x + g_gui.GetBrushSize() + 1;
+		const int end_map_y = mouse_map_y + g_gui.GetBrushSize() + 1;
+		const float start_sx = static_cast<float>(start_map_x * TILE_SIZE - view.view_scroll_x - floor_adjustment);
+		const float start_sy = static_cast<float>(start_map_y * TILE_SIZE - view.view_scroll_y - floor_adjustment);
+		const float end_sx = static_cast<float>(end_map_x * TILE_SIZE - view.view_scroll_x - floor_adjustment);
+		const float end_sy = static_cast<float>(end_map_y * TILE_SIZE - view.view_scroll_y - floor_adjustment);
+		drawWallBrushQuads(batch, atlas, start_sx, start_sy, end_sx, end_sy, brush_color);
+		return;
+	}
+
+	if (brush->isDoor()) {
+		const float cx = static_cast<float>(mouse_map_x * TILE_SIZE - view.view_scroll_x - floor_adjustment);
+		const float cy = static_cast<float>(mouse_map_y * TILE_SIZE - view.view_scroll_y - floor_adjustment);
+		const glm::vec4 color = tileCheckColor(brush, editor, Position(mouse_map_x, mouse_map_y, floor));
+		batch.drawRect(cx, cy, static_cast<float>(TILE_SIZE), static_cast<float>(TILE_SIZE), color, atlas);
+		return;
+	}
+
+	if (brush->isCreature()) {
+		const int cy = mouse_map_y * TILE_SIZE - view.view_scroll_y - floor_adjustment;
+		const int cx = mouse_map_x * TILE_SIZE - view.view_scroll_x - floor_adjustment;
+		CreatureBrush* creature_brush = brush->asCreature();
+		if (creature_brush->canDraw(&editor.map, Position(mouse_map_x, mouse_map_y, floor))) {
+			tile_renderer.DrawCreatureOutfitPreview(batch, atlas, gfx, cx, cy, creature_brush->getType()->outfit, SOUTH, 255, 255, 255, 160);
+		} else {
+			tile_renderer.DrawCreatureOutfitPreview(batch, atlas, gfx, cx, cy, creature_brush->getType()->outfit, SOUTH, 255, 64, 64, 160);
+		}
+		return;
+	}
+
+	RAWBrush* raw_brush = brush->isRaw() ? brush->asRaw() : nullptr;
 	const int brush_size = g_gui.GetBrushSize();
 	const BrushShape shape = g_gui.GetBrushShape();
 
@@ -247,14 +343,17 @@ void MapOverlayDrawer::DrawBrush(
 			}
 
 			const Position pos(mouse_map_x + x, mouse_map_y + y, floor);
-			glm::vec4 color = brush_color;
-			if (brush->isHouseExit() || brush->isOptionalBorder() || brush->isDoor()) {
-				color = tileCheckColor(brush, editor, pos);
-			}
+			const int cx = (mouse_map_x + x) * TILE_SIZE - view.view_scroll_x - floor_adjustment;
+			const int cy = (mouse_map_y + y) * TILE_SIZE - view.view_scroll_y - floor_adjustment;
 
-			const float draw_x = static_cast<float>((mouse_map_x + x) * TILE_SIZE - view.view_scroll_x - floor_adjustment);
-			const float draw_y = static_cast<float>((mouse_map_y + y) * TILE_SIZE - view.view_scroll_y - floor_adjustment);
-			batch.drawRect(draw_x, draw_y, static_cast<float>(TILE_SIZE), static_cast<float>(TILE_SIZE), color, atlas);
+			if (raw_brush) {
+				tile_renderer.DrawRawBrushPreview(batch, atlas, gfx, cx, cy, raw_brush->getItemType(), 160, 160, 160, 160);
+			} else if (brush->isHouseExit() || brush->isOptionalBorder()) {
+				const glm::vec4 color = tileCheckColor(brush, editor, pos);
+				batch.drawRect(static_cast<float>(cx), static_cast<float>(cy), static_cast<float>(TILE_SIZE), static_cast<float>(TILE_SIZE), color, atlas);
+			} else {
+				batch.drawRect(static_cast<float>(cx), static_cast<float>(cy), static_cast<float>(TILE_SIZE), static_cast<float>(TILE_SIZE), brush_color, atlas);
+			}
 		}
 	}
 }
@@ -262,6 +361,8 @@ void MapOverlayDrawer::DrawBrush(
 void MapOverlayDrawer::Draw(
 	SpriteBatch& sprite_batch,
 	AtlasManager& atlas,
+	GraphicManager& gfx,
+	TileRenderer& tile_renderer,
 	MapCanvas* canvas,
 	Editor& editor,
 	const RenderView& view,
@@ -271,12 +372,14 @@ void MapOverlayDrawer::Draw(
 		DrawGrid(sprite_batch, atlas, view);
 	}
 
+	DrawFloorShade(sprite_batch, atlas, view, options);
+
 	if (options.dragging) {
 		DrawSelectionBox(sprite_batch, atlas, canvas, view);
 	}
 
 	DrawLiveCursors(sprite_batch, atlas, canvas, editor, view);
-	DrawBrush(sprite_batch, atlas, canvas, editor, view, options);
+	DrawBrush(sprite_batch, atlas, gfx, tile_renderer, canvas, editor, view, options);
 
 	if (options.show_ingame_box && options.shouldDrawHeavyOverlays(view.zoom)) {
 		DrawIngameBox(sprite_batch, atlas, view);

@@ -30,7 +30,9 @@ void MapLayerDrawer::Draw(
 	const RenderView& view,
 	const DrawingOptions& options,
 	LightBuffer& light_buffer,
-	TooltipDrawer* tooltip_drawer
+	TooltipDrawer* tooltip_drawer,
+	bool begin_layer,
+	bool finish_layer
 ) {
 	const int offset = (map_z <= GROUND_LAYER)
 		? (GROUND_LAYER - map_z) * TILE_SIZE
@@ -42,7 +44,9 @@ void MapLayerDrawer::Draw(
 	const SpatialHashGrid::NodeBounds node_bounds = SpatialHashGrid::computeNodeBounds(view.start_x, view.start_y, view.end_x, view.end_y);
 
 	const bool draw_lights = options.isDrawLight() && view.zoom <= 10.0f && options.shouldDrawHeavyOverlays(view.zoom);
-	tile_renderer_->BeginLayer();
+	if (begin_layer) {
+		tile_renderer_->BeginLayer();
+	}
 
 	for (int nd_map_x = node_bounds.start_x; nd_map_x <= node_bounds.end_x; nd_map_x += SpatialHashGrid::NODE_SIZE) {
 		for (int nd_map_y = node_bounds.start_y; nd_map_y <= node_bounds.end_y; nd_map_y += SpatialHashGrid::NODE_SIZE) {
@@ -110,5 +114,7 @@ void MapLayerDrawer::Draw(
 		}
 	}
 
-	tile_renderer_->FinishLayer(view, tooltip_drawer);
+	if (finish_layer) {
+		tile_renderer_->FinishLayer(view, tooltip_drawer);
+	}
 }

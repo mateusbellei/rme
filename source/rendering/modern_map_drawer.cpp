@@ -14,10 +14,11 @@
 #include "rendering/core/sprite_batch.h"
 #include "rendering/drawers/map_layer_drawer.h"
 #include "rendering/drawers/map_overlay_drawer.h"
+#include "rendering/drawers/map_preview_drawer.h"
 #include "rendering/drawers/tile_renderer.h"
 #include "rendering/modern_map_drawer.h"
+#include "rendering/spatial_hash_grid.h"
 #include "rendering/utilities/modern_light_drawer.h"
-#include "rendering/utilities/post_process.h"
 #include "rendering/utilities/tooltip_drawer.h"
 
 #include <cmath>
@@ -107,14 +108,13 @@ void ModernMapDrawer::Draw() {
 	impl_->sprite_batch->begin(impl_->view.projectionMatrix, *atlas);
 	DrawMap();
 	DrawHigherFloors(*atlas);
-	MapOverlayDrawer::Draw(*impl_->sprite_batch, *atlas, canvas_, impl_->editor, impl_->view, options_);
+	MapPreviewDrawer::DrawDraggingShadow(*impl_->sprite_batch, *atlas, g_gui.gfx, *impl_->tile_renderer, canvas_, impl_->editor, impl_->view, options_);
+	MapOverlayDrawer::Draw(*impl_->sprite_batch, *atlas, g_gui.gfx, *impl_->tile_renderer, canvas_, impl_->editor, impl_->view, options_);
 	impl_->sprite_batch->end(*atlas);
 
 	if (options_.isDrawLight()) {
 		DrawLight();
 	}
-
-	PostProcessPass::Apply(impl_->view, impl_->view.screensize_x, impl_->view.screensize_y);
 }
 
 void ModernMapDrawer::DrawBackground() {
@@ -129,6 +129,7 @@ void ModernMapDrawer::DrawMap() {
 	}
 
 	RenderView layer_view = impl_->view;
+	bool begin_layer = true;
 
 	for (int map_z = layer_view.start_z; map_z >= layer_view.superend_z; --map_z) {
 		if (map_z >= layer_view.end_z) {
@@ -141,7 +142,22 @@ void ModernMapDrawer::DrawMap() {
 				layer_view,
 				options_,
 				impl_->light_buffer,
-				impl_->tooltip_drawer.get()
+				impl_->tooltip_drawer.get(),
+				begin_layer,
+				false
+			);
+			begin_layer = false;
+
+			MapPreviewDrawer::DrawSecondaryMapLayer(
+				*impl_->sprite_batch,
+				*atlas,
+				g_gui.gfx,
+				*impl_->tile_renderer,
+				canvas_,
+				impl_->editor,
+				map_z,
+				layer_view,
+				options_
 			);
 		}
 
@@ -150,6 +166,8 @@ void ModernMapDrawer::DrawMap() {
 		++layer_view.end_x;
 		++layer_view.end_y;
 	}
+
+	impl_->tile_renderer->FinishLayer(impl_->view, impl_->tooltip_drawer.get());
 }
 
 void ModernMapDrawer::DrawHigherFloors(AtlasManager& atlas) {
@@ -163,36 +181,78 @@ void ModernMapDrawer::DrawHigherFloors(AtlasManager& atlas) {
 	}
 
 	const int map_z = view.floor - 1;
-	for (int map_x = view.start_x; map_x <= view.end_x; ++map_x) {
-		for (int map_y = view.start_y; map_y <= view.end_y; ++map_y) {
-			QTreeNode* node = impl_->editor.map.getLeaf(map_x, map_y);
+	const int offset = TILE_SIZE * (view.floor - map_z);
+	const int base_screen_x = -view.view_scroll_x - offset;
+	const int base_screen_y = -view.view_scroll_y - offset;
+	const SpatialHashGrid::NodeBounds node_bounds = SpatialHashGrid::computeNodeBounds(view.start_x, view.start_y, view.end_x, view.end_y);
+
+	for (int nd_map_x = node_bounds.start_x; nd_map_x <= node_bounds.end_x; nd_map_x += SpatialHashGrid::NODE_SIZE) {
+		for (int nd_map_y = node_bounds.start_y; nd_map_y <= node_bounds.end_y; nd_map_y += SpatialHashGrid::NODE_SIZE) {
+			QTreeNode* node = impl_->editor.map.getLeaf(nd_map_x, nd_map_y);
 			if (!node) {
 				continue;
 			}
 
-			TileLocation* location = node->getTile(map_x, map_y, map_z);
-			if (!location || !location->get()) {
+			Floor* floor = node->getFloor(map_z);
+			if (!floor) {
 				continue;
 			}
 
-			int draw_x = 0;
-			int draw_y = 0;
-			if (!view.IsTileVisible(map_x, map_y, map_z, draw_x, draw_y)) {
-				continue;
-			}
+			const int node_draw_x = nd_map_x * TILE_SIZE + base_screen_x;
+			const int node_draw_y = nd_map_y * TILE_SIZE + base_screen_y;
+			TileLocation* location = floor->locs;
+			int draw_x_base = node_draw_x;
 
-			impl_->tile_renderer->DrawTileGhost(
-				*impl_->sprite_batch,
-				atlas,
-				g_gui.gfx,
-				location,
-				view,
-				options_,
-				draw_x,
-				draw_y,
-				96
-			);
+			for (int map_x = 0; map_x < 4; ++map_x, draw_x_base += TILE_SIZE) {
+				int draw_y = node_draw_y;
+				for (int map_y = 0; map_y < 4; ++map_y, ++location, draw_y += TILE_SIZE) {
+					if (!location->get()) {
+						continue;
+					}
+
+					const int absolute_x = nd_map_x + map_x;
+					const int absolute_y = nd_map_y + map_y;
+					int draw_x = 0;
+					int draw_y_visible = 0;
+					if (!view.IsTileVisible(absolute_x, absolute_y, map_z, draw_x, draw_y_visible)) {
+						continue;
+					}
+
+					impl_->tile_renderer->DrawTileGhost(
+						*impl_->sprite_batch,
+						atlas,
+						g_gui.gfx,
+						location,
+						view,
+						options_,
+						draw_x,
+						draw_y_visible,
+						96
+					);
+				}
+			}
 		}
+	}
+}
+
+void ModernMapDrawer::TakeScreenshot(uint8_t* screenshot_buffer) {
+	if (!screenshot_buffer) {
+		return;
+	}
+
+	glFinish();
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+	for (int i = 0; i < impl_->view.screensize_y; ++i) {
+		glReadPixels(
+			0,
+			impl_->view.screensize_y - i,
+			impl_->view.screensize_x,
+			1,
+			GL_RGB,
+			GL_UNSIGNED_BYTE,
+			screenshot_buffer + 3 * impl_->view.screensize_x * i
+		);
 	}
 }
 

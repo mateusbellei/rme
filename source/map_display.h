@@ -204,6 +204,7 @@ private:
 	friend class MapDrawer;
 	friend class ModernMapDrawer;
 	friend class MapOverlayDrawer;
+	friend class MapPreviewDrawer;
 
 	DECLARE_EVENT_TABLE()
 };

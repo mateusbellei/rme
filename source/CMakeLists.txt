@@ -137,6 +137,7 @@ ${CMAKE_CURRENT_LIST_DIR}/rendering/core/texture_garbage_collector.h
 ${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/tile_renderer.h
 ${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/map_layer_drawer.h
 ${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/map_overlay_drawer.h
+${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/map_preview_drawer.h
 ${CMAKE_CURRENT_LIST_DIR}/ui_theme.h
 ${CMAKE_CURRENT_LIST_DIR}/rendering/utilities/modern_light_drawer.h
 ${CMAKE_CURRENT_LIST_DIR}/rendering/utilities/tooltip_drawer.h
@@ -276,6 +277,7 @@ ${CMAKE_CURRENT_LIST_DIR}/rendering/core/texture_garbage_collector.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/tile_renderer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/map_layer_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/map_overlay_drawer.cpp
+${CMAKE_CURRENT_LIST_DIR}/rendering/drawers/map_preview_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ui_theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/utilities/modern_light_drawer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rendering/utilities/tooltip_drawer.cpp

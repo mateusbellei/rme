@@ -226,41 +226,8 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 		DrawingOptions& options = use_modern_renderer ? modern_drawer->getOptions() : drawer->getOptions();
 		if (screenshot_buffer) {
 			options.SetIngame();
-		} else if (use_modern_renderer) {
-			options.Update();
 		} else {
-			options.transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
-			options.transparent_items = g_settings.getBoolean(Config::TRANSPARENT_ITEMS);
-			options.show_ingame_box = g_settings.getBoolean(Config::SHOW_INGAME_BOX);
-			options.show_lights = g_settings.getBoolean(Config::SHOW_LIGHTS);
-			options.show_light_str = g_settings.getBoolean(Config::SHOW_LIGHT_STR);
-			options.show_tech_items = g_settings.getBoolean(Config::SHOW_TECHNICAL_ITEMS);
-			options.show_waypoints = g_settings.getBoolean(Config::SHOW_WAYPOINTS);
-			options.show_grid = g_settings.getInteger(Config::SHOW_GRID);
-			options.ingame = !g_settings.getBoolean(Config::SHOW_EXTRA);
-			options.show_all_floors = g_settings.getBoolean(Config::SHOW_ALL_FLOORS);
-			options.show_creatures = g_settings.getBoolean(Config::SHOW_CREATURES);
-			options.show_spawns = g_settings.getBoolean(Config::SHOW_SPAWNS);
-			options.show_houses = g_settings.getBoolean(Config::SHOW_HOUSES);
-			options.show_shade = g_settings.getBoolean(Config::SHOW_SHADE);
-			options.show_special_tiles = g_settings.getBoolean(Config::SHOW_SPECIAL_TILES);
-			options.show_zone_areas = g_settings.getBoolean(Config::SHOW_ZONE_AREAS);
-			options.show_items = g_settings.getBoolean(Config::SHOW_ITEMS);
-			options.highlight_items = g_settings.getBoolean(Config::HIGHLIGHT_ITEMS);
-			options.highlight_locked_doors = g_settings.getBoolean(Config::HIGHLIGHT_LOCKED_DOORS);
-			options.show_blocking = g_settings.getBoolean(Config::SHOW_BLOCKING);
-			options.show_tooltips = g_settings.getBoolean(Config::SHOW_TOOLTIPS);
-			options.show_as_minimap = g_settings.getBoolean(Config::SHOW_AS_MINIMAP);
-			options.show_only_colors = g_settings.getBoolean(Config::SHOW_ONLY_TILEFLAGS);
-			options.show_only_modified = g_settings.getBoolean(Config::SHOW_ONLY_MODIFIED_TILES);
-			options.show_preview = g_settings.getBoolean(Config::SHOW_PREVIEW);
-			options.show_hooks = g_settings.getBoolean(Config::SHOW_WALL_HOOKS);
-			options.hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
-			options.show_towns = g_settings.getBoolean(Config::SHOW_TOWNS);
-			options.always_show_zones = g_settings.getBoolean(Config::ALWAYS_SHOW_ZONES);
-			options.extended_house_shader = g_settings.getBoolean(Config::EXT_HOUSE_SHADER);
-
-			options.experimental_fog = g_settings.getBoolean(Config::EXPERIMENTAL_FOG);
+			options.Update();
 		}
 
 		options.dragging = boundbox_selection;
@@ -275,6 +242,9 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			modern_drawer->SetupVars();
 			modern_drawer->SetupGL();
 			modern_drawer->Draw();
+			if (screenshot_buffer) {
+				modern_drawer->TakeScreenshot(screenshot_buffer);
+			}
 			modern_drawer->Release();
 		} else {
 			drawer->SetupVars();

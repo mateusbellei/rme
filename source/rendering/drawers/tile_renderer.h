@@ -12,6 +12,8 @@ class AtlasManager;
 class Editor;
 class GraphicManager;
 class Item;
+class ItemType;
+struct Outfit;
 class SpriteBatch;
 class Tile;
 class TileLocation;
@@ -49,6 +51,68 @@ public:
 		int draw_y,
 		uint8_t alpha
 	);
+	void DrawPreviewTile(
+		SpriteBatch& sprite_batch,
+		AtlasManager& atlas,
+		GraphicManager& gfx,
+		Tile* tile,
+		int draw_x,
+		int draw_y,
+		const RenderView& view,
+		const DrawingOptions& options
+	);
+	void DrawRawBrushPreview(
+		SpriteBatch& sprite_batch,
+		AtlasManager& atlas,
+		GraphicManager& gfx,
+		int screen_x,
+		int screen_y,
+		ItemType* item_type,
+		uint8_t r,
+		uint8_t g,
+		uint8_t b,
+		uint8_t alpha
+	);
+	void DrawCreatureOutfitPreview(
+		SpriteBatch& sprite_batch,
+		AtlasManager& atlas,
+		GraphicManager& gfx,
+		int screen_x,
+		int screen_y,
+		const Outfit& outfit,
+		int direction,
+		int red,
+		int green,
+		int blue,
+		int alpha
+	);
+	void DrawEphemeralItem(
+		SpriteBatch& sprite_batch,
+		AtlasManager& atlas,
+		GraphicManager& gfx,
+		int draw_x,
+		int draw_y,
+		const Tile* tile,
+		Item* item,
+		const DrawingOptions& options,
+		const RenderView& view,
+		int red,
+		int green,
+		int blue,
+		int alpha
+	);
+	void DrawEphemeralSpriteType(
+		SpriteBatch& sprite_batch,
+		AtlasManager& atlas,
+		GraphicManager& gfx,
+		int draw_x,
+		int draw_y,
+		uint32_t sprite_id,
+		int red,
+		int green,
+		int blue,
+		int alpha
+	);
 
 private:
 	void calculateTileColor(const Tile* tile, const TileLocation* location, const DrawingOptions& options, uint32_t current_house_id, uint8_t& r, uint8_t& g, uint8_t& b) const;
@@ -66,7 +130,8 @@ private:
 		int blue,
 		int alpha,
 		LightBuffer* light_buffer,
-		const RenderView& view
+		const RenderView& view,
+		bool ephemeral = false
 	);
 	void blitSpriteType(SpriteBatch& sprite_batch, AtlasManager& atlas, GraphicManager& gfx, int screen_x, int screen_y, uint32_t sprite_id, int red, int green, int blue, int alpha);
 	void drawRawBrush(SpriteBatch& sprite_batch, AtlasManager& atlas, GraphicManager& gfx, int screen_x, int screen_y, uint32_t sprite_id, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha);

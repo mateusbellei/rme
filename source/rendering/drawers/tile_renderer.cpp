@@ -2,11 +2,13 @@
 
 #include "complexitem.h"
 #include "creature.h"
+#include "creature_brush.h"
 #include "editor.h"
 #include "graphics.h"
 #include "gui.h"
 #include "item.h"
 #include "items.h"
+#include "map.h"
 #include "map.h"
 #include "map_region.h"
 #include "rendering/core/light_buffer.h"
@@ -159,7 +161,8 @@ void TileRenderer::blitItem(
 	int blue,
 	int alpha,
 	LightBuffer* light_buffer,
-	const RenderView& view
+	const RenderView& view,
+	bool ephemeral
 ) {
 	if (!item) {
 		return;
@@ -171,7 +174,7 @@ void TileRenderer::blitItem(
 		green /= 2;
 	}
 
-	if (!options.ingame && item->isSelected()) {
+	if (!options.ingame && !ephemeral && item->isSelected()) {
 		red /= 2;
 		blue /= 2;
 		green /= 2;
@@ -518,8 +521,209 @@ void TileRenderer::DrawTileGhost(
 	}
 
 	for (Item* item : tile->items) {
-		blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, item, options, 255, 255, 255, alpha, nullptr, view);
+		blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, item, options, 255, 255, 255, alpha, nullptr, view, false);
 	}
+}
+
+void TileRenderer::DrawPreviewTile(
+	SpriteBatch& sprite_batch,
+	AtlasManager& atlas,
+	GraphicManager& gfx,
+	Tile* tile,
+	int draw_x,
+	int draw_y,
+	const RenderView& view,
+	const DrawingOptions& options
+) {
+	if (!tile) {
+		return;
+	}
+
+	uint8_t r = 160;
+	uint8_t g = 160;
+	uint8_t b = 160;
+
+	if (tile->isBlocking() && options.show_blocking) {
+		g = g / 3 * 2;
+		b = b / 3 * 2;
+	}
+	if (tile->isHouseTile() && options.show_houses) {
+		if (static_cast<int>(tile->getHouseID()) == static_cast<int>(options.current_house_id)) {
+			r /= 2;
+		} else {
+			r /= 2;
+			g /= 2;
+		}
+	} else if (options.show_special_tiles && tile->isPZ()) {
+		r /= 2;
+		b /= 2;
+	}
+	if (options.show_special_tiles && tile->getMapFlags() & TILESTATE_PVPZONE) {
+		r = r / 3 * 2;
+		b = r / 3 * 2;
+	}
+	if (options.show_special_tiles && tile->getMapFlags() & TILESTATE_NOLOGOUT) {
+		b /= 2;
+	}
+	if (options.show_special_tiles && tile->getMapFlags() & TILESTATE_NOPVP) {
+		g /= 2;
+	}
+	if (options.show_zone_areas && tile->getMapFlags() & TILESTATE_ZONE_BRUSH) {
+		ComputeZoneTint(tile->getZoneIds(), r, g, b);
+	}
+
+	if (tile->ground) {
+		blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, tile->ground, options, r, g, b, 160, nullptr, view, true);
+	}
+
+	if (!options.shouldDrawDetailedItems(view.zoom)) {
+		return;
+	}
+
+	for (Item* item : tile->items) {
+		if (item->isBorder()) {
+			blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, item, options, 160, r, b, 160, nullptr, view, true);
+		} else {
+			blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, item, options, 160, 160, 160, 160, nullptr, view, true);
+		}
+	}
+
+	if (tile->creature && options.show_creatures) {
+		DrawCreatureOutfitPreview(sprite_batch, atlas, gfx, draw_x, draw_y, tile->creature->getLookType(), tile->creature->getDirection(), 255, 255, 255, 160);
+	}
+}
+
+void TileRenderer::DrawRawBrushPreview(
+	SpriteBatch& sprite_batch,
+	AtlasManager& atlas,
+	GraphicManager& gfx,
+	int screen_x,
+	int screen_y,
+	ItemType* item_type,
+	uint8_t r,
+	uint8_t g,
+	uint8_t b,
+	uint8_t alpha
+) {
+	if (!item_type) {
+		return;
+	}
+
+	GameSprite* spr = item_type->sprite;
+	const uint16_t cid = item_type->clientID;
+
+	switch (cid) {
+		case 469:
+			b = 0;
+			alpha = alpha / 3 * 2;
+			spr = g_items[SPRITE_ZONE].sprite;
+			break;
+		case 470:
+			g = 0;
+			b = 0;
+			alpha = alpha / 3 * 2;
+			spr = g_items[SPRITE_ZONE].sprite;
+			break;
+		case 2187:
+			r = 0;
+			alpha = alpha / 3;
+			spr = g_items[SPRITE_ZONE].sprite;
+			break;
+		default:
+			break;
+	}
+
+	if (cid >= 39092 && cid <= 39100 || cid == 39236 || cid == 39367 || cid == 39368) {
+		spr = g_items[SPRITE_LIGHTSOURCE].sprite;
+		r = 0;
+		alpha = alpha / 3 * 2;
+	}
+
+	if (!spr) {
+		return;
+	}
+
+	screen_x -= spr->getDrawOffset().first;
+	screen_y -= spr->getDrawOffset().second;
+	for (int cx = 0; cx != spr->width; ++cx) {
+		for (int cy = 0; cy != spr->height; ++cy) {
+			for (int cf = 0; cf != spr->layers; ++cf) {
+				const AtlasRegion* region = ensureAtlasSprite(gfx, spr, cx, cy, cf, -1, 0, 0, 0, 0);
+				blitAtlasQuad(sprite_batch, screen_x - cx * TILE_SIZE, screen_y - cy * TILE_SIZE, region, r / 255.0f, g / 255.0f, b / 255.0f, alpha / 255.0f);
+			}
+		}
+	}
+}
+
+void TileRenderer::DrawCreatureOutfitPreview(
+	SpriteBatch& sprite_batch,
+	AtlasManager& atlas,
+	GraphicManager& gfx,
+	int screen_x,
+	int screen_y,
+	const Outfit& outfit,
+	int direction,
+	int red,
+	int green,
+	int blue,
+	int alpha
+) {
+	if (outfit.lookType == 0) {
+		return;
+	}
+
+	GameSprite* spr = g_gui.gfx.getCreatureSprite(outfit.lookType);
+	if (!spr) {
+		return;
+	}
+
+	screen_x -= spr->getDrawOffset().first;
+	screen_y -= spr->getDrawOffset().second;
+	const int pattern_z = 0;
+	for (int pattern_y = 0; pattern_y < spr->pattern_y; ++pattern_y) {
+		if (pattern_y > 0 && !(outfit.lookAddon & (1 << (pattern_y - 1)))) {
+			continue;
+		}
+		for (int cx = 0; cx != spr->width; ++cx) {
+			for (int cy = 0; cy != spr->height; ++cy) {
+				const AtlasRegion* region = ensureAtlasSprite(gfx, spr, cx, cy, 0, -1, direction, pattern_y, pattern_z, 0);
+				blitAtlasQuad(sprite_batch, screen_x - cx * TILE_SIZE, screen_y - cy * TILE_SIZE, region, red / 255.0f, green / 255.0f, blue / 255.0f, alpha / 255.0f);
+			}
+		}
+	}
+}
+
+void TileRenderer::DrawEphemeralItem(
+	SpriteBatch& sprite_batch,
+	AtlasManager& atlas,
+	GraphicManager& gfx,
+	int draw_x,
+	int draw_y,
+	const Tile* tile,
+	Item* item,
+	const DrawingOptions& options,
+	const RenderView& view,
+	int red,
+	int green,
+	int blue,
+	int alpha
+) {
+	blitItem(sprite_batch, atlas, gfx, draw_x, draw_y, tile, item, options, red, green, blue, alpha, nullptr, view, true);
+}
+
+void TileRenderer::DrawEphemeralSpriteType(
+	SpriteBatch& sprite_batch,
+	AtlasManager& atlas,
+	GraphicManager& gfx,
+	int draw_x,
+	int draw_y,
+	uint32_t sprite_id,
+	int red,
+	int green,
+	int blue,
+	int alpha
+) {
+	blitSpriteType(sprite_batch, atlas, gfx, draw_x, draw_y, sprite_id, red, green, blue, alpha);
 }
 
 void TileRenderer::FinishLayer(const RenderView& view, TooltipDrawer* tooltip_drawer) {

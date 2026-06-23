@@ -24,7 +24,9 @@ public:
 		const RenderView& view,
 		const DrawingOptions& options,
 		LightBuffer& light_buffer,
-		TooltipDrawer* tooltip_drawer
+		TooltipDrawer* tooltip_drawer,
+		bool begin_layer = true,
+		bool finish_layer = true
 	);
 
 private:

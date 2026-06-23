@@ -19,6 +19,7 @@ public:
 	void Release();
 	void Draw();
 	void DrawTooltips(wxDC& dc);
+	void TakeScreenshot(uint8_t* screenshot_buffer);
 
 	DrawingOptions& getOptions() {
 		return options_;

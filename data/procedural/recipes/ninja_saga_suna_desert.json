@@ -1,0 +1,16 @@
+﻿{
+  "version": 3,
+  "source": "text_prompt",
+  "prompt": "deserto arenoso vilarejo seco dunas oasi pedra",
+  "referenceImage": "",
+  "referenceWeight": 0,
+  "preset": "desert",
+  "seed": 4202,
+  "useSelection": true,
+  "region": { "width": 128, "height": 128, "z": 7 },
+  "elevation": 0,
+  "doodads": { "enabled": true, "density": 8 },
+  "pipeline": { "borderize": true, "randomize": true, "walls": false },
+  "legend": "procedural/default_legend.json",
+  "useSidecar": false
+}

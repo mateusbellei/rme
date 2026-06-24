@@ -1,7 +1,7 @@
-﻿{
+{
   "version": 3,
   "source": "text_prompt",
-  "prompt": "vila ninja floresta densa com clareiras casas madeira caminhos terra",
+  "prompt": "dense forest village clearing wooden paths earth roads",
   "referenceImage": "",
   "referenceWeight": 0,
   "preset": "forest",

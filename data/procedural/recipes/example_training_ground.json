@@ -1,7 +1,7 @@
-﻿{
+{
   "version": 3,
   "source": "text_prompt",
-  "prompt": "campo treino arena plana grama curta clareira floresta ao redor",
+  "prompt": "open grass training ground flat clearing forest border",
   "referenceImage": "",
   "referenceWeight": 0,
   "preset": "forest",

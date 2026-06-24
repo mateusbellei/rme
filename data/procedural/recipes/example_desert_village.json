@@ -1,7 +1,7 @@
-﻿{
+{
   "version": 3,
   "source": "text_prompt",
-  "prompt": "deserto arenoso vilarejo seco dunas oasi pedra",
+  "prompt": "sandy desert village dry dunes rock oasis",
   "referenceImage": "",
   "referenceWeight": 0,
   "preset": "desert",

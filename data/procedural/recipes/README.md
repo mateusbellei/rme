@@ -1,9 +1,14 @@
-﻿# Ninja Saga procedural recipes
+﻿# Procedural recipes (examples)
 
-Receitas em `data/procedural/recipes/`:
+Generic example recipes for **OTServer map generation**. No game-specific theme.
 
-- `ninja_saga_konoha_village.json` — vila floresta
-- `ninja_saga_suna_desert.json` — deserto Suna
-- `ninja_saga_training_ground.json` — campo de treino
+| File | Preset | Use |
+|------|--------|-----|
+| `example_forest.json` | forest | Dense forest + river |
+| `example_village_forest.json` | forest | Village in forest clearing |
+| `example_desert_village.json` | desert | Sandy settlement |
+| `example_training_ground.json` | forest | Open grass training area |
 
-Documentação no repo pai: `assets/.agents/rme-procedural-recipes.md`
+Load via **File → Generate Map → Load Recipe**.
+
+Project-specific recipes (private IP, themed prompts) belong in the **consumer's private assets repository**, not in this public RME fork.

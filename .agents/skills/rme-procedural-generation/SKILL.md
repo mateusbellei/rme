@@ -17,7 +17,7 @@ description: >-
 | Roadmap | `.agents/roadmap/improvements.md` — melhorias planejadas (Data Editor, headless, v3.4) |
 | Índice | `.agents/README.md` |
 
-**Arte/sprites:** repo pai `assets/.agents/` — não implementar pipeline PixelLab aqui.
+**Arte/sprites:** repositório privado de assets do consumidor — não implementar pipeline de sprites neste repo público.
 
 Branch: `feat/procedural-generation`
 

@@ -33,8 +33,12 @@ include(${wxWidgets_USE_FILE})
 include(source/CMakeLists.txt)
 add_executable(rme ${rme_H} ${rme_SRC})
 
-set_target_properties(rme PROPERTIES CXX_STANDARD 17)
+set_target_properties(rme PROPERTIES CXX_STANDARD 20)
 set_target_properties(rme PROPERTIES CXX_STANDARD_REQUIRED ON)
 
+target_include_directories(rme PRIVATE
+	${CMAKE_SOURCE_DIR}/source/ext/glad/include
+	${CMAKE_SOURCE_DIR}/source/ext/glm
+)
 include_directories(${Boost_INCLUDE_DIRS} ${LibArchive_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIR} ${GLUT_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIR})
 target_link_libraries(rme ${wxWidgets_LIBRARIES} ${Boost_LIBRARIES} ${LibArchive_LIBRARIES} ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${ZLIB_LIBRARIES})

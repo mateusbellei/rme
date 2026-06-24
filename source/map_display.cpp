@@ -22,6 +22,7 @@
 #include <wx/wfstream.h>
 
 #include "gui.h"
+#include "settings.h"
 #include "editor.h"
 #include "brush.h"
 #include "sprites.h"
@@ -33,6 +34,9 @@
 #include "palette_window.h"
 #include "map_display.h"
 #include "map_drawer.h"
+#include "rendering/modern_map_drawer.h"
+#include "rendering/gl_context_manager.h"
+#include "rendering/utilities/frame_pacer.h"
 #include "application.h"
 #include "live_server.h"
 #include "browse_tile_window.h"
@@ -142,22 +146,43 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	popup_menu = newd MapPopupMenu(editor);
 	animation_timer = newd AnimationTimer(this);
 	drawer = new MapDrawer(this);
+	modern_drawer = new ModernMapDrawer(this);
+	frame_pacer_.SetStatusCallback([](const wxString& status) {
+		if (g_settings.getBoolean(Config::SHOW_FPS) && g_gui.root) {
+			g_gui.root->SetStatusText(status, 4);
+		}
+	});
+	frame_start_ = std::chrono::steady_clock::now();
 	keyCode = WXK_NONE;
 }
 
 MapCanvas::~MapCanvas() {
+	g_gl_context.UnregisterCanvas(this);
 	delete popup_menu;
 	delete animation_timer;
 	delete drawer;
+	delete modern_drawer;
 	free(screenshot_buffer);
 }
 
 void MapCanvas::Refresh() {
-	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
+	if (repaint_reason_ == RepaintReason::MapRegion || refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
 		refresh_watch.Start();
 		wxGLCanvas::Update();
 	}
 	wxGLCanvas::Refresh();
+	repaint_reason_ = RepaintReason::Full;
+}
+
+void MapCanvas::RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1) {
+	(void)map_x0;
+	(void)map_y0;
+	(void)map_x1;
+	(void)map_y1;
+	repaint_reason_ = RepaintReason::MapRegion;
+	refresh_watch.Start();
+	wxGLCanvas::Update();
+	wxGLCanvas::Refresh(false);
 }
 
 void MapCanvas::SetZoom(double value) {
@@ -188,45 +213,21 @@ void MapCanvas::GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensi
 }
 
 void MapCanvas::OnPaint(wxPaintEvent& event) {
-	SetCurrent(*g_gui.GetGLContext(this));
+	frame_start_ = std::chrono::steady_clock::now();
+	const bool use_modern_renderer = g_settings.getBoolean(Config::USE_MODERN_RENDERER);
+	if (use_modern_renderer) {
+		SetCurrent(*g_gl_context.GetGLContext(this));
+		g_gl_context.ApplyVSyncIfNeeded(*this);
+	} else {
+		SetCurrent(*g_gui.GetGLContext(this));
+	}
 
 	if (g_gui.IsRenderingEnabled()) {
-		DrawingOptions& options = drawer->getOptions();
+		DrawingOptions& options = use_modern_renderer ? modern_drawer->getOptions() : drawer->getOptions();
 		if (screenshot_buffer) {
 			options.SetIngame();
 		} else {
-			options.transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
-			options.transparent_items = g_settings.getBoolean(Config::TRANSPARENT_ITEMS);
-			options.show_ingame_box = g_settings.getBoolean(Config::SHOW_INGAME_BOX);
-			options.show_lights = g_settings.getBoolean(Config::SHOW_LIGHTS);
-			options.show_light_str = g_settings.getBoolean(Config::SHOW_LIGHT_STR);
-			options.show_tech_items = g_settings.getBoolean(Config::SHOW_TECHNICAL_ITEMS);
-			options.show_waypoints = g_settings.getBoolean(Config::SHOW_WAYPOINTS);
-			options.show_grid = g_settings.getInteger(Config::SHOW_GRID);
-			options.ingame = !g_settings.getBoolean(Config::SHOW_EXTRA);
-			options.show_all_floors = g_settings.getBoolean(Config::SHOW_ALL_FLOORS);
-			options.show_creatures = g_settings.getBoolean(Config::SHOW_CREATURES);
-			options.show_spawns = g_settings.getBoolean(Config::SHOW_SPAWNS);
-			options.show_houses = g_settings.getBoolean(Config::SHOW_HOUSES);
-			options.show_shade = g_settings.getBoolean(Config::SHOW_SHADE);
-			options.show_special_tiles = g_settings.getBoolean(Config::SHOW_SPECIAL_TILES);
-			options.show_zone_areas = g_settings.getBoolean(Config::SHOW_ZONE_AREAS);
-			options.show_items = g_settings.getBoolean(Config::SHOW_ITEMS);
-			options.highlight_items = g_settings.getBoolean(Config::HIGHLIGHT_ITEMS);
-			options.highlight_locked_doors = g_settings.getBoolean(Config::HIGHLIGHT_LOCKED_DOORS);
-			options.show_blocking = g_settings.getBoolean(Config::SHOW_BLOCKING);
-			options.show_tooltips = g_settings.getBoolean(Config::SHOW_TOOLTIPS);
-			options.show_as_minimap = g_settings.getBoolean(Config::SHOW_AS_MINIMAP);
-			options.show_only_colors = g_settings.getBoolean(Config::SHOW_ONLY_TILEFLAGS);
-			options.show_only_modified = g_settings.getBoolean(Config::SHOW_ONLY_MODIFIED_TILES);
-			options.show_preview = g_settings.getBoolean(Config::SHOW_PREVIEW);
-			options.show_hooks = g_settings.getBoolean(Config::SHOW_WALL_HOOKS);
-			options.hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
-			options.show_towns = g_settings.getBoolean(Config::SHOW_TOWNS);
-			options.always_show_zones = g_settings.getBoolean(Config::ALWAYS_SHOW_ZONES);
-			options.extended_house_shader = g_settings.getBoolean(Config::EXT_HOUSE_SHADER);
-
-			options.experimental_fog = g_settings.getBoolean(Config::EXPERIMENTAL_FOG);
+			options.Update();
 		}
 
 		options.dragging = boundbox_selection;
@@ -237,15 +238,33 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 			animation_timer->Stop();
 		}
 
-		drawer->SetupVars();
-		drawer->SetupGL();
-		drawer->Draw();
+		if (use_modern_renderer) {
+			modern_drawer->SetupVars();
+			modern_drawer->SetupGL();
+			modern_drawer->Draw();
+			if (screenshot_buffer) {
+				modern_drawer->TakeScreenshot(screenshot_buffer);
+			}
+			modern_drawer->Release();
+		} else {
+			drawer->SetupVars();
+			drawer->SetupGL();
+			drawer->Draw();
 
-		if (screenshot_buffer) {
-			drawer->TakeScreenshot(screenshot_buffer);
+			if (screenshot_buffer) {
+				drawer->TakeScreenshot(screenshot_buffer);
+			}
+
+			drawer->Release();
 		}
+	}
 
-		drawer->Release();
+	wxPaintDC dc(this);
+	if (g_gui.IsRenderingEnabled() && g_settings.getBoolean(Config::USE_MODERN_RENDERER)) {
+		DrawingOptions& options = modern_drawer->getOptions();
+		if (options.show_tooltips) {
+			modern_drawer->DrawTooltips(dc);
+		}
 	}
 
 	// Clean unused textures
@@ -256,6 +275,15 @@ void MapCanvas::OnPaint(wxPaintEvent& event) {
 
 	// Send newd node requests
 	editor.SendNodeRequests();
+
+	if (g_settings.getBoolean(Config::SHOW_FPS)) {
+		const auto frame_end = std::chrono::steady_clock::now();
+		const double frame_ms = std::chrono::duration<double, std::milli>(frame_end - frame_start_).count();
+		frame_pacer_.SetLastFrameMs(frame_ms);
+		frame_pacer_.UpdateAndLimit(0, true);
+	}
+
+	event.Skip();
 }
 
 void MapCanvas::TakeScreenshot(wxFileName path, wxString format) {

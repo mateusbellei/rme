@@ -17,6 +17,8 @@
 
 #include "main.h"
 
+#include <algorithm>
+
 #include <wx/collpane.h>
 
 #include "settings.h"
@@ -26,6 +28,7 @@
 #include "gui.h"
 
 #include "preferences.h"
+#include "ui_theme.h"
 
 BEGIN_EVENT_TABLE(PreferencesWindow, wxDialog)
 EVT_BUTTON(wxID_OK, PreferencesWindow::OnClickOK)
@@ -378,6 +381,22 @@ wxNotebookPage* PreferencesWindow::CreateUIPage() {
 
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
 
+	auto* appearance_sizer = newd wxFlexGridSizer(2, 10, 10);
+	appearance_sizer->AddGrowableCol(1);
+	auto* appearance_label = newd wxStaticText(ui_page, wxID_ANY, "Appearance:");
+	appearance_sizer->Add(appearance_label, 0, wxLEFT | wxTOP, 5);
+	ui_appearance_choice = newd wxChoice(ui_page, wxID_ANY);
+	ui_appearance_choice->Append("System");
+	ui_appearance_choice->Append("Light");
+	ui_appearance_choice->Append("Dark");
+	ui_appearance_choice->SetSelection(std::clamp(g_settings.getInteger(Config::UI_APPEARANCE), 0, 2));
+	ui_appearance_choice->SetToolTip("Controls the editor interface theme. System follows the operating system setting.");
+	appearance_sizer->Add(ui_appearance_choice, 0, wxEXPAND | wxTOP, 5);
+	SetWindowToolTip(appearance_label, ui_appearance_choice, "Dark, light, or match the operating system appearance.");
+	sizer->Add(appearance_sizer, 0, wxEXPAND | wxALL, 6);
+
+	sizer->AddSpacer(10);
+
 	auto* subsizer = newd wxFlexGridSizer(2, 10, 10);
 	subsizer->AddGrowableCol(1);
 	terrain_palette_style_choice = AddPaletteStyleChoice(
@@ -670,6 +689,10 @@ void PreferencesWindow::Apply() {
 	*/
 
 	// Interface
+	g_settings.setInteger(Config::UI_APPEARANCE, ui_appearance_choice->GetSelection());
+	UiTheme::ApplyToAllWindows();
+	g_gui.RefreshView();
+
 	SetPaletteStyleChoice(terrain_palette_style_choice, Config::PALETTE_TERRAIN_STYLE);
 	SetPaletteStyleChoice(collection_palette_style_choice, Config::PALETTE_COLLECTION_STYLE);
 	SetPaletteStyleChoice(doodad_palette_style_choice, Config::PALETTE_DOODAD_STYLE);

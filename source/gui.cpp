@@ -19,8 +19,7 @@
 
 #include <wx/display.h>
 
-#include "gui.h"
-#include "main_menubar.h"
+#include "map_tab.h"
 
 #include "editor.h"
 #include "brush.h"
@@ -36,6 +35,7 @@
 #include "palette_window.h"
 #include "map_display.h"
 #include "application.h"
+#include "main_menubar.h"
 #include "welcome_dialog.h"
 
 #include "live_client.h"
@@ -140,6 +140,28 @@ wxString GUI::GetDataDirectory() {
 
 	exec_directory.AppendDir("data");
 	return exec_directory.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
+}
+
+wxString GUI::GetActiveDataDirectory() {
+	const wxString discovered = g_gui.getFoundDataDirectory();
+	if (!discovered.empty() && wxFileName(discovered + wxString("clients.xml")).FileExists()) {
+		return discovered;
+	}
+	return GetDataDirectory();
+}
+
+wxString GUI::GetProceduralDataDirectory() {
+	const wxString candidates[] = {
+		GetActiveDataDirectory() + wxString("procedural/"),
+		GetExecDirectory() + wxString("procedural/"),
+		GetDataDirectory() + wxString("procedural/"),
+	};
+	for (const wxString& path : candidates) {
+		if (wxFileName(path + wxString("default_legend.json")).FileExists()) {
+			return path;
+		}
+	}
+	return GetActiveDataDirectory() + wxString("procedural/");
 }
 
 wxString GUI::GetExecDirectory() {
@@ -1042,6 +1064,18 @@ void GUI::RefreshView() {
 
 	for (EditorTab* editorTab : editorTabs) {
 		editorTab->GetWindow()->Refresh();
+	}
+}
+
+void GUI::RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1) {
+	for (int32_t index = 0; index < tabbook->GetTabCount(); ++index) {
+		auto* mapTab = dynamic_cast<MapTab*>(tabbook->GetTab(index));
+		if (!mapTab) {
+			continue;
+		}
+		if (MapCanvas* canvas = mapTab->GetCanvas()) {
+			canvas->RefreshMapRegion(map_x0, map_y0, map_x1, map_y1);
+		}
 	}
 }
 

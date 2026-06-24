@@ -1,0 +1,16 @@
+{
+  "version": 3,
+  "source": "text_prompt",
+  "prompt": "open grass training ground flat clearing forest border",
+  "referenceImage": "",
+  "referenceWeight": 0,
+  "preset": "forest",
+  "seed": 4203,
+  "useSelection": true,
+  "region": { "width": 96, "height": 96, "z": 7 },
+  "elevation": 0,
+  "doodads": { "enabled": false, "density": 0 },
+  "pipeline": { "borderize": true, "randomize": false, "walls": false },
+  "legend": "procedural/default_legend.json",
+  "useSidecar": false
+}

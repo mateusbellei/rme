@@ -14,6 +14,10 @@ description: >-
 |--------|------|
 | v2 | `.agents/specs/procedural-generation-v2.md` |
 | v3 | `.agents/specs/procedural-generation-v3.md` |
+| Roadmap | `.agents/roadmap/improvements.md` — melhorias planejadas (Data Editor, headless, v3.4) |
+| Índice | `.agents/README.md` |
+
+**Arte/sprites:** repositório privado de assets do consumidor — não implementar pipeline de sprites neste repo público.
 
 Branch: `feat/procedural-generation`
 

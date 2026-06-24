@@ -928,6 +928,17 @@ void GraphicManager::garbageCollection() {
 	}
 }
 
+void GraphicManager::invalidateAllGLTextures() {
+	for (ImageMap::iterator iit = image_space.begin(); iit != image_space.end(); ++iit) {
+		GameSprite::Image* img = iit->second;
+		if (img && img->isGLLoaded) {
+			img->unloadGLTexture(static_cast<GLuint>(iit->first));
+		}
+	}
+	loaded_textures = 0;
+	lastclean = time(nullptr);
+}
+
 EditorSprite::EditorSprite(wxBitmap* b16x16, wxBitmap* b32x32) {
 	bm[SPRITE_SIZE_16x16] = b16x16;
 	bm[SPRITE_SIZE_32x32] = b32x32;

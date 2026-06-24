@@ -19,9 +19,11 @@
 #define RME_MAP_DRAWER_H_
 
 #include <iostream>
-#include <unordered_set>
 #include <unordered_map>
 #include <memory>
+
+#include "rendering/core/drawing_options.h"
+#include "rendering/core/zone_finder.h"
 
 class GameSprite;
 
@@ -48,148 +50,8 @@ struct MapTooltip {
 	bool ellipsis;
 };
 
-// Storage during drawing, for option caching
-struct DrawingOptions {
-	DrawingOptions();
-
-	void SetIngame();
-	void SetDefault();
-	bool isDrawLight() const noexcept;
-
-	bool transparent_floors;
-	bool transparent_items;
-	bool show_ingame_box;
-	bool show_lights;
-	bool show_light_str;
-	bool show_tech_items;
-	bool show_waypoints;
-	bool ingame;
-	bool dragging;
-
-	int show_grid;
-	bool show_all_floors;
-	bool show_creatures;
-	bool show_spawns;
-	bool show_houses;
-	bool show_shade;
-	bool show_special_tiles;
-	bool show_zone_areas;
-	bool show_items;
-
-	bool highlight_items;
-	bool highlight_locked_doors;
-	bool show_blocking;
-	bool show_tooltips;
-	bool show_as_minimap;
-	bool show_only_colors;
-	bool show_only_modified;
-	bool show_preview;
-	bool show_hooks;
-	bool hide_items_when_zoomed;
-	bool show_towns;
-	bool always_show_zones;
-	bool extended_house_shader;
-
-	bool experimental_fog;
-};
-
 class MapCanvas;
 class LightDrawer;
-
-struct FinderPosition {
-	FinderPosition() { }
-	FinderPosition(int _x, int _y, int _z) :
-		x(_x), y(_y), z(_z) { }
-	int x, y, z;
-
-	bool operator==(const FinderPosition& other) const {
-		return x == other.x && y == other.y && z == other.z;
-	}
-
-	double distance(const FinderPosition& b) const {
-		return std::sqrt(std::pow(x - b.x, 2) + std::pow(y - b.y, 2));
-	}
-
-	struct Hash {
-		size_t operator()(const FinderPosition& p) const {
-			return p.x ^ p.y ^ p.z;
-		}
-	};
-};
-
-class ZoneFinder {
-private:
-	std::unordered_set<FinderPosition, FinderPosition::Hash> positions;
-	std::vector<std::vector<FinderPosition>> zones;
-	std::unordered_set<FinderPosition, FinderPosition::Hash> visited;
-
-	bool isValid(const FinderPosition& pos) {
-		return positions.find(pos) != positions.end() && visited.find(pos) == visited.end();
-	}
-
-	void dfs(const FinderPosition& pos, std::vector<FinderPosition>& zone) {
-		if (visited.find(pos) != visited.end()) {
-			return;
-		}
-
-		visited.insert(pos);
-		zone.push_back(pos);
-
-		std::vector<FinderPosition> neighbors = {
-			{ pos.x + 1, pos.y, pos.z },
-			{ pos.x - 1, pos.y, pos.z },
-			{ pos.x, pos.y + 1, pos.z },
-			{ pos.x, pos.y - 1, pos.z }
-		};
-
-		for (const auto& next : neighbors) {
-			if (isValid(next)) {
-				dfs(next, zone);
-			}
-		}
-	}
-
-public:
-	ZoneFinder(const std::vector<FinderPosition>& inputPositions) :
-		positions(inputPositions.begin(), inputPositions.end()) { }
-
-	std::vector<std::vector<FinderPosition>> findZones() {
-		for (const auto& pos : positions) {
-			if (visited.find(pos) == visited.end()) {
-				std::vector<FinderPosition> zone;
-				dfs(pos, zone);
-				zones.push_back(zone);
-			}
-		}
-
-		return zones;
-	}
-
-	FinderPosition findClosestToCenter(const std::vector<FinderPosition>& zone) {
-		FinderPosition centroid = { 0, 0, 0 };
-		for (const auto& pos : zone) {
-			centroid.x += pos.x;
-			centroid.y += pos.y;
-			centroid.z += pos.z;
-		}
-
-		centroid.x /= zone.size();
-		centroid.y /= zone.size();
-		centroid.z /= zone.size();
-
-		double minDistance = std::numeric_limits<double>::max();
-		FinderPosition closestPosition;
-		for (const auto& pos : zone) {
-			const double dist = pos.distance(centroid);
-			if (dist < minDistance) {
-				minDistance = dist;
-				closestPosition = pos;
-			}
-		}
-
-		return closestPosition;
-	}
-};
 
 class MapDrawer {
 	MapCanvas* canvas;

@@ -30,7 +30,8 @@ struct LegendMapping {
 namespace ProceduralCommon {
 	bool ResolveRegion(Editor& editor, GenerationSpec& spec, wxString& error);
 	bool LoadLegend(const wxString& path, LegendMapping& mapping, wxString& error);
-	void ResolveLegendBrushes(LegendMapping& mapping);
+	wxString ResolveLegendBrushes(LegendMapping& mapping);
+	bool LoadLegendForPreset(const wxString& path, GenerationPreset preset, LegendMapping& mapping, wxString& resolvedPath, wxString& error);
 
 	GroundBrush* FindGroundBrush(const std::string& targetLower);
 	WallBrush* FindWallBrush(const std::string& targetLower);

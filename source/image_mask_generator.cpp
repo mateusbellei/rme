@@ -22,9 +22,17 @@ namespace {
 
 	static wxString DefaultLegendForPreset(GenerationPreset preset) {
 		if (preset == GenerationPreset::Ice) {
-			return wxstr(g_gui.GetDataDirectory()) + "procedural/ice_legend.json";
+			return g_gui.GetProceduralDataDirectory() + wxString("ice_legend.json");
 		}
-		return wxstr(g_gui.GetDataDirectory()) + "procedural/default_legend.json";
+		return g_gui.GetProceduralDataDirectory() + wxString("default_legend.json");
+	}
+
+	static wxString LoadAndResolveLegend(const wxString& path, GenerationPreset preset, LegendMapping& legend, wxString& error) {
+		wxString resolvedPath;
+		if (!ProceduralCommon::LoadLegendForPreset(path, preset, legend, resolvedPath, error)) {
+			return wxEmptyString;
+		}
+		return ProceduralCommon::ResolveLegendBrushes(legend);
 	}
 
 	static int EffectiveElevationLevels(const GenerationSpec& spec, GenerationPreset preset) {
@@ -136,14 +144,10 @@ namespace {
 		}
 
 		LegendMapping legend;
-		wxString legendPath = resolved.imageMask.legendPath;
-		if (legendPath.empty()) {
-			legendPath = DefaultLegendForPreset(GenerationPreset::Ice);
-		}
-		if (!ProceduralCommon::LoadLegend(legendPath, legend, error)) {
+		const wxString brushWarnings = LoadAndResolveLegend(resolved.imageMask.legendPath, GenerationPreset::Ice, legend, error);
+		if (!error.empty()) {
 			return false;
 		}
-		ProceduralCommon::ResolveLegendBrushes(legend);
 
 		g_gui.CreateLoadBar("Generating ice biome...");
 		g_gui.SetLoadDone(0);
@@ -166,6 +170,9 @@ namespace {
 		}
 
 		g_gui.DestroyLoadBar();
+		if (!brushWarnings.empty()) {
+			g_gui.PopupDialog(g_gui.root, "Legend warnings", brushWarnings, wxOK | wxICON_WARNING);
+		}
 		return true;
 	}
 
@@ -202,14 +209,10 @@ namespace {
 		}
 
 		LegendMapping legend;
-		wxString legendPath = resolved.imageMask.legendPath;
-		if (legendPath.empty()) {
-			legendPath = DefaultLegendForPreset(preset);
-		}
-		if (!ProceduralCommon::LoadLegend(legendPath, legend, error)) {
+		const wxString brushWarnings = LoadAndResolveLegend(resolved.imageMask.legendPath, preset, legend, error);
+		if (!error.empty()) {
 			return false;
 		}
-		ProceduralCommon::ResolveLegendBrushes(legend);
 
 		g_gui.CreateLoadBar("Generating from prompt...");
 		g_gui.SetLoadDone(0);
@@ -232,6 +235,9 @@ namespace {
 		}
 
 		g_gui.DestroyLoadBar();
+		if (!brushWarnings.empty()) {
+			g_gui.PopupDialog(g_gui.root, "Legend warnings", brushWarnings, wxOK | wxICON_WARNING);
+		}
 		return true;
 	}
 }
@@ -260,10 +266,12 @@ bool ProceduralBackends::GenerateFromImage(Editor& editor, const GenerationSpec&
 	}
 
 	LegendMapping legend;
-	if (!ProceduralCommon::LoadLegend(spec.imageMask.legendPath, legend, error)) {
+	const GenerationPreset preset = PromptGenerator::DetectPreset(spec.textPrompt.prompt, spec.preset);
+	wxString resolvedLegendPath;
+	if (!ProceduralCommon::LoadLegendForPreset(spec.imageMask.legendPath, preset, legend, resolvedLegendPath, error)) {
 		return false;
 	}
-	ProceduralCommon::ResolveLegendBrushes(legend);
+	const wxString brushWarnings = ProceduralCommon::ResolveLegendBrushes(legend);
 
 	g_gui.CreateLoadBar("Generating from image mask...");
 	g_gui.SetLoadDone(0);
@@ -274,7 +282,6 @@ bool ProceduralBackends::GenerateFromImage(Editor& editor, const GenerationSpec&
 	}
 
 	if (spec.doodads.enabled) {
-		const GenerationPreset preset = PromptGenerator::DetectPreset(spec.textPrompt.prompt, spec.preset);
 		if (!ProceduralCommon::ScatterPresetDoodads(editor, resolved, preset, nullptr, error)) {
 			g_gui.DestroyLoadBar();
 			return false;
@@ -287,6 +294,9 @@ bool ProceduralBackends::GenerateFromImage(Editor& editor, const GenerationSpec&
 	}
 
 	g_gui.DestroyLoadBar();
+	if (!brushWarnings.empty()) {
+		g_gui.PopupDialog(g_gui.root, "Legend warnings", brushWarnings, wxOK | wxICON_WARNING);
+	}
 	g_gui.RefreshView();
 	return true;
 }

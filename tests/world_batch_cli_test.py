@@ -31,7 +31,7 @@ def main():
                    str(source / "data/1098/items_original1098.otb"),
                    str(source / "data/1098/items_original1098.xml"),
                    str(source / "data/1098/materials.xml"), str(output),
-                   "--data-dir", str(source / "data"), "--town-prefix", "Frontier"]
+                   "--data-dir", str(source / "data"), "--town-prefix", "Frontier", "--verify"]
         # Run outside the checkout: only explicit arguments / recipe-relative paths apply.
         generated = subprocess.run(command, cwd=temporary, capture_output=True, text=True,
                                    errors="replace", timeout=60)
@@ -41,6 +41,7 @@ def main():
         plan = json.loads((output / "plan.json").read_text(encoding="utf-8"))
         assert report["client"]["clientVersion"] == 57
         assert report["tileBudget"] == 1048576
+        assert report["verifiedOTBM"] is True
         assert report["townPrefix"] == "Frontier" and len(report["towns"]) == 2
         assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
         assert all(town["templePosition"][2] == 7 for town in report["towns"])
@@ -89,6 +90,7 @@ def main():
         ridged_report = json.loads((ridged_output / "generation.json").read_text(encoding="utf-8"))
         ridged_plan = json.loads((ridged_output / "plan.json").read_text(encoding="utf-8"))
         assert ridged_report["tileBudget"] == 200000
+        assert ridged_report["verifiedOTBM"] is True
         assert ridged_plan["settings"]["relief"] == "ridges" and ridged_plan["settings"]["biomeDetail"] == 75
         assert len(ridged_plan["buildings"]) >= 4 and ridged_report["furniture"] > 0
         assert ridged_report["skippedFurniture"] == 0 and ridged_report["previews"] == []

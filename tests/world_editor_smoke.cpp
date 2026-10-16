@@ -90,6 +90,8 @@ namespace {
 		FixtureItem(100, ITEM_GROUP_GROUND);
 		FixtureItem(101, ITEM_GROUP_GROUND, true);
 		FixtureItem(104, ITEM_GROUP_GROUND);
+		FixtureItem(105, ITEM_GROUP_GROUND);
+		FixtureItem(106, ITEM_GROUP_GROUND);
 		FixtureItem(103, ITEM_GROUP_TELEPORT, false, ITEM_TYPE_TELEPORT);
 		for (int id = 200; id < 204; ++id) {
 			FixtureItem(id, ITEM_GROUP_NONE, true);
@@ -115,6 +117,19 @@ namespace {
 		ground->setName("fixture floor");
 		Check(ground->load(groundXml.child("brush"), warnings), "Styled ground fixture must load");
 		g_brushes.addBrush(ground.release());
+		pugi::xml_document equivalentXml;
+		Check(bool(equivalentXml.load(R"(<brush><item id="105" chance="1"/><border super="true" align="inner" to="none" ground_equivalent="105"><borderitem edge="dnw" item="106"/></border></brush>)")), "Equivalent ground fixture XML");
+		auto equivalent = std::make_unique<GroundBrush>();
+		equivalent->setName("fixture equivalent ground");
+		Check(equivalent->load(equivalentXml.child("brush"), warnings), "Equivalent ground brush must load");
+		g_brushes.addBrush(equivalent.release());
+		pugi::xml_document replacementXml;
+		Check(bool(replacementXml.load(R"(<brush><composite chance="1"><tile x="0" y="0"><item id="106"/></tile></composite></brush>)")), "Ground-replacing composite fixture XML");
+		auto replacement = std::make_unique<DoodadBrush>();
+		replacement->setName("fixture ground-replacing composite");
+		Check(replacement->load(replacementXml.child("brush"), warnings), "Ground-replacing composite fixture must load");
+		g_brushes.addBrush(replacement.release());
+		Check(!g_items[106].isGroundTile() && g_items[106].ground_equivalent == 105 && g_items[105].has_equivalent, "Inline ground borders must bind their ground equivalent before serialization");
 		for (int id = 204; id < 208; ++id) {
 			FixtureItem(id, ITEM_GROUP_NONE, true);
 		}
@@ -317,6 +332,10 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		Tile* untouched = editor.map.createTile(480, 480, 7);
 		untouched->addItem(Item::Create(100));
 		untouched->update();
+		Tile* equivalentTile = editor.map.createTile(450, 450, 7);
+		equivalentTile->addItem(Item::Create(105));
+		equivalentTile->addBorderItem(Item::Create(106));
+		equivalentTile->update();
 		const uint64_t before = MapHash(editor.map);
 		GenerationSpec spec;
 		spec.source = GenerationSource::WorldPlan;
@@ -465,6 +484,9 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			Check(!WorldEditor::ApplyPlan(editor, styledSpec, missingStyle, error) && MapHash(editor.map) == before, "Missing exact template materials must reject staging without fallback or mutations");
 		}
 
+		auto groundReplacingFurniture = plan;
+		for (auto& b : groundReplacingFurniture.catalog) for (auto& object : b.objects) object.brushes = { "fixture ground-replacing composite" };
+		Check(!WorldEditor::ApplyPlan(editor, resolved, groundReplacingFurniture, error) && MapHash(editor.map) == before, "Ground-equivalent composite furniture must reject preparation without replacing planned floors");
 		auto missingFurniture = plan;
 		for (auto& b : missingFurniture.catalog) {
 			for (auto& object : b.objects) {
@@ -532,6 +554,7 @@ static int RunBatchScenario(const wxString& outputDirectory) {
 		WorldBatch::Options options;
 		options.dataDirectory = wxString::FromUTF8(data.string());
 		options.townPrefix = "Fixture";
+		options.verifyOutput = true;
 		options.recipe = outputDirectory + "/recipe.json";
 		options.itemsOtb = outputDirectory + "/batch-items.otb";
 		options.itemsXml = outputDirectory + "/batch-items.xml";
@@ -542,6 +565,7 @@ static int RunBatchScenario(const wxString& outputDirectory) {
 		const bool generatedBatch = WorldBatch::Generate(options, result, error);
 		Check(generatedBatch, "Batch registry/XML/recipe generation: " + nstr(error));
 		Check(std::none_of(result.warnings.begin(), result.warnings.end(), [](const wxString& warning) { return warning.Contains("Biome decoration settings could not be read"); }), "UTF-8 BOM biome settings must load without silently replacing configured keywords");
+		Check(result.verified, "Batch verification must reopen and exactly re-encode the written OTBM bundle");
 		Check(g_items[20001].isTeleport(), "Explicit registry client version must preserve modern item XML IDs");
 		Check(g_items[65535].name == "maximum item", "Maximum server ID must load without a uint16 range-loop wrap");
 		Check(result.application.changedTiles > 0 && result.application.furniture > 0, "Batch generation must use the full production adapter, including furniture");

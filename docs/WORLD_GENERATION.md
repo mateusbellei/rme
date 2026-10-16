@@ -592,7 +592,40 @@ because the staged world and undo transaction coexist until export completes.
 A local Windows x64 Release run with the bundled 10.98 registry/materials exported
 an optional-ridged 1024×1024 continent, two cave levels and three-floor buildings:
 3,161,744 tiles, 64 buildings, four registered towns, 576 furniture placements,
-79,193 biome doodads and 25 preview PNGs. Observed elapsed time was 14.4 seconds,
-peak working set 1,403.7 MiB and OTBM size 26.96 MiB. These are one machine's
+79,193 biome doodads and 25 preview PNGs. With `--verify`, observed elapsed time
+was 16.4 seconds, peak working set 1,989.9 MiB and OTBM size 27.13 MiB. These are one machine's
 measurements, not a CI performance guarantee. No real DAT/SPR or game server was
 used; physical/navigation checks and production serialization ran normally.
+
+
+## Verifying written bundles
+
+`--verify` reads the committed OTBM bytes, reopens them through the production
+map reader, re-encodes the resulting map, and requires byte-for-byte equality.
+It also reopens both XML sidecars and checks their expected roots. Success sets
+`generation.json.verifiedOTBM:true`; without the option the field is false.
+Verification adds another map allocation and parsing pass. It validates format
+round-trip integrity rather than game-server behavior or client sprite visuals.
+A verification failure returns nonzero and retains the new folder for inspection.
+A differing re-encoding is saved as `verification-readback.otbm`; the error reports
+the first differing byte offset and both sizes.
+
+
+Readback verification exposed an existing inline-ground-border bug: borders with
+`ground_equivalent` were not marked as ground borders when loaded. Sandstone
+could consequently export both its base ground and an equivalent ground item,
+then lose/reclassify one on reload. Loading now activates that equivalence,
+allowing the existing writer/reader to preserve the intended ground-plus-border
+editor representation. Synthetic editor tests and the real desert profile cover
+this round-trip behavior.
+
+
+Reproduce the larger verified example with the public profile:
+
+```powershell
+rme --generate-world data/procedural/recipes/example_large_continent_1098.json data/1098/items_original1098.otb data/1098/items_original1098.xml data/1098/materials.xml build/large-world --data-dir data --tile-budget 4194304 --town-prefix "Frontier" --verify
+```
+
+Equivalent-ground objects are excluded from composite decorations/furniture,
+and material validation rejects additional ground items inside a tile's item
+stack before changing the editor map.

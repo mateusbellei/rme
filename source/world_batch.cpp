@@ -17,6 +17,8 @@
 #include <wx/wfstream.h>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
+#include <cstring>
 namespace WorldBatch {
 	namespace {
 		class Codec : public IOMapOTBM {
@@ -25,6 +27,9 @@ namespace WorldBatch {
 				IOMapOTBM(version) { }
 			bool Encode(Map& map, MemoryNodeFileWriteHandle& file) {
 				return saveMap(map, file);
+			}
+			bool Decode(Map& map, NodeFileReadHandle& file) {
+				return loadMap(map, file);
 			}
 			bool Spawns(Map& map, pugi::xml_document& doc) {
 				return saveSpawns(map, doc);
@@ -288,6 +293,48 @@ namespace WorldBatch {
 			error = "Could not finish the OTBM artifact. The new output folder contains partial diagnostics.";
 			return false;
 		}
+		if (options.verifyOutput) {
+			std::ifstream saved(std::filesystem::u8path(nstr((output + "world.otbm"))), std::ios::binary | std::ios::ate);
+			const size_t expected = memory.getSize() + 4;
+			if (!saved || saved.tellg() != std::streamoff(expected)) {
+				error = "Written OTBM size differs from the encoded map.";
+				return false;
+			}
+			std::string bytes(expected, '\0');
+			saved.seekg(0, std::ios::beg);
+			if (!saved.read(bytes.data(), std::streamsize(bytes.size())) || bytes.compare(0, 4, "OTBM") != 0 || std::memcmp(bytes.data() + 4, memory.getMemory(), memory.getSize()) != 0) {
+				error = "Written OTBM bytes differ from the generated map.";
+				return false;
+			}
+			saved.close();
+			Editor reopened(copy, version);
+			MemoryNodeFileReadHandle nodes(reinterpret_cast<const uint8_t*>(bytes.data() + 4), bytes.size() - 4);
+			MemoryNodeFileWriteHandle replay;
+			if (!codec.Decode(reopened.map, nodes) || !codec.Encode(reopened.map, replay)) {
+				error = "OTBM verification failed: the production reader/writer could not reopen the generated world.";
+				return false;
+			}
+			if (replay.getSize() != memory.getSize() || std::memcmp(replay.getMemory(), memory.getMemory(), memory.getSize()) != 0) {
+				size_t difference = 0;
+				while (difference < std::min(replay.getSize(), memory.getSize()) && replay.getMemory()[difference] == memory.getMemory()[difference]) ++difference;
+				std::string diagnostic("OTBM", 4);
+				diagnostic.append(reinterpret_cast<const char*>(replay.getMemory()), replay.getSize());
+				wxString writeError;
+				const bool diagnosticSaved = Write(output + "verification-readback.otbm", diagnostic.data(), diagnostic.size(), writeError);
+				error = wxString::Format("OTBM verification mismatch: original %llu bytes, readback %llu bytes, first differing offset %llu.", static_cast<unsigned long long>(memory.getSize()), static_cast<unsigned long long>(replay.getSize()), static_cast<unsigned long long>(difference + 4));
+				if (!diagnosticSaved) error += " " + writeError;
+				return false;
+			}
+
+			for (const auto& sidecar : { std::pair { "world-spawns.xml", "spawns" }, std::pair { "world-houses.xml", "houses" } }) {
+				pugi::xml_document document;
+				if (!document.load_file((output + wxString::FromUTF8(sidecar.first)).wc_str()) || !document.child(sidecar.second)) {
+					error = "Could not verify generated XML sidecar: " + wxString::FromUTF8(sidecar.first);
+					return false;
+				}
+			}
+			prepared.verified = true;
+		}
 		std::string diagnosticError;
 		if (!WorldGen::ExportDiagnostics(plan, nstr((output + "plan")), diagnosticError)) {
 			error = wxString::FromUTF8(diagnosticError);
@@ -316,6 +363,7 @@ namespace WorldBatch {
 		json::mObject report, client;
 		report["schemaVersion"] = 1;
 		report["tileBudget"] = json::mValue(uint64_t(options.tileBudget));
+		report["verifiedOTBM"] = prepared.verified;
 		report["previews"] = previews;
 		report["towns"] = townRecords;
 		report["townPrefix"] = nstr(options.townPrefix);
@@ -350,7 +398,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME] [--tile-budget MAX_TILES]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME] [--tile-budget MAX_TILES] [--verify]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -366,6 +414,10 @@ namespace WorldBatch {
 		options.materials = args[3];
 		options.outputDirectory = args[4];
 		for (size_t i = 5; i < args.size(); ++i) {
+			if (args[i] == "--verify") {
+				options.verifyOutput = true;
+				continue;
+			}
 			if (args[i] == "--no-previews") {
 				options.exportPreviews = false;
 				continue;

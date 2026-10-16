@@ -109,7 +109,7 @@ static void TestRecipes() {
 	for (const char* example : { "example_forest.json", "example_village_forest.json", "example_desert_village.json", "example_training_ground.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error), "Existing v3 recipes must remain loadable");
 	}
-	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json", "example_ridged_continent.json" }) {
+	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json", "example_ridged_continent.json", "example_large_continent_1098.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error) && loaded.source == GenerationSource::WorldPlan, "Bundled world recipes must load");
 	}
 	std::filesystem::remove(path);

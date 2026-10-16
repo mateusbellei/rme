@@ -53,7 +53,8 @@ int AutoBorder::edgeNameToID(const std::string& edgename) {
 }
 
 bool AutoBorder::load(pugi::xml_node node, wxArrayString& warnings, GroundBrush* owner, uint16_t ground_equivalent) {
-	ASSERT(ground ? ground_equivalent != 0 : true);
+	ground = ground_equivalent != 0;
+	ASSERT(!ground || owner != nullptr);
 
 	pugi::xml_attribute attribute;
 

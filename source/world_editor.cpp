@@ -185,7 +185,7 @@ namespace WorldEditor {
 					return fail("invalid item or composite offset");
 				}
 				const auto& type = g_items[id];
-				if (type.isGroundTile() || type.isTeleport() || type.isDoor() || type.isDepot() || type.isContainer() || type.isFloorChange() || type.isWall || object.prototype->getUniqueID() || object.prototype->getActionID()) {
+				if (type.isGroundTile() || type.ground_equivalent || type.isTeleport() || type.isDoor() || type.isDepot() || type.isContainer() || type.isFloorChange() || type.isWall || object.prototype->getUniqueID() || object.prototype->getActionID()) {
 					return fail("object contains ground, travel, container, wall or quest attributes");
 				}
 				auto& blocked = points[{ object.offset.x, object.offset.y }];
@@ -633,6 +633,10 @@ namespace WorldEditor {
 							for (Item* item : tile->items) {
 								blocked = blocked || g_items[item->getID()].unpassable;
 								const auto& type = g_items[item->getID()];
+								if (type.isGroundTile()) {
+									error = wxString::Format("Client materials add a second ground at %d,%d,%d. Correct the border definitions before applying this world.", pos.x, pos.y, pos.z);
+									return false;
+								}
 								if (type.isFloorChange() || (type.isTeleport() && (!(cell.flags & WorldGen::Connection) || !dynamic_cast<Teleport*>(item)))) {
 									error = wxString::Format("Client items at %d,%d,%d add unplanned floor travel.", pos.x, pos.y, pos.z);
 									return false;

@@ -6,11 +6,13 @@ namespace WorldBatch {
 		wxString recipe, itemsOtb, itemsXml, materials, outputDirectory;
 		wxString dataDirectory, clientDat, townPrefix;
 		bool exportPreviews = true;
+		bool verifyOutput = false;
 		size_t tileBudget = WorldEditor::DefaultTileBudget;
 	};
 	struct Result {
 		uint64_t fingerprint = 0;
 		size_t towns = 0;
+		bool verified = false;
 		WorldEditor::ApplicationStats application;
 		std::vector<wxString> warnings;
 	};

@@ -273,6 +273,31 @@ inputs are capped at 16 million source pixels and 64 MiB. Recipe fields are
 | Snow | `#F0F8FF` |
 | Mountain | `#654321` |
 
+### Export a world for PNG editing
+
+The preview's **Export plan / editable PNGs…** writes an additional grayscale
+`<prefix>_heightmap.png`, exact-palette `<prefix>_biomes.png`, and relative
+`<prefix>_editable-recipe.json` alongside the diagnostics. Edit the PNGs in an
+image editor, then load the editable recipe to generate a new world.
+
+Batch export offers the same workflow with `--editable-inputs`: the bundle gains
+`inputs_heightmap.png`, `inputs_biomes.png` and `editable-recipe.json`, with their
+filenames listed in `generation.json`. This works with `--no-previews`; the two
+editable inputs are separate from the diagnostic views. Existing outputs remain
+protected by the new-directory requirement.
+
+The heightmap uses nearest 8-bit grayscale (at most 20 units of quantization
+error on the normalized 0..10000 elevation scale). Biome hints retain the six
+natural categories exactly; water, roads and construction cells become fully
+transparent so the next run can plan those features normally. Do not paint with
+partial alpha or antialias categorical edges.
+
+These files are a starting point for authoring, not an exact replay: quantized
+elevation, transparent infrastructure and recomputed hydrology can change the
+next plan. Authored height pixels also take priority over procedural ridge
+breaching. Keep the bundle's original `recipe.json` and unchanged original
+inputs for deterministic replay. The editable recipe is deliberately separate.
+
 
 ## Progress and cancellation
 

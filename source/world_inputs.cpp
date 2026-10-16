@@ -4,9 +4,65 @@
 #include <fstream>
 #include <array>
 #include <algorithm>
+#include <utility>
 #include <wx/imagpng.h>
 #include <wx/wfstream.h>
 namespace WorldGen {
+	bool EncodeGeographyInputs(const Plan& plan, wxImage& heightmap, wxImage& biomeHints, wxString& error) {
+		error.clear();
+		std::string settingsError;
+		const auto* surface = plan.FindLayer(0);
+		if (!ValidateSettings(plan.settings, settingsError) || !surface || surface->cells.size() != size_t(plan.settings.width) * plan.settings.height) {
+			error = "Cannot encode editable inputs without valid surface dimensions.";
+			return false;
+		}
+		for (const auto& cell : surface->cells) {
+			if (cell.elevation > 10000 || unsigned(cell.terrain) >= unsigned(Terrain::Void)) {
+				error = "Cannot encode an invalid surface terrain or elevation.";
+				return false;
+			}
+		}
+		wxImage elevation(plan.settings.width, plan.settings.height), biomes(plan.settings.width, plan.settings.height);
+		if (!elevation.IsOk() || !biomes.IsOk()) {
+			error = "Could not allocate editable geography images.";
+			return false;
+		}
+		biomes.InitAlpha();
+		for (int y = 0; y < plan.settings.height; ++y) {
+			for (int x = 0; x < plan.settings.width; ++x) {
+				const auto& cell = surface->cells[size_t(y) * plan.settings.width + x];
+				const auto value = static_cast<unsigned char>((uint32_t(cell.elevation) * 255 + 5000) / 10000);
+				elevation.SetRGB(x, y, value, value, value);
+				const bool natural = cell.terrain >= Terrain::Beach && cell.terrain <= Terrain::Mountain;
+				const uint32_t rgb = natural ? TerrainColor(cell.terrain) : 0;
+				biomes.SetRGB(x, y, uint8_t(rgb >> 16), uint8_t(rgb >> 8), uint8_t(rgb));
+				biomes.SetAlpha(x, y, natural ? 255 : 0);
+			}
+		}
+		heightmap = std::move(elevation);
+		biomeHints = std::move(biomes);
+		return true;
+	}
+	bool ExportGeographyInputs(const Plan& plan, const wxString& prefix, wxString& heightmapPath, wxString& biomeHintsPath, wxString& error) {
+		if (prefix.empty() || prefix.find(wxUniChar(0)) != wxString::npos) {
+			error = "Choose a nonempty editable-input filename prefix without NUL.";
+			return false;
+		}
+		wxImage heightmap, biomes;
+		if (!EncodeGeographyInputs(plan, heightmap, biomes, error)) return false;
+		const wxString heightFile = prefix + "_heightmap.png", biomeFile = prefix + "_biomes.png";
+		wxPNGHandler encoder;
+		for (const auto& entry : { std::pair { heightFile, &heightmap }, std::pair { biomeFile, &biomes } }) {
+			wxTempFileOutputStream stream(entry.first);
+			if (!stream.IsOk() || !encoder.SaveFile(entry.second, stream, false) || !stream.Commit()) {
+				error = "Could not finish editable world input: " + entry.first;
+				return false;
+			}
+		}
+		heightmapPath = heightFile;
+		biomeHintsPath = biomeFile;
+		return true;
+	}
 	namespace {
 		bool CheckImage(const wxImage& image, int width, int height, wxString& error) {
 			error.clear();

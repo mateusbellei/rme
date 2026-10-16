@@ -2,6 +2,7 @@
 #include "world_batch.h"
 #include "procedural_recipe.h"
 #include "world_export.h"
+#include "world_inputs.h"
 #include "editor.h"
 #include "copybuffer.h"
 #include "items.h"
@@ -386,6 +387,17 @@ namespace WorldBatch {
 				}
 			}
 		}
+		json::mObject editableInputs;
+		if (options.exportEditableInputs) {
+			GenerationSpec editable = resolved;
+			editable.world.settings = plan.settings;
+			if (!WorldGen::ExportGeographyInputs(plan, output + "inputs", editable.world.heightmapPath, editable.world.biomeHintsPath, error) || !ProceduralRecipe::Save(output + "editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
+				return false;
+			}
+			editableInputs["heightmap"] = "inputs_heightmap.png";
+			editableInputs["biomeHints"] = "inputs_biomes.png";
+			editableInputs["recipe"] = "editable-recipe.json";
+		}
 		if (!ProceduralRecipe::Save(output + "recipe.json", resolved, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 			return false;
 		}
@@ -394,6 +406,7 @@ namespace WorldBatch {
 		report["tileBudget"] = json::mValue(uint64_t(options.tileBudget));
 		report["verifiedOTBM"] = prepared.verified;
 		report["previews"] = previews;
+		report["editableInputs"] = editableInputs;
 		report["towns"] = townRecords;
 		report["townPrefix"] = nstr(options.townPrefix);
 		report["algorithmVersion"] = int(WorldGen::AlgorithmVersion);
@@ -428,7 +441,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME] [--tile-budget MAX_TILES] [--seed UINT32] [--verify]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--editable-inputs] [--town-prefix NAME] [--tile-budget MAX_TILES] [--seed UINT32] [--verify]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -444,6 +457,10 @@ namespace WorldBatch {
 		options.materials = args[3];
 		options.outputDirectory = args[4];
 		for (size_t i = 5; i < args.size(); ++i) {
+			if (args[i] == "--editable-inputs") {
+				options.exportEditableInputs = true;
+				continue;
+			}
 			if (args[i] == "--verify") {
 				options.verifyOutput = true;
 				continue;

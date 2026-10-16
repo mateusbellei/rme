@@ -349,10 +349,49 @@ static void TestWorldInputs() {
 	std::filesystem::remove(path);
 }
 
+static void TestEditableInputs() {
+	WorldGen::Settings settings;
+	settings.width = settings.height = 32;
+	settings.settlementCount = settings.buildingsPerSettlement = settings.riverCount = 0;
+	WorldGen::Plan plan;
+	std::string message;
+	Check(WorldGen::Build(settings, plan, message), "Editable-input fixture must build");
+	auto& cells = plan.FindLayer(0)->cells;
+	for (size_t i = 0; i < cells.size(); ++i) cells[i].elevation = uint16_t((i * 73) % 10001);
+	for (int i = int(WorldGen::Terrain::Beach); i <= int(WorldGen::Terrain::Mountain); ++i) cells[size_t(i)].terrain = WorldGen::Terrain(i);
+	wxImage heightmap, hints;
+	wxString error;
+	Check(WorldGen::EncodeGeographyInputs(plan, heightmap, hints, error), "Editable PNG images must encode");
+	WorldGen::GeographyInput decoded;
+	Check(WorldGen::DecodeHeightmap(heightmap, 32, 32, decoded, error) && WorldGen::DecodeBiomeHints(hints, 32, 32, decoded, error), "Encoded images must pass the strict production decoders");
+	for (size_t i = 0; i < cells.size(); ++i) {
+		const auto& cell = cells[i];
+		Check(std::abs(int(decoded.elevation[i]) - int(cell.elevation)) <= 20, "8-bit elevation quantization must remain within 20 normalized units");
+		const bool natural = cell.terrain >= WorldGen::Terrain::Beach && cell.terrain <= WorldGen::Terrain::Mountain;
+		Check(decoded.biomes[i] == (natural ? cell.terrain : WorldGen::Terrain::Void), "Only natural terrain belongs in editable biome hints; water and infrastructure must remain transparent");
+	}
+	const auto prefix = std::filesystem::temp_directory_path() / (std::filesystem::path(u8"rme-editable-\u00e7-").native() + std::filesystem::path(std::to_string(wxGetProcessId())).native());
+	const auto utf8 = prefix.u8string();
+	wxString heightPath, biomePath;
+	Check(WorldGen::ExportGeographyInputs(plan, wxString::FromUTF8(std::string(utf8.begin(), utf8.end())), heightPath, biomePath, error), "Editable PNG files must save to Unicode paths");
+	wxImage reopened;
+	WorldGen::GeographyInput replay;
+	Check(WorldGen::LoadWorldPNG(heightPath, reopened, error) && WorldGen::DecodeHeightmap(reopened, 32, 32, replay, error), "Saved editable heightmap must reload");
+	Check(WorldGen::LoadWorldPNG(biomePath, reopened, error) && WorldGen::DecodeBiomeHints(reopened, 32, 32, replay, error), "Saved biome alpha/palette must reload");
+	Check(decoded.elevation == replay.elevation && decoded.biomes == replay.biomes, "PNG encoding must preserve every editable sample and transparent hole");
+	std::filesystem::remove(std::filesystem::u8path(nstr(heightPath)));
+	std::filesystem::remove(std::filesystem::u8path(nstr(biomePath)));
+	auto invalid = plan;
+	invalid.FindLayer(0)->cells[0].elevation = 10001;
+	const auto before = heightmap.GetRed(0, 0);
+	Check(!WorldGen::EncodeGeographyInputs(invalid, heightmap, hints, error) && heightmap.GetWidth() == 32 && heightmap.GetRed(0, 0) == before, "Failed encoding must preserve the caller's images");
+}
+
 int main() {
 	try {
 		TestDiagnostics();
 		TestWorldInputs();
+		TestEditableInputs();
 		TestRelativeRecipes();
 		TestRecipes();
 		TestScopedRandom();

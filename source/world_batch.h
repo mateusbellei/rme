@@ -7,6 +7,7 @@ namespace WorldBatch {
 		wxString recipe, itemsOtb, itemsXml, materials, outputDirectory;
 		wxString dataDirectory, clientDat, townPrefix;
 		bool exportPreviews = true;
+		bool exportEditableInputs = false;
 		bool verifyOutput = false;
 		size_t tileBudget = WorldEditor::DefaultTileBudget;
 		std::optional<uint32_t> seed;

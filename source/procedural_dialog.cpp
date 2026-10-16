@@ -11,6 +11,7 @@
 #include "gui.h"
 #include "world_editor.h"
 #include "world_export.h"
+#include "world_inputs.h"
 #include <wx/imagpng.h>
 #include <wx/wfstream.h>
 #include "procedural_mask.h"
@@ -679,7 +680,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
 	auto* apply = new wxButton(&preview, wxID_OK, "Apply displayed world");
 	buttons->Add(apply, 0, wxRIGHT, 8);
-	auto* exportPlan = new wxButton(&preview, wxID_ANY, "Export plan diagnostics...");
+	auto* exportPlan = new wxButton(&preview, wxID_ANY, "Export plan / editable PNGs...");
 	buttons->Add(exportPlan, 0, wxRIGHT, 8);
 	buttons->Add(new wxButton(&preview, wxID_CANCEL, "Close"));
 	layout->Add(buttons, 0, wxALIGN_RIGHT | wxALL, 8);
@@ -788,6 +789,12 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		wxBusyCursor busy;
 		if (!WorldGen::ExportDiagnostics(plan, nstr(prefix.GetFullPath()), exportError)) {
 			g_gui.PopupDialog(&preview, "Export failed", wxstr(exportError), wxOK | wxICON_ERROR);
+			return;
+		}
+		GenerationSpec editable = resolved;
+		editable.world.settings = plan.settings;
+		if (!WorldGen::ExportGeographyInputs(plan, prefix.GetFullPath(), editable.world.heightmapPath, editable.world.biomeHintsPath, error) || !ProceduralRecipe::Save(prefix.GetFullPath() + "_editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
+			g_gui.PopupDialog(&preview, "Export failed", error, wxOK | wxICON_ERROR);
 			return;
 		}
 		const char* names[] = { "terrain", "elevation", "moisture", "temperature", "roles" };

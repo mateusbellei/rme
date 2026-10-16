@@ -9,5 +9,9 @@ namespace WorldGen {
 	bool DecodeBiomeHints(const wxImage& image, int width, int height, GeographyInput& input, wxString& error);
 	// Inspect PNG IHDR dimensions and file budget before invoking the decoder.
 	bool LoadWorldPNG(const wxString& path, wxImage& image, wxString& error);
+	// Editable 8-bit elevation plus exact-palette biome hints. Non-natural cells
+	// are transparent in the hints; these inputs are an editable starting point.
+	bool EncodeGeographyInputs(const Plan& plan, wxImage& heightmap, wxImage& biomeHints, wxString& error);
+	bool ExportGeographyInputs(const Plan& plan, const wxString& prefix, wxString& heightmapPath, wxString& biomeHintsPath, wxString& error);
 }
 #endif

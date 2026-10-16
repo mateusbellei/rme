@@ -47,6 +47,7 @@ def main():
         assert report["tileBudget"] == 1048576
         assert report["seed"] == plan["settings"]["seed"]
         assert report["verifiedOTBM"] is True
+        assert report["editableInputs"] == {}
         assert report["townPrefix"] == "Frontier" and len(report["towns"]) == 2
         assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
         assert all(town["templePosition"][2] == 7 for town in report["towns"])
@@ -118,6 +119,7 @@ def main():
         diverse_path.write_text(json.dumps(diverse_recipe), encoding="utf-8")
         diverse_command = ridged_command.copy()
         diverse_command[2], diverse_command[6] = str(diverse_path), str(diversity_output)
+        diverse_command.append("--editable-inputs")
         generated = subprocess.run(diverse_command, cwd=temporary, capture_output=True,
                                    text=True, errors="replace", timeout=60)
         assert generated.returncode == 0, generated.stdout + generated.stderr
@@ -128,6 +130,21 @@ def main():
             residences = [b for b in diverse["buildings"] if b["settlement"] == index and b["role"] == "residential"]
             expected = town["biome"] + "_residence" if town["biome"] in ("desert", "snow") else "residence"
             assert residences and all(b["blueprint"] == expected for b in residences)
+        diversity_report = json.loads((diversity_output / "generation.json").read_text(encoding="utf-8"))
+        assert diversity_report["previews"] == []
+        assert diversity_report["editableInputs"] == {"heightmap": "inputs_heightmap.png",
+                                                       "biomeHints": "inputs_biomes.png",
+                                                       "recipe": "editable-recipe.json"}
+        editable = json.loads((diversity_output / "editable-recipe.json").read_text(encoding="utf-8"))
+        assert editable["world"]["heightmap"] == "inputs_heightmap.png"
+        assert editable["world"]["biomeHints"] == "inputs_biomes.png"
+        assert editable["pathBase"] == "recipe"
+        # The editable starting point must be accepted by the real PNG import path.
+        diverse_command[2] = str(diversity_output / "editable-recipe.json")
+        diverse_command[6] = str(Path(temporary) / "diverse-edited")
+        generated = subprocess.run(diverse_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
 
         balanced_output = Path(temporary) / "balanced-city"
         balanced_command = command.copy()

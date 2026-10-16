@@ -32,7 +32,7 @@ ClientVersion::VersionMap ClientVersion::client_versions;
 ClientVersion* ClientVersion::latest_version = nullptr;
 ClientVersion::OtbMap ClientVersion::otb_versions;
 
-void ClientVersion::loadVersions() {
+void ClientVersion::loadVersions(const wxString& explicitFile) {
 	// Clean up old stuff
 	ClientVersion::unloadVersions();
 
@@ -51,8 +51,8 @@ void ClientVersion::loadVersions() {
 	work_dir_client_xml.Assign(g_gui.getFoundDataDirectory());
 	work_dir_client_xml.SetFullName("clients.xml");
 
-	file_to_load = exec_dir_client_xml;
-	if (!file_to_load.FileExists()) {
+	file_to_load = explicitFile.empty() ? exec_dir_client_xml : wxFileName(explicitFile);
+	if (explicitFile.empty() && !file_to_load.FileExists()) {
 		file_to_load = data_dir_client_xml;
 		if (!file_to_load.FileExists()) {
 			file_to_load = work_dir_client_xml;
@@ -69,7 +69,7 @@ void ClientVersion::loadVersions() {
 
 	// Parse the file
 	pugi::xml_document doc;
-	pugi::xml_parse_result result = doc.load_file(file_to_load.GetFullPath().mb_str());
+	pugi::xml_parse_result result = doc.load_file(file_to_load.GetFullPath().wc_str());
 	if (result) {
 		pugi::xml_node node = doc.child("client_config");
 		if (!node) {
@@ -254,16 +254,19 @@ void ClientVersion::loadVersion(pugi::xml_node versionNode) {
 				continue;
 			}
 
-			if (!(attribute = childNode.attribute("dat")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong((unsigned long*)&client_data.datSignature, 16)) {
+			unsigned long parsedSignature = 0;
+			if (!(attribute = childNode.attribute("dat")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong(&parsedSignature, 16) || parsedSignature > UINT32_MAX) {
 				wxLogError("Node 'data' 'dat' tag is not hex-formatted.");
 				continue;
 			}
 
-			if (!(attribute = childNode.attribute("spr")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong((unsigned long*)&client_data.sprSignature, 16)) {
+			client_data.datSignature = uint32_t(parsedSignature);
+			if (!(attribute = childNode.attribute("spr")) || !wxString(attribute.as_string(), wxConvUTF8).ToULong(&parsedSignature, 16) || parsedSignature > UINT32_MAX) {
 				wxLogError("Node 'data' 'spr' tag is not hex-formatted.");
 				continue;
 			}
 
+			client_data.sprSignature = uint32_t(parsedSignature);
 			version->data_versions.push_back(client_data);
 		}
 	}

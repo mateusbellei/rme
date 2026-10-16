@@ -478,19 +478,42 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 
 	uint16_t effect_count, distance_count;
 
-	uint32_t datSignature;
-	file.getU32(datSignature);
+	uint32_t datSignature = 0;
+	if (!file.getU32(datSignature)) {
+		error = "Truncated DAT metadata.";
+		return false;
+	}
 	// get max id
-	file.getU16(item_count);
-	file.getU16(creature_count);
-	file.getU16(effect_count);
-	file.getU16(distance_count);
+	if (!file.getU16(item_count)) {
+		error = "Truncated DAT metadata.";
+		return false;
+	}
+	if (!file.getU16(creature_count)) {
+		error = "Truncated DAT metadata.";
+		return false;
+	}
+	if (!file.getU16(effect_count)) {
+		error = "Truncated DAT metadata.";
+		return false;
+	}
+	if (!file.getU16(distance_count)) {
+		error = "Truncated DAT metadata.";
+		return false;
+	}
 
 	uint32_t minID = 100; // items start with id 100
 	// We don't load distance/effects, if we would, just add effect_count & distance_count here
 	uint32_t maxID = item_count + creature_count;
 
+	if (!client_version || item_count < 100) {
+		error = "Invalid DAT header or missing client version.";
+		return false;
+	}
 	dat_format = client_version->getDatFormatForSignature(datSignature);
+	if (dat_format == DAT_FORMAT_UNKNOWN) {
+		error = "Unsupported DAT signature.";
+		return false;
+	}
 
 	if (!otfi_found) {
 		is_extended = dat_format >= DAT_FORMAT_96;
@@ -498,7 +521,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		has_frame_groups = dat_format >= DAT_FORMAT_1057;
 	}
 
-	uint16_t id = minID;
+	uint32_t id = minID;
 	// loop through all ItemDatabase until we reach the end of file
 	while (id <= maxID) {
 		GameSprite* sType = newd GameSprite();
@@ -510,56 +533,117 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		if (!loadSpriteMetadataFlags(file, sType, error, warnings)) {
 			wxString msg;
 			msg << "Failed to load flags for sprite " << sType->id;
-			warnings.push_back(msg);
+			error = msg + ": " + error;
+			return false;
 		}
 
 		// Reads the group count
 		uint8_t group_count = 1;
 		if (has_frame_groups && id > item_count) {
-			file.getU8(group_count);
+			if (!file.getU8(group_count)) {
+				error = "Truncated DAT metadata.";
+				return false;
+			}
 		}
 
+		if (group_count == 0) {
+			error = "DAT sprite has no frame groups.";
+			return false;
+		}
 		for (uint32_t k = 0; k < group_count; ++k) {
 			// Skipping the group type
 			if (has_frame_groups && id > item_count) {
-				file.skip(1);
+				if (file.tell() > file.size() || 1 > file.size() - file.tell() || !file.seekRelative(1)) {
+					error = "Truncated DAT metadata payload.";
+					return false;
+				}
 			}
 
 			// Size and GameSprite data
-			file.getByte(sType->width);
-			file.getByte(sType->height);
+			if (!file.getByte(sType->width)) {
+				error = "Truncated DAT metadata.";
+				return false;
+			}
+			if (!file.getByte(sType->height)) {
+				error = "Truncated DAT metadata.";
+				return false;
+			}
 
 			// Skipping the exact size
 			if ((sType->width > 1) || (sType->height > 1)) {
-				file.skip(1);
+				if (file.tell() > file.size() || 1 > file.size() - file.tell() || !file.seekRelative(1)) {
+					error = "Truncated DAT metadata payload.";
+					return false;
+				}
 			}
 
-			file.getU8(sType->layers); // Number of blendframes (some sprites consist of several merged sprites)
-			file.getU8(sType->pattern_x);
-			file.getU8(sType->pattern_y);
+			if (!file.getU8(sType->layers)) {
+
+				error = "Truncated DAT metadata.";
+
+				return false;
+
+			} // Number of blendframes (some sprites consist of several merged sprites)
+			if (!file.getU8(sType->pattern_x)) {
+				error = "Truncated DAT metadata.";
+				return false;
+			}
+			if (!file.getU8(sType->pattern_y)) {
+				error = "Truncated DAT metadata.";
+				return false;
+			}
 			if (dat_format <= DAT_FORMAT_74) {
 				sType->pattern_z = 1;
 			} else {
-				file.getU8(sType->pattern_z);
+				if (!file.getU8(sType->pattern_z)) {
+					error = "Truncated DAT metadata.";
+					return false;
+				}
 			}
-			file.getU8(sType->frames); // Length of animation
+			if (!file.getU8(sType->frames)) {
+				error = "Truncated DAT metadata.";
+				return false;
+			} // Length of animation
 
 			if (sType->frames > 1) {
 				uint8_t async = 0;
 				int loop_count = 0;
 				int8_t start_frame = 0;
 				if (has_frame_durations) {
-					file.getByte(async);
-					file.get32(loop_count);
-					file.getSByte(start_frame);
+					if (!file.getByte(async)) {
+						error = "Truncated DAT metadata.";
+						return false;
+					}
+					if (!file.get32(loop_count)) {
+						error = "Truncated DAT metadata.";
+						return false;
+					}
+					if (!file.getSByte(start_frame)) {
+						error = "Truncated DAT metadata.";
+						return false;
+					}
+				}
+				if (start_frame < -1 || start_frame >= sType->frames || async > 1) {
+					error = "Invalid DAT animation settings.";
+					return false;
 				}
 				sType->animator = newd Animator(sType->frames, start_frame, loop_count, async == 1);
 				if (has_frame_durations) {
 					for (int i = 0; i < sType->frames; i++) {
 						uint32_t min;
 						uint32_t max;
-						file.getU32(min);
-						file.getU32(max);
+						if (!file.getU32(min)) {
+							error = "Truncated DAT metadata.";
+							return false;
+						}
+						if (!file.getU32(max)) {
+							error = "Truncated DAT metadata.";
+							return false;
+						}
+						if (!min || min > max || max > uint32_t(INT_MAX / sType->frames)) {
+							error = "Invalid DAT animation duration.";
+							return false;
+						}
 						FrameDuration* frame_duration = sType->animator->getFrameDuration(i);
 						frame_duration->setValues(int(min), int(max));
 					}
@@ -567,16 +651,27 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 				}
 			}
 
-			sType->numsprites = (int)sType->width * (int)sType->height * (int)sType->layers * (int)sType->pattern_x * (int)sType->pattern_y * sType->pattern_z * (int)sType->frames;
+			const uint64_t spriteCount = uint64_t(sType->width) * sType->height * sType->layers * sType->pattern_x * sType->pattern_y * sType->pattern_z * sType->frames;
+			if (!spriteCount || spriteCount > 262144 || spriteCount > (file.size() - std::min(file.tell(), file.size())) / (is_extended ? 4 : 2)) {
+				error = "Invalid or truncated DAT sprite dimensions.";
+				return false;
+			}
+			sType->numsprites = int(spriteCount);
 
 			// Read the sprite ids
 			for (uint32_t i = 0; i < sType->numsprites; ++i) {
 				uint32_t sprite_id;
 				if (is_extended) {
-					file.getU32(sprite_id);
+					if (!file.getU32(sprite_id)) {
+						error = "Truncated DAT metadata.";
+						return false;
+					}
 				} else {
 					uint16_t u16 = 0;
-					file.getU16(u16);
+					if (!file.getU16(u16)) {
+						error = "Truncated DAT metadata.";
+						return false;
+					}
 					sprite_id = u16;
 				}
 
@@ -600,7 +695,10 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 
 	for (int i = 0; i < DatFlagLast; ++i) {
 		prev_flag = flag;
-		file.getU8(flag);
+		if (!file.getU8(flag)) {
+			error = "Truncated DAT metadata.";
+			return false;
+		}
 
 		if (flag == DatFlagLast) {
 			return true;
@@ -715,15 +813,24 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 			case DatFlagCloth:
 			case DatFlagLensHelp:
 			case DatFlagUsable:
-				file.skip(2);
+				if (file.tell() > file.size() || 2 > file.size() - file.tell() || !file.seekRelative(2)) {
+					error = "Truncated DAT metadata payload.";
+					return false;
+				}
 				break;
 
 			case DatFlagLight: {
 				SpriteLight light;
 				uint16_t intensity;
 				uint16_t color;
-				file.getU16(intensity);
-				file.getU16(color);
+				if (!file.getU16(intensity)) {
+					error = "Truncated DAT metadata.";
+					return false;
+				}
+				if (!file.getU16(color)) {
+					error = "Truncated DAT metadata.";
+					return false;
+				}
 				sType->has_light = true;
 				sType->light = SpriteLight { static_cast<uint8_t>(intensity), static_cast<uint8_t>(color) };
 				break;
@@ -733,8 +840,14 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 				if (dat_format >= DAT_FORMAT_755) {
 					uint16_t offset_x;
 					uint16_t offset_y;
-					file.getU16(offset_x);
-					file.getU16(offset_y);
+					if (!file.getU16(offset_x)) {
+						error = "Truncated DAT metadata.";
+						return false;
+					}
+					if (!file.getU16(offset_y)) {
+						error = "Truncated DAT metadata.";
+						return false;
+					}
 
 					sType->drawoffset_x = offset_x;
 					sType->drawoffset_y = offset_y;
@@ -747,36 +860,52 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 
 			case DatFlagElevation: {
 				uint16_t draw_height;
-				file.getU16(draw_height);
+				if (!file.getU16(draw_height)) {
+					error = "Truncated DAT metadata.";
+					return false;
+				}
 				sType->draw_height = draw_height;
 				break;
 			}
 
 			case DatFlagMinimapColor: {
 				uint16_t minimap_color;
-				file.getU16(minimap_color);
+				if (!file.getU16(minimap_color)) {
+					error = "Truncated DAT metadata.";
+					return false;
+				}
 				sType->minimap_color = minimap_color;
 				break;
 			}
 
 			case DatFlagMarket: {
-				file.skip(6);
+				if (file.tell() > file.size() || 6 > file.size() - file.tell() || !file.seekRelative(6)) {
+					error = "Truncated DAT metadata payload.";
+					return false;
+				}
 				std::string marketName;
-				file.getString(marketName);
-				file.skip(4);
+				if (!file.getString(marketName)) {
+					error = "Truncated DAT metadata.";
+					return false;
+				}
+				if (file.tell() > file.size() || 4 > file.size() - file.tell() || !file.seekRelative(4)) {
+					error = "Truncated DAT metadata payload.";
+					return false;
+				}
 				break;
 			}
 
 			default: {
 				wxString err;
 				err << "Metadata: Unknown flag: " << i2ws(flag) << ". Previous flag: " << i2ws(prev_flag) << ".";
-				warnings.push_back(err);
-				break;
+				error = err;
+				return false;
 			}
 		}
 	}
 
-	return true;
+	error = "DAT sprite flags lack a terminator.";
+	return false;
 }
 
 bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, wxArrayString& warnings) {

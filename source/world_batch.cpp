@@ -90,6 +90,8 @@ namespace WorldBatch {
 		g_materials.clear();
 		g_brushes.clear();
 		g_items.clear();
+		g_gui.gfx.clear();
+		g_gui.gfx.client_version = nullptr;
 		wxString dataDirectory = options.dataDirectory;
 		if (dataDirectory.empty()) {
 			wxFileName parent = wxFileName::DirName(wxFileName(options.materials).GetPath());
@@ -118,7 +120,7 @@ namespace WorldBatch {
 				error = "Client metadata requires a data directory containing clients.xml.";
 				return false;
 			}
-			ClientVersion::loadVersions();
+			ClientVersion::loadVersions(clients);
 			auto* version = ClientVersion::get(int(g_items.MinorVersion));
 			if (!version) {
 				error = "items.otb client version is not registered in clients.xml.";

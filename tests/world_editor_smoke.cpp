@@ -17,6 +17,7 @@
 #include "iomap_otbm.h"
 #include "mt_rand.h"
 #include "settings.h"
+#include "gui.h"
 
 #include <filesystem>
 #include <memory>
@@ -193,6 +194,33 @@ namespace {
 			out << (bad ? 65530 : (barrier ? 101 : 100)) << '}';
 		}
 		out << "]}";
+	}
+
+	std::string MetadataFixture(uint16_t maximum = 65535) {
+		std::ostringstream bytes(std::ios::binary);
+		auto put = [&](uint32_t value, int count) { for (int i = 0; i < count; ++i){ bytes.put(char(value >> (8 * i)));
+} };
+		put(0x12345678, 4);
+		put(maximum, 2);
+		put(0, 2);
+		put(0, 2);
+		put(0, 2);
+		for (uint32_t id = 100; id <= maximum; ++id) {
+			put(255, 1); // Flag terminator, including at the maximum 16-bit ID.
+			const int side = id == 300 ? 2 : 1;
+			put(side, 1);
+			put(side, 1);
+			if (side > 1) {
+				put(64, 1);
+			}
+			for (int field = 0; field < 5; ++field) {
+				put(1, 1); // Layers, patterns x/y/z, frames.
+			}
+			for (int pixel = 0; pixel < side * side; ++pixel) {
+				put(0, 4);
+			}
+		}
+		return bytes.str();
 	}
 
 	void WriteBatchRegistry(const std::filesystem::path& directory) {
@@ -503,6 +531,50 @@ static int RunBatchScenario(const wxString& outputDirectory) {
 	}
 }
 
+static int RunMetadataScenario(const wxString& outputDirectory) {
+	try {
+		const auto directory = std::filesystem::u8path(nstr(outputDirectory));
+		const auto data = directory / "batch-data";
+		std::ofstream(data / "clients.xml") << R"(<client_config><otbs><otb client="fixture" version="3" id="57"/></otbs><clients><client name="metadata fixture" data_directory="fixture" otb="fixture"><otbm version="2"/><data format="10.57" dat="12345678" spr="87654321"/></client></clients></client_config>)";
+		const wxString clients = wxString::FromUTF8((data / "clients.xml").string());
+		ClientVersion::loadVersions(clients);
+		auto* version = ClientVersion::get(57);
+		Check(version && version->getDatFormatForSignature(0x12345678) == DAT_FORMAT_1057, "Explicit clients.xml must register DAT signatures portably");
+		const auto metadata = MetadataFixture();
+		const wxString filename = outputDirectory + "/batch-client.dat";
+		wxString error;
+		wxArrayString warnings;
+		for (size_t length : { size_t(0), size_t(4), size_t(10), size_t(12), size_t(15), metadata.size() - 1 }) {
+			std::ofstream(std::filesystem::u8path(nstr(filename)), std::ios::binary).write(metadata.data(), std::streamsize(length));
+			g_gui.gfx.clear();
+			g_gui.gfx.client_version = version;
+			Check(!g_gui.gfx.loadSpriteMetadata(filename, error, warnings) && !error.empty(), "Truncated DAT metadata must fail before uninitialized dimensions are used");
+		}
+		std::ofstream(std::filesystem::u8path(nstr(filename)), std::ios::binary).write(metadata.data(), std::streamsize(metadata.size()));
+		g_gui.gfx.clear();
+		g_gui.gfx.client_version = version;
+		Check(g_gui.gfx.loadSpriteMetadata(filename, error, warnings), "Complete metadata through ID 65535 must load without wrapping");
+		Check(g_gui.gfx.getSprite(65535) && static_cast<GameSprite*>(g_gui.gfx.getSprite(300))->width == 2, "Metadata must retain maximum ID and multi-tile dimensions");
+		WorldBatch::Options options;
+		options.recipe = outputDirectory + "/recipe.json";
+		options.itemsOtb = outputDirectory + "/batch-items.otb";
+		options.itemsXml = outputDirectory + "/batch-items.xml";
+		options.materials = outputDirectory + "/batch-materials.xml";
+		options.dataDirectory = wxString::FromUTF8(data.string());
+		options.clientDat = filename;
+		options.outputDirectory = outputDirectory + "/metadata-" + std::to_string(wxGetProcessId());
+		WorldBatch::Result result;
+		Check(WorldBatch::Generate(options, result, error), "Batch generation with explicit metadata: " + nstr(error));
+		Check(g_items[300].sprite && g_items[300].sprite->width == 2 && result.application.furniture > 0, "Batch adapter must bind real metadata before placing decorations and furniture");
+		Check(std::none_of(result.warnings.begin(), result.warnings.end(), [](const wxString& warning) { return warning.Contains("No client DAT supplied"); }), "Loaded metadata must not be reported as unavailable");
+		std::cout << "PASS: explicit clients.xml/DAT, truncated metadata rejection, maximum sprite ID and metadata-backed batch generation\n";
+		return 0;
+	} catch (const std::exception& exception) {
+		std::cerr << "FAIL: client metadata: " << exception.what() << '\n';
+		return 1;
+	}
+}
+
 int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 	const int village = RunWorldScenario(outputDirectory, false);
 	if (village != 0) {
@@ -512,5 +584,9 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 	if (city != 0) {
 		return city;
 	}
-	return RunBatchScenario(outputDirectory);
+	const int batch = RunBatchScenario(outputDirectory);
+	if (batch != 0) {
+		return batch;
+	}
+	return RunMetadataScenario(outputDirectory);
 }

@@ -137,6 +137,7 @@ namespace WorldGen {
 
 	struct Report {
 		bool valid = true;
+		size_t plannedTiles = 0; // All non-void cells across every floor.
 		size_t landTiles = 0, waterTiles = 0, roadTiles = 0;
 		int surfaceComponents = 0, caveComponents = 0;
 		std::vector<std::string> errors;

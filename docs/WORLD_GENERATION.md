@@ -21,6 +21,11 @@ For a complete batch bundle, use the command-line section below. The large
 batch export; the editor's default application limit remains one million tiles.
 The client-independent planner can be built from `tests/` without game assets.
 
+The preview reports the total non-void tile count across every floor. If it
+exceeds the editor's 1,048,576-tile budget, **Apply displayed world** is disabled;
+seed comparison and diagnostics export remain available. Reduce the region or
+floor count, or use the explicit larger budget in the 64-bit batch exporter.
+
 ## Semantic planner
 
 `WorldGen::Build` creates a client-independent `Plan` before any map editing.

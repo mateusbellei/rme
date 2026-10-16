@@ -459,6 +459,9 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		Check(randomBefore.values == randomAfter.values && randomBefore.index == randomAfter.index, "Complete application must preserve global brush RNG");
 		const uint64_t applied = MapHash(editor.map);
 		Check(applied != before, "Application must create tiles");
+		size_t describedTiles = 0;
+		const auto description = WorldEditor::Describe(plan, &describedTiles);
+		Check(describedTiles == stats.changedTiles && description.Contains("Editor budget"), "Preview must report the actual whole-world tile count before application");
 		CheckTravel(editor, resolved, plan);
 		editor.actionQueue->undo();
 		Check(MapHash(editor.map) == before, "One undo must restore terrain, walls, travel and untouched tiles");

@@ -47,6 +47,7 @@ def main():
         assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
         assert all(town["templePosition"][2] == 7 for town in report["towns"])
         assert report["planFingerprint"] == plan["fingerprint"]
+        assert plan["counts"]["plannedTiles"] == report["tiles"]
         assert len(plan["settlements"]) == 2 and len(plan["buildings"]) == 24
         for town in range(2):
             roles = [b["role"] for b in plan["buildings"] if b["settlement"] == town]

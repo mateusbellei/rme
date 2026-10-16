@@ -913,9 +913,14 @@ namespace WorldEditor {
 		return image;
 	}
 
-	wxString Describe(const WorldGen::Plan& plan) {
+	wxString Describe(const WorldGen::Plan& plan, size_t* plannedTiles) {
 		const auto report = WorldGen::Validate(plan);
+		if (plannedTiles) *plannedTiles = report.plannedTiles;
 		wxString text = wxString::Format("Seed %u | Algorithm %u | Plan %llu\n%d x %d | %u settlements | %u buildings | %u floors | %u planned vertical connections\nLand: %u tiles | Water: %u tiles | Roads/bridges: %u tiles\nYellow: travel portals; magenta: entrances; cyan: authored furniture anchors; dark gray: walls. Actual furniture placement is validated against client brushes.", unsigned(plan.settings.seed), unsigned(WorldGen::AlgorithmVersion), static_cast<unsigned long long>(WorldGen::Fingerprint(plan)), plan.settings.width, plan.settings.height, unsigned(plan.settlements.size()), unsigned(plan.buildings.size()), unsigned(plan.layers.size()), unsigned(plan.links.size()), unsigned(report.landTiles), unsigned(report.waterTiles), unsigned(report.roadTiles));
+		text << wxString::Format("\nPlanned tiles (all floors): %llu | Editor budget: %llu.", static_cast<unsigned long long>(report.plannedTiles), static_cast<unsigned long long>(DefaultTileBudget));
+		if (report.plannedTiles > DefaultTileBudget) {
+			text << " Reduce the region/floors or use 64-bit batch export with an explicit larger tile budget.";
+		}
 		std::map<std::string, size_t> roles;
 		for (const auto& building : plan.buildings) {
 			++roles[WorldGen::BlueprintRole(plan.catalog[building.blueprint])];

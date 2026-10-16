@@ -1232,6 +1232,7 @@ namespace WorldGen {
 			}
 			bool invalidCell = false;
 			for (const auto& cell : layer.cells) {
+				report.plannedTiles += cell.terrain != Terrain::Void;
 				invalidCell = invalidCell || static_cast<unsigned>(cell.terrain) > static_cast<unsigned>(Terrain::Void) || cell.elevation > 10000 || cell.moisture > 10000 || cell.temperature > 10000 || (cell.flags & ~(Reserved | Wall | Entrance | Connection)) || (layer.offsetZ >= 0 && cell.terrain == Terrain::Void);
 			}
 			if (invalidCell) {

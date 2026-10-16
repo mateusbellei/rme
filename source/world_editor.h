@@ -25,7 +25,7 @@ namespace WorldEditor {
 	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats = nullptr, const WorldGen::ProgressCallback& progress = {}, size_t tileBudget = DefaultTileBudget);
 	bool Generate(Editor& editor, const GenerationSpec& spec, wxString& error);
 	wxImage Render(const WorldGen::Plan& plan, int floor, PreviewLayer view = PreviewLayer::Terrain);
-	wxString Describe(const WorldGen::Plan& plan);
+	wxString Describe(const WorldGen::Plan& plan, size_t* plannedTiles = nullptr);
 }
 
 #endif

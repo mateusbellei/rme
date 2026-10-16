@@ -669,7 +669,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	auto* inspection = new wxStaticText(&preview, wxID_ANY, "Point at a tile to inspect its coordinates, terrain and climate.", wxDefaultPosition, wxDefaultSize, wxST_NO_AUTORESIZE | wxST_ELLIPSIZE_END);
 	inspection->SetToolTip("Elevation, moisture and temperature are normalized to 0..10000.");
 	layout->Add(inspection, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
-	auto* description = new wxTextCtrl(&preview, wxID_ANY, WorldEditor::Describe(plan), wxDefaultPosition, wxSize(-1, 95), wxTE_MULTILINE | wxTE_READONLY);
+	auto* description = new wxTextCtrl(&preview, wxID_ANY, "", wxDefaultPosition, wxSize(-1, 95), wxTE_MULTILINE | wxTE_READONLY);
 	layout->Add(description, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 	wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
 	auto* apply = new wxButton(&preview, wxID_OK, "Apply displayed world");
@@ -679,6 +679,13 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	buttons->Add(new wxButton(&preview, wxID_CANCEL, "Close"));
 	layout->Add(buttons, 0, wxALIGN_RIGHT | wxALL, 8);
 	preview.SetSizer(layout);
+	auto updateDescription = [&]() {
+		size_t tiles = 0;
+		description->SetValue(WorldEditor::Describe(plan, &tiles));
+		const bool fits = tiles <= WorldEditor::DefaultTileBudget;
+		apply->Enable(fits);
+		apply->SetToolTip(fits ? "Apply this displayed plan in one undo operation." : "This plan exceeds the editor tile budget. Reduce its size/floors or export in a 64-bit batch with --tile-budget.");
+	};
 	wxBitmap rendered;
 	int renderedFloor = -1, renderedView = -1;
 	double previewScale = 1.0;
@@ -755,7 +762,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		floors->SetSelection(selectedFloor);
 		seed->SetValue(double(plan.settings.seed));
 		spnSeed->SetValue(double(plan.settings.seed));
-		description->SetValue(WorldEditor::Describe(plan));
+		updateDescription();
 		redraw();
 	};
 	previousSeed->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(plan.settings.seed - uint32_t(1)); });
@@ -810,6 +817,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		}
 		preview.EndModal(wxID_OK);
 	});
+	updateDescription();
 	preview.Layout();
 	redraw();
 	preview.CentreOnParent();

@@ -486,3 +486,15 @@ trailing documents/text and invalid raw UTF-8 fail. Input limits are 4 MiB for
 recipes/legends, 2 MiB for catalogs and 1 MiB for biome decoration settings.
 Invalid recipe/catalog loads preserve the caller's configuration. Wall brush
 names also reject embedded NUL instead of being silently truncated on saving.
+
+
+## Comparing seeds in the editor
+
+The world preview provides **Previous seed**, **Next seed** and **Preview seed**
+controls. Adjacent seeds wrap across the full uint32 range. Regeneration retains
+the current settings, target region, selected floor when available and preview
+view. It replaces the displayed plan only when planning succeeds; cancellation
+or input failure leaves the previous plan inspectable. The summary identifies
+the displayed seed and fingerprint, and **Apply displayed world** always applies
+that exact plan. Successful previews update the main dialog's seed so a saved
+recipe can reproduce the chosen candidate.

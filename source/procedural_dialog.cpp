@@ -627,13 +627,25 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	controls->Add(floors, 1, wxRIGHT, 8);
 	controls->Add(views, 1);
 	layout->Add(controls, 0, wxEXPAND | wxALL, 8);
+	auto* seedRow = new wxBoxSizer(wxHORIZONTAL);
+	seedRow->Add(new wxStaticText(&preview, wxID_ANY, "Try seed:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	auto* seed = new wxSpinCtrlDouble(&preview, wxID_ANY, std::to_string(plan.settings.seed), wxDefaultPosition, wxSize(150, -1), wxSP_ARROW_KEYS, 0, 4294967295.0, plan.settings.seed, 1);
+	seed->SetDigits(0);
+	seedRow->Add(seed, 1, wxRIGHT, 6);
+	auto* previousSeed = new wxButton(&preview, wxID_ANY, "Previous seed");
+	auto* nextSeed = new wxButton(&preview, wxID_ANY, "Next seed");
+	auto* rebuild = new wxButton(&preview, wxID_ANY, "Preview seed");
+	seedRow->Add(previousSeed, 0, wxRIGHT, 6);
+	seedRow->Add(nextSeed, 0, wxRIGHT, 6);
+	seedRow->Add(rebuild, 0);
+	layout->Add(seedRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 	auto* bitmap = new wxStaticBitmap(&preview, wxID_ANY, wxBitmap(1, 1));
 	bitmap->SetMinSize(wxSize(1, 1));
 	layout->Add(bitmap, 1, wxALIGN_CENTER | wxALL, 8);
 	auto* description = new wxTextCtrl(&preview, wxID_ANY, WorldEditor::Describe(plan), wxDefaultPosition, wxSize(-1, 95), wxTE_MULTILINE | wxTE_READONLY);
 	layout->Add(description, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 	wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
-	auto* apply = new wxButton(&preview, wxID_OK, "Apply this world");
+	auto* apply = new wxButton(&preview, wxID_OK, "Apply displayed world");
 	buttons->Add(apply, 0, wxRIGHT, 8);
 	auto* exportPlan = new wxButton(&preview, wxID_ANY, "Export plan diagnostics...");
 	buttons->Add(exportPlan, 0, wxRIGHT, 8);
@@ -647,11 +659,48 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		}
 		wxImage image = WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(views->GetSelection()));
 		const wxSize area = preview.GetClientSize();
-		const double scale = std::min(std::max(120, area.x - 40) / double(image.GetWidth()), std::max(100, area.y - 215) / double(image.GetHeight()));
+		const double scale = std::min(std::max(120, area.x - 40) / double(image.GetWidth()), std::max(100, area.y - 260) / double(image.GetHeight()));
 		image = ProceduralMask::Scale(image, std::max(1, int(image.GetWidth() * scale)), std::max(1, int(image.GetHeight() * scale)));
 		bitmap->SetBitmap(wxBitmap(image));
 		preview.Layout();
 	};
+	auto regenerate = [&](uint32_t requestedSeed) {
+		GenerationSpec candidate = resolved, candidateResolved;
+		candidate.seed = requestedSeed;
+		WorldGen::Plan candidatePlan;
+		bool generated = false;
+		{
+			wxProgressDialog progress("Planning world", "Preparing geography", 100, &preview, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
+			generated = WorldEditor::BuildPlan(editor, candidate, candidateResolved, candidatePlan, error, DialogProgress(progress));
+		}
+		if (!generated) {
+			seed->SetValue(double(plan.settings.seed));
+			if (error != "World generation cancelled.") {
+				g_gui.PopupDialog(&preview, "World preview failed", error, wxOK | wxICON_ERROR);
+			}
+			return;
+		}
+		const int selected = floors->GetSelection();
+		const int oldFloor = selected >= 0 ? plan.layers[selected].offsetZ : 0;
+		plan = std::move(candidatePlan);
+		resolved = std::move(candidateResolved);
+		floors->Clear();
+		int selectedFloor = 0;
+		for (const auto& layer : plan.layers) {
+			if (layer.offsetZ == oldFloor) {
+				selectedFloor = int(floors->GetCount());
+			}
+			floors->Append(wxString::Format("Floor z=%d%s", resolved.region.z + layer.offsetZ, layer.offsetZ == 0 ? " (surface)" : ""));
+		}
+		floors->SetSelection(selectedFloor);
+		seed->SetValue(double(plan.settings.seed));
+		spnSeed->SetValue(double(plan.settings.seed));
+		description->SetValue(WorldEditor::Describe(plan));
+		redraw();
+	};
+	previousSeed->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(plan.settings.seed - uint32_t(1)); });
+	nextSeed->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(plan.settings.seed + uint32_t(1)); });
+	rebuild->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(uint32_t(seed->GetValue())); });
 	preview.Bind(wxEVT_SIZE, [&](wxSizeEvent& event) {redraw();event.Skip(); });
 	floors->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	views->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });

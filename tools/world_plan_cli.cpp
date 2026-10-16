@@ -26,8 +26,8 @@ int main(int argc, char** argv) {
 	try {
 		const std::string prefix = argc > 1 ? argv[1] : "world";
 		WorldGen::Settings settings;
-		if (argc > 6) {
-			throw std::runtime_error("Usage: rme_world_plan [prefix] [uint32 seed] [size] [organic|blocks] [buildings]");
+		if (argc > 8) {
+			throw std::runtime_error("Usage: rme_world_plan [prefix] [uint32 seed] [size] [organic|blocks] [buildings] [smooth|ridges] [biome detail 0-100]");
 		}
 		if (argc > 2) {
 			settings.seed = Number<uint32_t>(argv[2]);
@@ -42,6 +42,16 @@ int main(int argc, char** argv) {
 		}
 		if (argc > 5) {
 			settings.buildingsPerSettlement = Number<int>(argv[5]);
+		}
+		if (argc > 6) {
+			const std::string relief = argv[6];
+			if (relief != "smooth" && relief != "ridges") {
+				throw std::runtime_error("Relief must be smooth or ridges");
+			}
+			settings.relief = relief == "ridges" ? WorldGen::ReliefStyle::Ridges : WorldGen::ReliefStyle::Smooth;
+		}
+		if (argc > 7) {
+			settings.biomeDetail = Number<int>(argv[7]);
 		}
 		settings.caveDepth = 2;
 		settings.buildingLevels = 2;

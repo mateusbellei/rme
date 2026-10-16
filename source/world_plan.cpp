@@ -138,6 +138,14 @@ namespace WorldGen {
 						}
 					}
 					cell.elevation = uint16_t(Clamp(7800 - int(falloff) + noise * 65 / 100));
+					if (s.relief == ReliefStyle::Ridges) {
+						const int rx = x + s.width + (Noise(x, y, s.width, s.height, 3, Hash(terrainSeed, 81)) - 5000) * s.width / 20000;
+						const int ry = y + s.height + (Noise(x, y, s.width, s.height, 3, Hash(terrainSeed, 82)) - 5000) * s.height / 20000;
+						const int ridge = 10000 - std::abs(Noise(rx, ry, s.width, s.height, 9, Hash(terrainSeed, 83)) - 5000) * 2;
+						const int uplift = int(int64_t(ridge) * ridge * ridge * 2600 / 1000000000000LL);
+						const int inland = Clamp((int(cell.elevation) - s.seaLevel - 500) * 4);
+						cell.elevation = uint16_t(Clamp(int(cell.elevation) + (uplift - 1500) * inland / 10000));
+					}
 					if (input && !input->elevation.empty() && input->elevation[size_t(y) * s.width + x] != 65535) {
 						cell.elevation = input->elevation[size_t(y) * s.width + x];
 					}
@@ -147,52 +155,102 @@ namespace WorldGen {
 					const int latitude = std::abs(y * 10000 / (s.height - 1) - 5000) * 2;
 					cell.temperature = uint16_t(Clamp(10500 - latitude * 8 / 10 - std::max(0, int(cell.elevation) - s.seaLevel) * 7 / 10 + (Noise(x, y, s.width, s.height, 4, climateSeed) - 5000) / 5 + s.temperatureBias));
 					cell.moisture = uint16_t(Clamp(Noise(x, y, s.width, s.height, 5, Hash(climateSeed, 1)) + s.moistureBias));
+					if (s.biomeDetail) {
+						const int localWetness = (Noise(x, y, s.width, s.height, 18, Hash(climateSeed, 51)) - 5000) * s.biomeDetail / 250 + (Noise(x, y, s.width, s.height, 48, Hash(climateSeed, 52)) - 5000) * s.biomeDetail / 750;
+						const int localTemperature = (Noise(x, y, s.width, s.height, 16, Hash(climateSeed, 53)) - 5000) * s.biomeDetail / 600;
+						cell.moisture = uint16_t(Clamp(int(cell.moisture) + localWetness));
+						cell.temperature = uint16_t(Clamp(int(cell.temperature) + localTemperature));
+					}
 					cell.terrain = cell.elevation <= s.seaLevel ? Terrain::Ocean : Terrain::Grass;
 				}
 			}
 			plan.layers.push_back(std::move(surface));
 		}
 
-		void BuildDrainage(Plan& plan, Control& control) {
+		void BuildDrainage(Plan& plan, Control& control, const GeographyInput* input) {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
-			using Node = std::pair<int, int>;
-			std::priority_queue<Node, std::vector<Node>, std::greater<Node>> frontier;
 			std::vector<int> filled(cells.size(), -1), order;
-			plan.drainage.assign(cells.size(), -1);
-			plan.flow.assign(cells.size(), 1);
-			for (int i = 0; i < int(cells.size()); ++i) {
-				if (cells[i].terrain == Terrain::Ocean) {
-					filled[i] = s.seaLevel;
-					frontier.push({ s.seaLevel, i });
+			auto flood = [&]() {
+				using Node = std::pair<int, int>;
+				std::priority_queue<Node, std::vector<Node>, std::greater<Node>> frontier;
+				std::fill(filled.begin(), filled.end(), -1);
+				order.clear();
+				plan.drainage.assign(cells.size(), -1);
+				plan.flow.assign(cells.size(), 1);
+				for (int i = 0; i < int(cells.size()); ++i) {
+					if (cells[i].terrain == Terrain::Ocean) {
+						filled[i] = s.seaLevel;
+						frontier.push({ s.seaLevel, i });
+					}
 				}
-			}
-			while (!frontier.empty()) {
-				if ((order.size() & 4095) == 0) {
-					control.Row(int(order.size()), int(cells.size()));
+				while (!frontier.empty()) {
+					if ((order.size() & 4095) == 0) {
+						control.Row(int(order.size()), int(cells.size()));
+					}
+					const auto [height, current] = frontier.top();
+					frontier.pop();
+					order.push_back(current);
+					const int x = current % s.width, y = current / s.width;
+					for (Point dir : kDirections) {
+						const int nx = x + dir.x, ny = y + dir.y;
+						if (!Inside(nx, ny, s.width, s.height)) {
+							continue;
+						}
+						const int next = ny * s.width + nx;
+						if (filled[next] >= 0) {
+							continue;
+						}
+						filled[next] = std::max(int(cells[next].elevation), height + 1);
+						plan.drainage[next] = current;
+						frontier.push({ filled[next], next });
+					}
 				}
-				const auto [height, current] = frontier.top();
-				frontier.pop();
-				order.push_back(current);
-				const int x = current % s.width, y = current / s.width;
-				for (Point dir : kDirections) {
-					const int nx = x + dir.x, ny = y + dir.y;
-					if (!Inside(nx, ny, s.width, s.height)) {
+				for (auto it = order.rbegin(); it != order.rend(); ++it) {
+					const int parent = plan.drainage[*it];
+					if (parent >= 0) {
+						plan.flow[parent] += plan.flow[*it];
+					}
+				}
+			};
+			flood();
+			// Ridged terrain breaches a bounded set of deep, high-runoff basins.
+			// Explicit heightmap pixels retain their supplied elevations.
+			if (s.relief == ReliefStyle::Ridges && (!input || std::none_of(input->elevation.begin(), input->elevation.end(), [](uint16_t value) { return value != 65535; }))) {
+				std::vector<int> basins;
+				for (int i = 0; i < int(cells.size()); ++i) {
+					if (cells[i].terrain != Terrain::Ocean && filled[i] - cells[i].elevation > 500 && plan.flow[i] >= uint32_t(std::max(16, s.width * s.height / 512))) {
+						basins.push_back(i);
+					}
+				}
+				std::sort(basins.begin(), basins.end(), [&](int a, int b) {
+					const uint64_t scoreA = uint64_t(filled[a] - cells[a].elevation) * plan.flow[a], scoreB = uint64_t(filled[b] - cells[b].elevation) * plan.flow[b];
+					return scoreA != scoreB ? scoreA > scoreB : a < b;
+				});
+				std::vector<Point> breached;
+				const int separation = std::max(6, std::min(s.width, s.height) / 12);
+				for (int basin : basins) {
+					if (breached.size() >= size_t(std::min(32, std::max(4, s.riverCount * 2)))) {
+						break;
+					}
+					const Point source { basin % s.width, basin / s.width };
+					if (std::any_of(breached.begin(), breached.end(), [&](Point p) { return std::abs(p.x - source.x) + std::abs(p.y - source.y) < separation; })) {
 						continue;
 					}
-					const int next = ny * s.width + nx;
-					if (filled[next] >= 0) {
-						continue;
+					breached.push_back(source);
+					int bed = cells[basin].elevation;
+					for (int current = basin; current >= 0 && cells[current].terrain != Terrain::Ocean; current = plan.drainage[current]) {
+						if ((current & 4095) == 0) {
+							control.Poll();
+						}
+						bed = std::max(s.seaLevel + 1, std::min(bed - 1, int(cells[current].elevation)));
+						const int lowering = int(cells[current].elevation) - bed;
+						cells[current].elevation = uint16_t(bed);
+						cells[current].temperature = uint16_t(Clamp(int(cells[current].temperature) + lowering * 7 / 10));
 					}
-					filled[next] = std::max(int(cells[next].elevation), height + 1);
-					plan.drainage[next] = current;
-					frontier.push({ filled[next], next });
 				}
-			}
-			for (auto it = order.rbegin(); it != order.rend(); ++it) {
-				const int parent = plan.drainage[*it];
-				if (parent >= 0) {
-					plan.flow[parent] += plan.flow[*it];
+				if (!breached.empty()) {
+					flood();
 				}
 			}
 			// Depressions use the same spill graph as rivers, so there are no cycles.
@@ -928,7 +986,7 @@ namespace WorldGen {
 			error = "World dimensions must be 32..4096 with at most 4,194,304 surface cells.";
 			return false;
 		}
-		if ((s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
+		if ((s.relief != ReliefStyle::Smooth && s.relief != ReliefStyle::Ridges) || s.biomeDetail < 0 || s.biomeDetail > 100 || (s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
 			error = "World settings are outside supported ranges.";
 			return false;
 		}
@@ -973,7 +1031,7 @@ namespace WorldGen {
 			control.Stage("Shaping continents", 0, 15);
 			BuildGeography(plan, input, control);
 			control.Stage("Computing drainage and rivers", 15, 35);
-			BuildDrainage(plan, control);
+			BuildDrainage(plan, control, input);
 			control.Stage("Classifying biomes", 35, 45);
 			ClassifyBiomes(plan, control);
 			if (input && !input->biomes.empty()) {
@@ -1215,6 +1273,11 @@ namespace WorldGen {
 		auto add = [&](uint32_t value) {for(int byte=0;byte<4;++byte){hash^=(value>>(byte*8))&255;hash*=1099511628211ull;} };
 		auto string = [&](const std::string& value) {add(uint32_t(value.size()));for(unsigned char byte:value){hash^=byte;hash*=1099511628211ull;} };
 		add(AlgorithmVersion);
+		if (plan.settings.relief != ReliefStyle::Smooth || plan.settings.biomeDetail) {
+			string("relief-biome-detail");
+			add(uint32_t(plan.settings.relief));
+			add(uint32_t(plan.settings.biomeDetail));
+		}
 		add(uint32_t(plan.settings.shape));
 		add(plan.settings.seaLevel);
 		add(plan.settings.coastRoughness);

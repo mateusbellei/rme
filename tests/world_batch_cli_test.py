@@ -51,6 +51,30 @@ def main():
         assert repeated.returncode == 1
         assert "already exists" in repeated.stderr
         assert before == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in output.iterdir()}
+
+        ridged_recipe = json.loads((source / "data/procedural/recipes/example_furnished_city_1098.json").read_text(encoding="utf-8"))
+        ridged_recipe["legend"] = str(source / "data/procedural/world_legend.json")
+        ridged_recipe["world"].update(catalog=str(source / "data/procedural/profiles/1098/buildings.json"),
+                                      relief="ridges", biomeDetail=75, settlements=1, buildings=8,
+                                      buildingLevels=2, caveDepth=1)
+        ridged_recipe["region"].update(width=256, height=256)
+        recipe_path = Path(temporary) / "ridged-recipe.json"
+        recipe_path.write_text(json.dumps(ridged_recipe), encoding="utf-8")
+        ridged_output = Path(temporary) / "ridged-world"
+        ridged_command = command.copy()
+        ridged_command[2] = str(recipe_path)
+        ridged_command[6] = str(ridged_output)
+        ridged_command.append("--no-previews")
+        generated = subprocess.run(ridged_command, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        if generated.returncode:
+            raise AssertionError(f"Ridged CLI returned {generated.returncode}: {generated.stdout} {generated.stderr}")
+        ridged_report = json.loads((ridged_output / "generation.json").read_text(encoding="utf-8"))
+        ridged_plan = json.loads((ridged_output / "plan.json").read_text(encoding="utf-8"))
+        assert ridged_plan["settings"]["relief"] == "ridges" and ridged_plan["settings"]["biomeDetail"] == 75
+        assert len(ridged_plan["buildings"]) >= 4 and ridged_report["furniture"] > 0
+        assert ridged_report["skippedFurniture"] == 0 and ridged_report["previews"] == []
+        assert not list(ridged_output.glob("preview_*.png"))
         print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
               f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite")
 

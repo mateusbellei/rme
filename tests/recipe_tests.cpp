@@ -29,6 +29,8 @@ static void TestRecipes() {
 	original.world.settings.shape = WorldGen::LandShape::Archipelago;
 	original.world.settings.seaLevel = 4000;
 	original.world.settings.coastRoughness = 80;
+	original.world.settings.relief = WorldGen::ReliefStyle::Ridges;
+	original.world.settings.biomeDetail = 67;
 	original.world.settings.temperatureBias = -3200;
 	original.world.settings.moistureBias = 2100;
 	original.world.settings.riverWidth = 5;
@@ -58,6 +60,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.settlementCount == 4 && loaded.world.settings.buildingsPerSettlement == 5 && loaded.world.settings.buildingLevels == 3, "World settlement settings must round-trip");
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
 	Check(loaded.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks, "City street layout must round-trip");
+	Check(loaded.world.settings.relief == WorldGen::ReliefStyle::Ridges && loaded.world.settings.biomeDetail == 67, "Relief and local biome variation must round-trip");
 	Check(loaded.world.connectionItemId == 1387 && loaded.world.wallBrushName == "Stone walls" && !loaded.world.protectExisting, "Client/protection settings must round-trip");
 	Check(loaded.world.catalogPath == original.world.catalogPath, "Construction catalog path must round-trip");
 	Check(loaded.world.heightmapPath == original.world.heightmapPath && loaded.world.biomeHintsPath == original.world.biomeHintsPath, "World raster paths must round-trip");
@@ -80,7 +83,7 @@ static void TestRecipes() {
 	Check(ProceduralRecipe::Save(unicodeFile, original, error) && ProceduralRecipe::Load(unicodeFile, loaded, error), "Recipe paths must support Unicode on Windows and Linux");
 	std::filesystem::remove(unicodePath);
 	for (const char* malformed : {
-			 R"({"version":99})", R"({"world":{"wallBrush":"stone\u0000other"}})", "{} trailing", "{} {}", R"({"pathBase":"unknown"})", R"({"legend":"bad\u0000path"})", R"({"world":{"heightmap":"bad\u0000path"}})", R"({"source":false})", R"({"preset":"typo"})", R"({"region":[]})", R"({"seed":1,"useSelection":0})", R"({"referenceWeight":101})", R"({"doodads":{"density":4294967296}})", R"({"doodads":{"enabled":1}})", R"({"pipeline":{"borderize":"yes"}})", R"({"seed":4294967296})", R"({"seed":1.5})",
+			 R"({"version":99})", R"({"source":"world","world":{"relief":"unknown"}})", R"({"source":"world","world":{"biomeDetail":101}})", R"({"world":{"wallBrush":"stone\u0000other"}})", "{} trailing", "{} {}", R"({"pathBase":"unknown"})", R"({"legend":"bad\u0000path"})", R"({"world":{"heightmap":"bad\u0000path"}})", R"({"source":false})", R"({"preset":"typo"})", R"({"region":[]})", R"({"seed":1,"useSelection":0})", R"({"referenceWeight":101})", R"({"doodads":{"density":4294967296}})", R"({"doodads":{"enabled":1}})", R"({"pipeline":{"borderize":"yes"}})", R"({"seed":4294967296})", R"({"seed":1.5})",
 			 R"({"source":"world","world":{"caveDepth":9}})",
 			 R"({"source":"world","world":{"seaLevel":4294967296}})",
 			 R"({"source":"world","world":{"shape":"typo"}})",
@@ -104,7 +107,7 @@ static void TestRecipes() {
 	for (const char* example : { "example_forest.json", "example_village_forest.json", "example_desert_village.json", "example_training_ground.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error), "Existing v3 recipes must remain loadable");
 	}
-	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json" }) {
+	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json", "example_ridged_continent.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error) && loaded.source == GenerationSource::WorldPlan, "Bundled world recipes must load");
 	}
 	std::filesystem::remove(path);

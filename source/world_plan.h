@@ -84,6 +84,9 @@ namespace WorldGen {
 	enum class LandShape { Continent,
 						   Archipelago };
 
+	enum class ReliefStyle { Smooth,
+							 Ridges };
+
 	enum class SettlementLayout { Organic,
 								  Blocks };
 	struct Settings {
@@ -92,6 +95,8 @@ namespace WorldGen {
 		LandShape shape = LandShape::Continent;
 		int seaLevel = 4200;
 		int coastRoughness = 55;
+		ReliefStyle relief = ReliefStyle::Smooth;
+		int biomeDetail = 0;
 		int temperatureBias = 0, moistureBias = 0;
 		int riverWidth = 3;
 		int riverCount = 8;

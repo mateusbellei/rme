@@ -513,6 +513,13 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	const auto& settings = worldSettings.settings;
 	auto* sea = spin("Sea level (2000-6500):", 2000, 6500, settings.seaLevel);
 	auto* roughness = spin("Coast roughness %:", 0, 100, settings.coastRoughness);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Relief style:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* relief = new wxChoice(content, wxID_ANY);
+	relief->Append("Smooth highlands");
+	relief->Append("Mountain ridges and breached valleys");
+	relief->SetSelection(settings.relief == WorldGen::ReliefStyle::Ridges ? 1 : 0);
+	grid->Add(relief, 1, wxEXPAND);
+	auto* biomeDetail = spin("Local biome variation %:", 0, 100, settings.biomeDetail);
 	auto* temperature = spin("Temperature adjustment:", -5000, 5000, settings.temperatureBias);
 	auto* moisture = spin("Moisture adjustment:", -5000, 5000, settings.moistureBias);
 	grid->Add(new wxStaticText(content, wxID_ANY, "Maximum river width:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -578,6 +585,8 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.shape = shape->GetSelection() == 1 ? WorldGen::LandShape::Archipelago : WorldGen::LandShape::Continent;
 	candidate.settings.seaLevel = sea->GetValue();
 	candidate.settings.coastRoughness = roughness->GetValue();
+	candidate.settings.relief = relief->GetSelection() == 1 ? WorldGen::ReliefStyle::Ridges : WorldGen::ReliefStyle::Smooth;
+	candidate.settings.biomeDetail = biomeDetail->GetValue();
 	candidate.settings.temperatureBias = temperature->GetValue();
 	candidate.settings.moistureBias = moisture->GetValue();
 	candidate.settings.riverWidth = 1 + 2 * riverWidth->GetSelection();

@@ -157,6 +157,8 @@ static void TestSettingsMatrix() {
 		s.caveFill = 20 + int(seed % 46);
 		s.roadWidth = 1 + int(seed % 4);
 		s.coastRoughness = int(seed % 101);
+		s.relief = seed % 3 ? ReliefStyle::Ridges : ReliefStyle::Smooth;
+		s.biomeDetail = int(seed % 101);
 		s.temperatureBias = int(seed % 11) * 1000 - 5000;
 		s.moistureBias = int(seed % 9) * 1000 - 4000;
 		s.riverWidth = 1 + int(seed % 4) * 2;
@@ -217,6 +219,39 @@ static void TestClimateAndCoast() {
 	settings.riverWidth = 7;
 	Check(Build(settings, wide, error), "Wide rivers must build");
 	Check(count(wide, Terrain::River) > count(narrow, Terrain::River) && Validate(wide).valid, "Runoff-dependent width must expand river channels without invalidating drainage");
+}
+
+static void TestReliefAndBiomeDetail() {
+	Settings settings;
+	settings.width = settings.height = 256;
+	settings.settlementCount = 0;
+	settings.caveDepth = 1;
+	Plan smooth, ridged, repeat;
+	std::string error;
+	Check(Build(settings, smooth, error), "Smooth relief fixture must build");
+	settings.relief = ReliefStyle::Ridges;
+	settings.biomeDetail = 75;
+	Check(Build(settings, ridged, error) && Validate(ridged).valid, "Ridged terrain, drainage and caves must remain valid");
+	Check(Build(settings, repeat, error) && Fingerprint(repeat) == Fingerprint(ridged), "Ridged terrain and basin breaching must be deterministic");
+	auto mountains = [](const Plan& plan) { size_t count = 0; for (const auto& cell : plan.FindLayer(0)->cells) count += cell.terrain == Terrain::Mountain; return count; };
+	Check(mountains(ridged) > 0 && mountains(ridged) < mountains(smooth), "The public seed must retain mountains while opening more valleys than smooth central highlands");
+	GeographyInput holes;
+	holes.elevation.assign(256 * 256, 65535);
+	Check(Build(settings, repeat, error, nullptr, &holes) && Fingerprint(repeat) == Fingerprint(ridged), "Fully transparent height input must preserve procedural ridge erosion");
+	GeographyInput authored;
+	authored.elevation.assign(256 * 256, 6000);
+	Check(Build(settings, ridged, error, nullptr, &authored), "Authored heightmaps must retain control in ridged mode");
+	for (int y = 1; y < 255; ++y) for (int x = 1; x < 255; ++x) Check(ridged.FindLayer(0)->cells[size_t(y) * 256 + x].elevation == 6000, "Basin breaching must not alter authored height pixels");
+	settings.biomeDetail = 0;
+	Check(Build(settings, smooth, error, nullptr, &authored), "Undetailed biome fixture must build");
+	size_t changed = 0;
+	for (size_t i = 0; i < smooth.FindLayer(0)->cells.size(); ++i) changed += smooth.FindLayer(0)->cells[i].moisture != ridged.FindLayer(0)->cells[i].moisture;
+	Check(changed > 10000, "Biome detail must change local climate fields even with fixed elevation");
+	settings.biomeDetail = 101;
+	Check(!Build(settings, repeat, error), "Out-of-range local biome variation must fail");
+	settings.biomeDetail = 0;
+	settings.relief = static_cast<ReliefStyle>(99);
+	Check(!Build(settings, repeat, error), "Unknown relief modes must fail");
 }
 
 static void TestCityBlocks() {
@@ -304,6 +339,7 @@ static void TestCancellation() {
 int main() {
 	try {
 		TestClimateAndCoast();
+		TestReliefAndBiomeDetail();
 		TestCityBlocks();
 		TestCancellation();
 		TestCaves();

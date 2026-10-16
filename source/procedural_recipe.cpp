@@ -171,6 +171,8 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["shape"] = json::mValue(spec.world.settings.shape == WorldGen::LandShape::Archipelago ? "archipelago" : "continent");
 	world["seaLevel"] = json::mValue(spec.world.settings.seaLevel);
 	world["coastRoughness"] = json::mValue(spec.world.settings.coastRoughness);
+	world["relief"] = spec.world.settings.relief == WorldGen::ReliefStyle::Ridges ? "ridges" : "smooth";
+	world["biomeDetail"] = spec.world.settings.biomeDetail;
 	world["temperatureBias"] = json::mValue(spec.world.settings.temperatureBias);
 	world["moistureBias"] = json::mValue(spec.world.settings.moistureBias);
 	world["riverWidth"] = json::mValue(spec.world.settings.riverWidth);
@@ -426,6 +428,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		};
 		integer("seaLevel", spec.world.settings.seaLevel);
 		integer("coastRoughness", spec.world.settings.coastRoughness);
+		integer("biomeDetail", spec.world.settings.biomeDetail);
 		integer("temperatureBias", spec.world.settings.temperatureBias);
 		integer("moistureBias", spec.world.settings.moistureBias);
 		integer("riverWidth", spec.world.settings.riverWidth);
@@ -437,6 +440,14 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		integer("caveFill", spec.world.settings.caveFill);
 		integer("roadWidth", spec.world.settings.roadWidth);
 		integer("connectionItemId", spec.world.connectionItemId);
+		const auto relief = world.find("relief");
+		if (relief != world.end()) {
+			if (relief->second.type() != json::str_type || (relief->second.get_str() != "smooth" && relief->second.get_str() != "ridges")) {
+				error = "World relief must be smooth or ridges.";
+				return false;
+			}
+			spec.world.settings.relief = relief->second.get_str() == "ridges" ? WorldGen::ReliefStyle::Ridges : WorldGen::ReliefStyle::Smooth;
+		}
 		const auto layout = world.find("layout");
 		if (layout != world.end()) {
 			if (layout->second.type() != json::str_type || (layout->second.get_str() != "organic" && layout->second.get_str() != "blocks")) {

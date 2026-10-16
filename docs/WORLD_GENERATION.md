@@ -507,3 +507,23 @@ filenames. Transparent cells preserve absent upper-floor terrain. These images
 show the plan and authored furniture anchors, rather than client sprite renders.
 Pass `--no-previews` to omit PNGs while retaining OTBM, XML and PPM/JSON outputs.
 Each PNG is written through a temporary file and committed after encoding.
+
+
+## Mountain ridges and local biome variation
+
+`world.relief:"ridges"` adds warped mountain chains inside the continental
+envelope, lowering broad highlands into valleys while retaining the existing
+coastline envelope. A bounded basin-breaching pass lowers spill channels of deep,
+high-runoff basins, then recomputes the acyclic drainage/flow graph before lakes
+and rivers. It is a deterministic terrain heuristic, not a physical erosion
+simulation. Supplied heightmap elevations retain priority: breaching is disabled
+when any authored height pixel is present; an entirely transparent heightmap
+still uses procedural relief normally.
+
+`world.biomeDetail` (0–100) adds coherent local humidity/temperature variation on
+top of regional climate. It creates smaller biome patches without randomizing
+individual tiles. Defaults `relief:"smooth"` and `biomeDetail:0` preserve existing
+recipes. Both settings are editable in World settings, recorded in recipes and
+diagnostics, and included in the plan fingerprint. Try the generic
+`example_ridged_continent.json`; the standalone planner also accepts optional
+`[smooth|ridges] [biome detail 0-100]` arguments after its building count.

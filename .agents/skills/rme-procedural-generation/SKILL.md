@@ -27,6 +27,11 @@ A nova opção `source:world` usa `world_plan`/`world_catalog` (núcleo C++ inde
 e `world_editor` (staging/brushes/validação/undo). O fluxo v3 abaixo permanece legado;
 não rotear World planner pelo sidecar ou pelos presets de máscara.
 
+Catálogos aceitam `minPerSettlement`/`maxPerSettlement`, `upperFloors` por nível
+e `floorMaterials` com herança. Preservar a seed do plano ao aplicar; validar
+ownership, footprints e endpoints antes de staging. `--editable-inputs` exporta
+PNGs autoráveis e receita separada; a quantização não promete replay idêntico.
+
 Contrato e exemplos: `docs/WORLD_GENERATION.md`. Receitas v4 preservam seed uint32,
 referências relativas (`pathBase:recipe`), clima/relevo/biomas, catálogo e andares.
 Viagens atuais são pares de teleports com chegada adjacente segura; escadas/rampas

@@ -860,7 +860,9 @@ namespace WorldEditor {
 			return wxImage();
 		}
 		wxImage image(plan.settings.width, plan.settings.height);
+		if (!image.IsOk()) return wxImage();
 		image.InitAlpha();
+		if (!image.HasAlpha()) return wxImage();
 		for (int y = 0; y < plan.settings.height; ++y) {
 			for (int x = 0; x < plan.settings.width; ++x) {
 				const auto& cell = layer->cells[size_t(y) * plan.settings.width + x];

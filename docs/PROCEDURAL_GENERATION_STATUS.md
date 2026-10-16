@@ -10,6 +10,11 @@ furnished rotating catalogs, multi-floor structures, connected caves, distribute
 entrances, preview/seed comparison and staged single undo/redo. Recipes support
 relative paths and strict bounded UTF-8/BOM loading.
 
+The latest draft also includes hard construction minimums, different floor plans
+and client materials by building level, optional settlement distribution across
+biomes, seed overrides with exact recipe replay, and zoom/tile inspection. Plan
+exports can produce editable height/biome PNGs with a separate relative recipe.
+
 Batch generation loads client OTB/XML/materials explicitly, exports OTBM/XML/PNG
 bundles, optionally registers towns and verifies production read/re-encode byte
 equality. The public 10.98 large profile was exported and verified at 3,161,744

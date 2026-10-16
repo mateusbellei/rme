@@ -579,6 +579,11 @@ and regional furniture/material bindings. Regression tests use a flat PNG and
 four habitat quadrants to verify grass, forest, desert and snow towns together,
 including their actual regional buildings in a byte-verified OTBM.
 
+The bundled diverse profile's default seed was also exported with the public
+10.98 client data: 794,572 tiles, 32 buildings and 288 furniture placements, with
+one settlement in each of grass, desert, forest and snow. Its OTBM passed
+read/re-encode verification, and the bundle included editable PNGs.
+
 A blueprint's optional `role` is a short identifier such as `residential`,
 `commercial`, `industrial` or `civic`. It labels the plan and role preview; it
 does not create NPCs, house ownership or server scripts. `maxPerSettlement`
@@ -731,6 +736,11 @@ an optional-ridged 1024×1024 continent, two cave levels and three-floor buildin
 was 16.4 seconds, peak working set 1,989.9 MiB and OTBM size 27.13 MiB. These are one machine's
 measurements, not a CI performance guarantee. No real DAT/SPR or game server was
 used; physical/navigation checks and production serialization ran normally.
+
+A repeat on the current branch with `--editable-inputs` retained the same tile,
+building and furniture counts, verified the OTBM, and wrote 27 PNGs in 12.9
+seconds with a 1,985.6 MiB peak working set. Timing varies with machine load;
+the editable files add authoring inputs rather than a new visual client test.
 
 
 ## Verifying written bundles

@@ -28,6 +28,10 @@ namespace WorldGen {
 			return false;
 		}
 		biomes.InitAlpha();
+		if (!biomes.HasAlpha()) {
+			error = "Could not allocate the editable biome transparency channel.";
+			return false;
+		}
 		for (int y = 0; y < plan.settings.height; ++y) {
 			for (int x = 0; x < plan.settings.width; ++x) {
 				const auto& cell = surface->cells[size_t(y) * plan.settings.width + x];

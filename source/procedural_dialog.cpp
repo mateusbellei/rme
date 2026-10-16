@@ -702,9 +702,14 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		}
 		const int view = views->GetSelection();
 		if (!rendered.IsOk() || renderedFloor != index || renderedView != view) {
-			rendered = wxBitmap(WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(view)));
+			const wxImage image = WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
+			rendered = image.IsOk() ? wxBitmap(image) : wxNullBitmap;
 			renderedFloor = index;
 			renderedView = view;
+		}
+		if (!rendered.IsOk()) {
+			inspection->SetLabel("Could not allocate the preview image. Reduce the region or floor count.");
+			return;
 		}
 		const wxSize area = canvas->GetClientSize();
 		previewScale = zoom->GetSelection() == 0 ? std::min(std::max(1, area.x) / double(rendered.GetWidth()), std::max(1, area.y) / double(rendered.GetHeight())) : double(1 << (zoom->GetSelection() - 1));

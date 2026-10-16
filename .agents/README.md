@@ -40,6 +40,8 @@ Este repositório é **público**. Não incluir IPs, temas, receitas ou paths de
 - `example_training_ground.json`
 - `example_continent.json`, `example_ridged_continent.json`
 - `example_furnished_city_1098.json`, `example_large_continent_1098.json` (bindings públicos 10.98)
+- `example_balanced_city.json`, `example_layered_town.json` (composição e plantas por andar)
+- `example_diverse_continent_1098.json`, `example_layered_town_1098.json` (biomas e estilos regionais/por andar)
 
 Receitas temáticas de um jogo específico ficam no **repositório privado de assets** do consumidor, não aqui.
 

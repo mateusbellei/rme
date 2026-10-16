@@ -144,6 +144,15 @@ def main():
         assert layer_tiles[-2] == len(layered["buildings"]) * 9 * 9
         assert sum(layer_tiles.values()) == layered_report["tiles"]
         assert layered_report["verifiedOTBM"] is True
+        styled_output = Path(temporary) / "layered-styles"
+        layered_command[2] = str(source / "data/procedural/recipes/example_layered_town_1098.json")
+        layered_command[6] = str(styled_output)
+        generated = subprocess.run(layered_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        styled = json.loads((styled_output / "generation.json").read_text(encoding="utf-8"))
+        assert styled["verifiedOTBM"] is True and styled["tiles"] == layered_report["tiles"]
+        assert styled["planFingerprint"] != layered_report["planFingerprint"]
 
         for biome, rgb in [("desert", (232, 192, 96)), ("snow", (240, 248, 255))]:
             hint = Path(temporary) / (biome + ".png")

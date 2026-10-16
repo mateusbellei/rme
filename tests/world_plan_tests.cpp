@@ -472,6 +472,9 @@ static void TestCancellation() {
 	altered.catalog[0].floorBrush = "custom floor";
 	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include exact construction material bindings");
 	altered = observed;
+	altered.catalog[0].floorMaterials.push_back({ "wood", "stone" });
+	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include per-floor material bindings");
+	altered = observed;
 	altered.catalog[0].role = "civic";
 	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include construction roles");
 	altered = observed;

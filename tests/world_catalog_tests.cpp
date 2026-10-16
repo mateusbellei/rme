@@ -48,6 +48,17 @@ int main() {
 		styled.wallBrush = "wall";
 		Check(WorldGen::ValidateBlueprint(styled, error), "Optional exact client materials must validate");
 		Check(WorldGen::RotateBlueprint(styled, 1).floorBrush == "floor", "Rotation must preserve material bindings");
+		styled.floorMaterials = { { "base override", "" }, { "", "upper wall" } };
+		Check(WorldGen::ValidateBlueprint(styled, error), "Partial per-floor overrides must validate");
+		Check(WorldGen::BlueprintMaterialForFloor(styled, 0).floorBrush == "base override" && WorldGen::BlueprintMaterialForFloor(styled, 0).wallBrush == "wall", "Base override must retain the inherited wall");
+		Check(WorldGen::BlueprintMaterialForFloor(styled, 1).floorBrush == "floor" && WorldGen::BlueprintMaterialForFloor(styled, 1).wallBrush == "upper wall", "Upper wall override must retain the inherited floor");
+		Check(WorldGen::BlueprintMaterialForFloor(WorldGen::RotateBlueprint(styled, 3), 2).floorBrush == "floor", "Unspecified levels and rotation must preserve template inheritance");
+		auto invalidStyle = styled;
+		invalidStyle.floorMaterials.resize(size_t(styled.maxLevels + 1));
+		Check(!WorldGen::ValidateBlueprint(invalidStyle, error), "Overrides beyond maximum levels must fail");
+		invalidStyle = styled;
+		invalidStyle.floorMaterials[0].wallBrush = std::string("bad\0wall", 8);
+		Check(!WorldGen::ValidateBlueprint(invalidStyle, error), "Per-floor NUL material names must fail before lookup");
 		styled.floorBrush = std::string("bad\0floor", 9);
 		Check(!WorldGen::ValidateBlueprint(styled, error), "NUL material names must fail before client lookup");
 		auto furnished = catalog[1];

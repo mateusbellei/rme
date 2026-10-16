@@ -506,6 +506,24 @@ before the map changes. A global wall setting may be empty if every placed
 template supplies a wall. The 10.98 furnished profile demonstrates wooden
 residences, marble-floored inns and stone-floored brick workshops.
 
+To change materials by height, add `floorMaterials`, an array starting at the
+base floor and containing at most `maxLevels` objects. Each object can override
+`floor`, `wall` or both; `{}` and omitted keys inherit the template bindings,
+then the world settings. For example:
+
+```json
+"materials": {"floor":"stone floor", "wall":"stone wall"},
+"floorMaterials": [{}, {"floor":"wooden floor", "wall":"wooden wall"}]
+```
+
+This keeps the base and later unspecified floors in stone while making the
+first upper floor wooden. Explicit names are resolved only for floors that the
+plan actually uses; missing/wrong-type bindings on a used floor fail before any
+editor changes. Errors include the template ID and relative floor (0 is base).
+`example_layered_town_1098.json` combines independent floor layouts with stone,
+wood and marble floors plus different wall brushes from the public 10.98 data.
+Per-floor styles participate in the plan fingerprint, undo and OTBM verification.
+
 
 ## Settlement composition
 

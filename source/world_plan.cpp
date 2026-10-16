@@ -1404,6 +1404,14 @@ namespace WorldGen {
 		add(uint32_t(plan.catalog.size()));
 		for (const auto& blueprint : plan.catalog) {
 			string(blueprint.id);
+			if (!blueprint.floorMaterials.empty()) {
+				string("per-floor-materials");
+				add(uint32_t(blueprint.floorMaterials.size()));
+				for (const auto& material : blueprint.floorMaterials) {
+					string(material.floorBrush);
+					string(material.wallBrush);
+				}
+			}
 			if (blueprint.minPerSettlement) {
 				string("construction-minimum");
 				add(uint32_t(blueprint.minPerSettlement));

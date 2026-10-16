@@ -93,21 +93,37 @@ namespace WorldGen {
 				}
 			}
 			const auto materials = entry.find("materials");
-			if (materials != entry.end()) {
-				if (materials->second.type() != json::obj_type) {
-					error = "Template materials must be an object with exact floor/wall brush names.";
+			auto readMaterial = [&](const json::mValue& value, std::string& ground, std::string& wall) {
+				if (value.type() != json::obj_type) {
+					error = "Template materials must be objects with exact floor/wall brush names.";
 					return false;
 				}
-				for (const auto& binding : { std::pair { "floor", &blueprint.floorBrush }, std::pair { "wall", &blueprint.wallBrush } }) {
-					const auto value = materials->second.get_obj().find(binding.first);
-					if (value == materials->second.get_obj().end()) {
-						continue;
-					}
-					if (value->second.type() != json::str_type || value->second.get_str().empty()) {
+				for (const auto& binding : { std::pair { "floor", &ground }, std::pair { "wall", &wall } }) {
+					const auto field = value.get_obj().find(binding.first);
+					if (field == value.get_obj().end()) continue;
+					if (field->second.type() != json::str_type || field->second.get_str().empty()) {
 						error = "Template material bindings must be nonempty strings.";
 						return false;
 					}
-					*binding.second = value->second.get_str();
+					*binding.second = field->second.get_str();
+				}
+				return true;
+			};
+			if (materials != entry.end()) {
+				if (!readMaterial(materials->second, blueprint.floorBrush, blueprint.wallBrush)) {
+					return false;
+				}
+			}
+			const auto floorMaterials = entry.find("floorMaterials");
+			if (floorMaterials != entry.end()) {
+				if (floorMaterials->second.type() != json::array_type || floorMaterials->second.get_array().empty() || floorMaterials->second.get_array().size() > 4) {
+					error = "floorMaterials must be an array of 1..4 material objects, starting at the base floor.";
+					return false;
+				}
+				for (const auto& value : floorMaterials->second.get_array()) {
+					BlueprintMaterial material;
+					if (!readMaterial(value, material.floorBrush, material.wallBrush)) return false;
+					blueprint.floorMaterials.push_back(std::move(material));
 				}
 			}
 			const auto objects = entry.find("objects");

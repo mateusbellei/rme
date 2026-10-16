@@ -238,6 +238,15 @@ static void TestCatalogJson() {
 		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed template material bindings must fail atomically");
 	}
 
+	for (const char* materials : { R"([{}])", R"([{}, {"floor":"wooden floor","wall":"stone wall"}])" }) {
+		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"styled\",\"maxLevels\":2,\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"floorMaterials\":" << materials << "}]}";
+		Check(WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Partial per-floor material arrays must parse");
+	}
+	for (const char* materials : { "false", "[]", "[7]", R"([{"floor":0}])", R"([{"wall":""}])", "[{},{},{}]" }) {
+		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"styled\",\"maxLevels\":2,\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"floorMaterials\":" << materials << "}]}";
+		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed per-floor materials must fail");
+	}
+
 	for (const char* metadata : { R"("role":"civic","maxPerSettlement":1)", R"("role":"residential","maxPerSettlement":0)", R"("minPerSettlement":2,"maxPerSettlement":2)" }) {
 		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"role\",\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"]," << metadata << "}]}";
 		Check(WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Role and per-town template caps must parse");

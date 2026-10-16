@@ -17,6 +17,9 @@ namespace WorldGen {
 		std::vector<std::string> brushes;
 		bool required = false;
 	};
+	struct BlueprintMaterial {
+		std::string floorBrush, wallBrush;
+	};
 	struct Blueprint {
 		std::string id;
 		int weight = 1;
@@ -33,6 +36,8 @@ namespace WorldGen {
 		int minPerSettlement = 0; // Required in each generated settlement of an allowed biome.
 		// Optional explicit rows for levels 1..maxLevels-1; exclusive with upperRows.
 		std::vector<std::vector<std::string>> upperFloors;
+		// Entries start at the base floor. Empty names inherit template bindings.
+		std::vector<BlueprintMaterial> floorMaterials;
 	};
 
 	using BlueprintCatalog = std::vector<Blueprint>;
@@ -41,6 +46,7 @@ namespace WorldGen {
 	bool ValidateCatalog(const BlueprintCatalog& catalog, std::string& error);
 	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns);
 	const std::vector<std::string>& BlueprintRowsForFloor(const Blueprint& blueprint, int level);
+	BlueprintMaterial BlueprintMaterialForFloor(const Blueprint& blueprint, int level);
 	std::pair<int, int> FindBlueprintSymbol(const std::vector<std::string>& rows, char symbol);
 	const BlueprintCatalog& DefaultBlueprints();
 	const std::string& BlueprintRole(const Blueprint& blueprint);

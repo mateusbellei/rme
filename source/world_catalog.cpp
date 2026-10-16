@@ -150,6 +150,18 @@ namespace WorldGen {
 				return false;
 			}
 		}
+		if (b.floorMaterials.size() > size_t(b.maxLevels)) {
+			error = "Per-floor materials cannot exceed the template's maximum levels.";
+			return false;
+		}
+		for (const auto& material : b.floorMaterials) {
+			for (const auto& name : { material.floorBrush, material.wallBrush }) {
+				if (name.size() > 128 || name.find('\0') != std::string::npos) {
+					error = "Per-floor material names must contain at most 128 bytes without NUL.";
+					return false;
+				}
+			}
+		}
 		if (!ValidateRows(b.rows, false, b.maxLevels > 1, error)) {
 			return false;
 		}
@@ -234,6 +246,16 @@ namespace WorldGen {
 			}
 		}
 		return blueprint.rows;
+	}
+
+	BlueprintMaterial BlueprintMaterialForFloor(const Blueprint& blueprint, int level) {
+		BlueprintMaterial material { blueprint.floorBrush, blueprint.wallBrush };
+		if (level >= 0 && size_t(level) < blueprint.floorMaterials.size()) {
+			const auto& binding = blueprint.floorMaterials[size_t(level)];
+			if (!binding.floorBrush.empty()) material.floorBrush = binding.floorBrush;
+			if (!binding.wallBrush.empty()) material.wallBrush = binding.wallBrush;
+		}
+		return material;
 	}
 
 	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns) {

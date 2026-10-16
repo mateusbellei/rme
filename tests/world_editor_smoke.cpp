@@ -486,6 +486,31 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		CheckTravel(editor, styledSpec, styled);
 		editor.actionQueue->undo();
 		Check(MapHash(editor.map) == before, "Styled construction application must remain one undo operation");
+		auto floorStyled = styled;
+		for (auto& blueprint : floorStyled.catalog) {
+			blueprint.maxLevels = 4;
+			blueprint.floorMaterials.resize(4);
+			blueprint.floorMaterials[1] = { "fixture equivalent ground", "stone" };
+			blueprint.floorMaterials[3] = { "missing unused floor", "missing unused wall" };
+		}
+		const bool appliedFloorStyles = WorldEditor::ApplyPlan(editor, styledSpec, floorStyled, error);
+		Check(appliedFloorStyles, "Used floors must resolve their own bindings, ignoring unused floors: " + nstr(error));
+		for (const auto& building : floorStyled.buildings) {
+			for (int floor = 0; floor < building.levels; ++floor) {
+				const Tile* corner = editor.map.getTile(resolved.region.originX + building.origin.x, resolved.region.originY + building.origin.y, resolved.region.z - floor);
+				Check(corner && corner->ground && corner->ground->getID() == (floor == 1 ? 105 : 104), "Per-floor grounds must override or inherit independently");
+				const int firstWall = floor == 1 ? 200 : 204;
+				Check(std::any_of(corner->items.begin(), corner->items.end(), [&](const Item* item) { return item->getID() >= firstWall && item->getID() <= firstWall + 3; }), "Per-floor walls must override or inherit independently");
+			}
+		}
+		CheckTravel(editor, styledSpec, floorStyled);
+		editor.actionQueue->undo();
+		Check(MapHash(editor.map) == before, "Per-floor materials must undo with the complete world");
+		for (const bool floorBinding : { true, false }) {
+			auto missingFloorStyle = floorStyled;
+			for (auto& blueprint : missingFloorStyle.catalog) (floorBinding ? blueprint.floorMaterials[1].floorBrush : blueprint.floorMaterials[1].wallBrush) = "missing used-floor style";
+			Check(!WorldEditor::ApplyPlan(editor, styledSpec, missingFloorStyle, error) && MapHash(editor.map) == before, "Missing used-floor bindings must reject before editor mutations");
+		}
 		for (const bool floorBinding : { true, false }) {
 			auto missingStyle = styled;
 			for (auto& blueprint : missingStyle.catalog) (floorBinding ? blueprint.floorBrush : blueprint.wallBrush) = "missing exact style";

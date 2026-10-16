@@ -35,6 +35,7 @@ namespace WorldEditor {
 			Material floor;
 			WallBrush* wall = nullptr;
 		};
+		using BuildingMaterials = std::array<BuildingMaterial, 4>;
 
 		bool Update(const WorldGen::ProgressCallback& progress, const char* stage, int percent, wxString& error) {
 			if (progress && !progress(stage, percent)) {
@@ -431,7 +432,9 @@ namespace WorldEditor {
 				}
 			}
 			for (const auto& building : plan.buildings) {
-				needsWalls = needsWalls || plan.catalog[building.blueprint].wallBrush.empty();
+				for (int level = 0; level < building.levels; ++level) {
+					needsWalls = needsWalls || WorldGen::BlueprintMaterialForFloor(plan.catalog[building.blueprint], level).wallBrush.empty();
+				}
 			}
 			for (size_t i = 0; i < used.size(); ++i) {
 				if (!used[i]) {
@@ -475,38 +478,41 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool ResolveBuildingMaterials(const WorldGen::Plan& plan, std::vector<BuildingMaterial>& materials, wxString& error) {
+		bool ResolveBuildingMaterials(const WorldGen::Plan& plan, std::vector<BuildingMaterials>& materials, wxString& error) {
 			materials.resize(plan.catalog.size());
-			std::vector<bool> used(plan.catalog.size(), false);
+			std::vector<int> usedLevels(plan.catalog.size(), 0);
 			for (const auto& building : plan.buildings) {
-				used[building.blueprint] = true;
+				usedLevels[building.blueprint] = std::max(usedLevels[building.blueprint], building.levels);
 			}
 			for (size_t i = 0; i < plan.catalog.size(); ++i) {
-				if (!used[i]) {
+				if (!usedLevels[i]) {
 					continue;
 				}
 				const auto& blueprint = plan.catalog[i];
-				for (int type = 0; type < 2; ++type) {
-					const auto& name = type == 0 ? blueprint.floorBrush : blueprint.wallBrush;
-					if (name.empty()) {
-						continue;
-					}
-					Brush* brush = g_brushes.getBrush(name);
-					if (!brush || (type == 0 ? !brush->isGround() : !brush->isWall())) {
-						error = "Template '" + wxString::FromUTF8(blueprint.id) + "' requires an exact " + (type == 0 ? "ground" : "wall") + " brush: " + wxString::FromUTF8(name);
-						return false;
-					}
-					if (type == 0) {
-						materials[i].floor.brush = brush->asGround();
-					} else {
-						materials[i].wall = brush->asWall();
+				for (int level = 0; level < usedLevels[i]; ++level) {
+					const auto binding = WorldGen::BlueprintMaterialForFloor(blueprint, level);
+					for (int type = 0; type < 2; ++type) {
+						const auto& name = type == 0 ? binding.floorBrush : binding.wallBrush;
+						if (name.empty()) {
+							continue;
+						}
+						Brush* brush = g_brushes.getBrush(name);
+						if (!brush || (type == 0 ? !brush->isGround() : !brush->isWall())) {
+							error = "Template '" + wxString::FromUTF8(blueprint.id) + "' floor " + std::to_string(level) + " requires an exact " + (type == 0 ? "ground" : "wall") + " brush: " + wxString::FromUTF8(name);
+							return false;
+						}
+						if (type == 0) {
+							materials[i][level].floor.brush = brush->asGround();
+						} else {
+							materials[i][level].wall = brush->asWall();
+						}
 					}
 				}
 			}
 			return true;
 		}
 
-		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, const std::vector<BuildingMaterial>& buildingMaterials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
+		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, const std::vector<BuildingMaterials>& buildingMaterials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
 			std::vector<int> owners(size_t(spec.region.width) * spec.region.height, -1);
 			for (const auto& building : plan.buildings) {
 				for (int y = building.origin.y; y < building.origin.y + building.height; ++y) {
@@ -552,7 +558,7 @@ namespace WorldEditor {
 						const auto pos = PositionFor(spec, { x, y }, layer.offsetZ);
 						Tile* tile = scratch.allocator(scratch.createTileL(pos));
 						const int owner = owners[size_t(y) * spec.region.width + x];
-						const BuildingMaterial* style = owner >= 0 ? &buildingMaterials[owner] : nullptr;
+						const BuildingMaterial* style = owner >= 0 && layer.offsetZ <= 0 ? &buildingMaterials[owner][size_t(-layer.offsetZ)] : nullptr;
 						const auto& material = style && cell.terrain == WorldGen::Terrain::BuildingFloor && style->floor.brush ? style->floor : materials[size_t(cell.terrain)];
 						WallBrush* selectedWall = style && style->wall ? style->wall : wall;
 						if (material.tileId) {
@@ -788,7 +794,7 @@ namespace WorldEditor {
 		}
 		BaseMap scratch;
 		ApplicationStats result;
-		std::vector<BuildingMaterial> buildingMaterials;
+		std::vector<BuildingMaterials> buildingMaterials;
 		if (!ResolveBuildingMaterials(plan, buildingMaterials, error)) {
 			return false;
 		}

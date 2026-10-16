@@ -11,6 +11,7 @@
 #include "gui.h"
 #include "settings.h"
 #include "json.h"
+#include "town.h"
 #include <wx/file.h>
 #include <wx/imagpng.h>
 #include <wx/wfstream.h>
@@ -41,6 +42,64 @@ namespace WorldBatch {
 				g_settings.setInteger(Config::CHECK_SIGNATURES, previous);
 			}
 		};
+		bool RegisterTowns(Map& map, const GenerationSpec& spec, const WorldGen::Plan& plan, const wxString& prefix, json::mArray& records, wxString& error) {
+			if (prefix.empty()) {
+				return true;
+			}
+			for (size_t i = 0; i < plan.settlements.size(); ++i) {
+				const auto center = plan.settlements[i].center;
+				Position position;
+				bool found = false;
+				for (int radius = 0; radius <= 2 && !found; ++radius) {
+					for (int dy = -radius; dy <= radius && !found; ++dy) {
+						for (int dx = -radius; dx <= radius && !found; ++dx) {
+							if (std::abs(dx) + std::abs(dy) != radius) {
+								continue;
+							}
+							const WorldGen::Point point { center.x + dx, center.y + dy };
+							if (!plan.Contains(point) || (plan.FindLayer(0)->cells[plan.Index(point)].flags & WorldGen::Connection)) {
+								continue;
+							}
+							const Position candidate(spec.region.originX + point.x, spec.region.originY + point.y, spec.region.z);
+							Tile* tile = map.getTile(candidate);
+							if (!tile || !tile->ground) {
+								continue;
+							}
+							auto unsafe = [](const Item* item) { const auto& type = g_items[item->getID()]; return type.unpassable || type.isTeleport() || type.isFloorChange(); };
+							if (unsafe(tile->ground) || std::any_of(tile->items.begin(), tile->items.end(), unsafe)) {
+								continue;
+							}
+							position = candidate;
+							found = true;
+						}
+					}
+				}
+				if (!found) {
+					error = "No safe plaza position is available for the generated town record.";
+					return false;
+				}
+				auto town = std::make_unique<Town>(map.towns.getEmptyID());
+				const std::string name = nstr(prefix) + " " + std::to_string(i + 1);
+				town->setName(name);
+				town->setTemplePosition(position);
+				json::mObject record;
+				record["id"] = int(town->getID());
+				record["name"] = name;
+				json::mArray target;
+				target.push_back(position.x);
+				target.push_back(position.y);
+				target.push_back(position.z);
+				record["templePosition"] = target;
+				if (!map.towns.addTown(town.get())) {
+					error = "Could not register a generated town ID.";
+					return false;
+				}
+				town.release();
+				map.getTile(position)->getLocation()->increaseTownCount();
+				records.push_back(record);
+			}
+			return true;
+		}
 		bool Write(const wxString& filename, const void* bytes, size_t size, wxString& error) {
 			wxTempFile file(filename);
 			if (!file.IsOpened() || !file.Write(bytes, size) || !file.Commit()) {
@@ -69,6 +128,13 @@ namespace WorldBatch {
 		const auto parent = outputPath.parent_path().empty() ? std::filesystem::path(".") : outputPath.parent_path();
 		if (!std::filesystem::is_directory(parent, filesystemError) || filesystemError) {
 			error = "The batch output parent directory must already exist.";
+			return false;
+		}
+		const auto prefix = options.townPrefix.utf8_string();
+		wxString visiblePrefix = options.townPrefix;
+		visiblePrefix.Trim(true).Trim(false);
+		if (options.townPrefix.find(wxUniChar(0)) != wxString::npos || prefix.size() > 64 || (!options.townPrefix.empty() && visiblePrefix.empty()) || std::any_of(prefix.begin(), prefix.end(), [](unsigned char c) { return c < 32 || c == 127; })) {
+			error = "Town prefix must contain 1..64 printable UTF-8 bytes, or be empty to omit town records.";
 			return false;
 		}
 		GenerationSpec spec;
@@ -168,6 +234,11 @@ namespace WorldBatch {
 			return false;
 		}
 		prepared.fingerprint = WorldGen::Fingerprint(plan);
+		json::mArray townRecords;
+		if (!RegisterTowns(editor.map, resolved, plan, options.townPrefix, townRecords, error)) {
+			return false;
+		}
+		prepared.towns = townRecords.size();
 		for (const auto& warning : warnings) {
 			prepared.warnings.push_back(warning);
 		}
@@ -241,6 +312,8 @@ namespace WorldBatch {
 		json::mObject report, client;
 		report["schemaVersion"] = 1;
 		report["previews"] = previews;
+		report["towns"] = townRecords;
+		report["townPrefix"] = nstr(options.townPrefix);
 		report["algorithmVersion"] = int(WorldGen::AlgorithmVersion);
 		report["planFingerprint"] = std::to_string(prepared.fingerprint);
 		report["tiles"] = json::mValue(uint64_t(prepared.application.changedTiles));
@@ -272,7 +345,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -300,6 +373,8 @@ namespace WorldBatch {
 				options.dataDirectory = args[i + 1];
 			} else if (args[i] == "--client-dat") {
 				options.clientDat = args[i + 1];
+			} else if (args[i] == "--town-prefix") {
+				options.townPrefix = args[i + 1];
 			} else {
 				std::cerr << usage << '\n';
 				return 2;
@@ -319,7 +394,7 @@ namespace WorldBatch {
 			std::cerr << "World generation failed: " << exception.what() << '\n';
 			return 1;
 		}
-		std::cout << "World saved: " << result.application.changedTiles << " tiles; plan=" << result.fingerprint << '\n';
+		std::cout << "World saved: " << result.application.changedTiles << " tiles; " << result.towns << " towns; plan=" << result.fingerprint << '\n';
 		for (const auto& warning : result.warnings) {
 			std::cerr << "Warning: " << nstr(warning) << '\n';
 		}

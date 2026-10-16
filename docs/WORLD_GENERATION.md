@@ -556,3 +556,19 @@ share explicit rotated furniture and the residential role. Selection uses the
 settlement's center biome, keeping a town's style coherent across its lots.
 External regressions supply real categorical biome PNGs to force desert/snow
 settlements and validate those client materials, furniture and cave links.
+
+
+## Optional server town records in batch output
+
+Add `--town-prefix "Frontier"` to the batch command to register a town per planned
+settlement, named `Frontier 1`, `Frontier 2`, etc., with deterministic IDs. Temple
+positions use a physically walkable plaza cell and avoid the central cave portal
+and movement-changing items. The OTBM contains real town nodes; `generation.json`
+records the names, IDs, prefix and target coordinates. A blank/omitted prefix
+keeps town registration disabled. Prefixes support printable UTF-8 up to 64 bytes.
+
+This is an export option for the newly generated batch map. The saved recipe
+still describes geometry/materials; repeat the prefix option to reproduce town
+metadata. The editor preview/apply path keeps its existing single tile undo
+transaction. A town record provides a server arrival position; temple artwork,
+NPCs, houses, ownership and server scripts are separate authoring tasks.

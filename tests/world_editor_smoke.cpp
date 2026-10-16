@@ -18,6 +18,7 @@
 #include "mt_rand.h"
 #include "settings.h"
 #include "gui.h"
+#include "town.h"
 
 #include <filesystem>
 #include <memory>
@@ -528,6 +529,7 @@ static int RunBatchScenario(const wxString& outputDirectory) {
 		std::ofstream(data / "procedural/biome_doodads.json", std::ios::binary) << "\xef\xbb\xbf" << R"({"presets":{"forest":{"keywords":["tree"]}}})";
 		WorldBatch::Options options;
 		options.dataDirectory = wxString::FromUTF8(data.string());
+		options.townPrefix = "Fixture";
 		options.recipe = outputDirectory + "/recipe.json";
 		options.itemsOtb = outputDirectory + "/batch-items.otb";
 		options.itemsXml = outputDirectory + "/batch-items.xml";
@@ -562,12 +564,26 @@ static int RunBatchScenario(const wxString& outputDirectory) {
 		Check(ProceduralRecipe::Load(options.recipe, spec, error), "Original batch recipe must reload");
 		Check(WorldEditor::BuildPlan(reopened, spec, resolved, plan, error), "Batch plan must be reproducible from original inputs");
 		Check(WorldGen::Fingerprint(plan) == result.fingerprint, "Batch result must record the exact semantic plan");
+		Check(reopened.map.towns.count() == plan.settlements.size() && result.towns == plan.settlements.size(), "Generated town records must survive the production OTBM reader");
+		for (const auto& pair : reopened.map.towns) {
+			const Town* town = pair.second;
+			Check(town->getName() == "Fixture " + std::to_string(pair.first), "Town IDs and names must be deterministic");
+			const Tile* tile = reopened.map.getTile(town->getTemplePosition());
+			Check(tile && tile->ground && !g_items[tile->ground->getID()].unpassable && tile->getLocation()->getTownCount() == 1, "Town temple position must have a walkable, protected tile");
+			Check(std::none_of(tile->items.begin(), tile->items.end(), [](const Item* item) { return g_items[item->getID()].isTeleport() || g_items[item->getID()].unpassable; }), "Town spawn must never land directly on the cave portal");
+		}
 		CheckTravel(reopened, resolved, plan);
 		std::ifstream reportFile(output / "generation.json");
 		json::mValue report;
 		Check(json::read(reportFile, report) && report.get_obj().at("planFingerprint").get_str() == std::to_string(result.fingerprint), "Batch report must record the exact plan identity");
 		Check(report.get_obj().at("furniture").get_int64() > 0 && !report.get_obj().at("warnings").get_array().empty(), "Batch report must retain placement counts and metadata-availability warnings");
 		const auto before = MapHash(reopened.map);
+		WorldBatch::Options invalidPrefix = options;
+		invalidPrefix.outputDirectory += "-invalid-prefix";
+		invalidPrefix.townPrefix = wxString::FromUTF8(std::string("bad\0prefix", 10));
+		const ItemType* existingRegistryItem = &g_items[65535];
+		Check(!WorldBatch::Generate(invalidPrefix, result, error) && !wxDirExists(invalidPrefix.outputDirectory) && &g_items[65535] == existingRegistryItem && MapHash(reopened.map) == before, "Invalid town names must fail before registry/output mutations");
+
 		Check(!WorldBatch::Generate(options, result, error) && MapHash(reopened.map) == before, "Existing output must be rejected before touching the registry or map");
 		std::ifstream unchanged(output / "world.otbm", std::ios::binary);
 		const std::string after((std::istreambuf_iterator<char>(unchanged)), {});

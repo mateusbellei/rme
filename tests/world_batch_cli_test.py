@@ -31,7 +31,7 @@ def main():
                    str(source / "data/1098/items_original1098.otb"),
                    str(source / "data/1098/items_original1098.xml"),
                    str(source / "data/1098/materials.xml"), str(output),
-                   "--data-dir", str(source / "data")]
+                   "--data-dir", str(source / "data"), "--town-prefix", "Frontier"]
         # Run outside the checkout: only explicit arguments / recipe-relative paths apply.
         generated = subprocess.run(command, cwd=temporary, capture_output=True, text=True,
                                    errors="replace", timeout=60)
@@ -40,6 +40,9 @@ def main():
         report = json.loads((output / "generation.json").read_text(encoding="utf-8"))
         plan = json.loads((output / "plan.json").read_text(encoding="utf-8"))
         assert report["client"]["clientVersion"] == 57
+        assert report["townPrefix"] == "Frontier" and len(report["towns"]) == 2
+        assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
+        assert all(town["templePosition"][2] == 7 for town in report["towns"])
         assert report["planFingerprint"] == plan["fingerprint"]
         assert len(plan["settlements"]) == 2 and len(plan["buildings"]) == 24
         for town in range(2):

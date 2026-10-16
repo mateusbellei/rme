@@ -6,63 +6,145 @@
 #include <unordered_set>
 
 using namespace WorldGen;
-static void Check(bool condition,const char* message){if(!condition)throw std::runtime_error(message);}
-
-static int CountConnected(const Layer& layer,int width,int height){
-	std::vector<bool> seen(layer.cells.size());int components=0;
-	for(int i=0;i<int(layer.cells.size());++i){
-		if(seen[i]||!IsWalkable(layer.cells[i]))continue;
-		++components;std::queue<int> queue;queue.push(i);seen[i]=true;
-		while(!queue.empty()){
-			const int p=queue.front();queue.pop();
-			for(const auto [dx,dy]:{std::pair{1,0},std::pair{-1,0},std::pair{0,1},std::pair{0,-1}}){
-				int x=p%width+dx,y=p/width+dy;if(x<0||y<0||x>=width||y>=height)continue;
-				int n=y*width+x;if(!seen[n]&&IsWalkable(layer.cells[n])){seen[n]=true;queue.push(n);}
-			}
-		}
-	}return components;
-}
-
-static void TestCaves(){
-	const int w=33,h=25;Layer layer;layer.cells.resize(w*h);
-	for(auto& c:layer.cells)c.terrain=Terrain::CaveWall;
-	for(int y=2;y<h-2;y+=5)for(int x=2;x<w-2;x+=5)layer.cells[y*w+x].terrain=Terrain::CaveFloor;
-	Check(CountConnected(layer,w,h)>10,"Fixture must have disconnected rooms");
-	Check(ConnectCave(layer.cells,w,h)==1,"Cave connector must join all rooms");
-	Check(CountConnected(layer,w,h)==1,"Independent flood fill must reach all carved rooms");
-	for(int x=0;x<w;++x)Check(layer.cells[x].terrain==Terrain::CaveWall&&layer.cells[(h-1)*w+x].terrain==Terrain::CaveWall,"Cave boundary must remain sealed");
-	for(int y=0;y<h;++y)Check(layer.cells[y*w].terrain==Terrain::CaveWall&&layer.cells[y*w+w-1].terrain==Terrain::CaveWall,"Cave boundary must remain sealed");
-	Check(ConnectCave(layer.cells,w,h)==1,"Connecting a connected cave must be stable");
-}
-
-static void TestWorlds(){
-	for(uint32_t seed:{1u,42u,1337u,0xffffffffu})for(LandShape shape:{LandShape::Continent,LandShape::Archipelago}){
-		Settings s;s.width=96;s.height=80;s.seed=seed;s.shape=shape;s.caveDepth=2;s.buildingLevels=3;
-		Plan plan,repeat;std::string error;
-		Check(Build(s,plan,error),"World build must succeed");
-		const Report report=Validate(plan);
-		if(!report.valid)for(const auto& message:report.errors)std::cerr<<message<<'\n';
-		Check(report.valid,"Generated world must pass semantic validation");
-		Check(report.landTiles>0&&report.waterTiles>0,"World must have land and ocean");
-		Check(plan.layers.size()==5,"Requested building/cave floors must exist");
-		for(int z=1;z<=2;++z)Check(CountConnected(*plan.FindLayer(z),s.width,s.height)==1,"Every cave floor must be connected");
-		for(int i=0;i<int(plan.drainage.size());++i){
-			int steps=0;for(int p=i;p>=0;p=plan.drainage[p])Check(++steps<=int(plan.drainage.size()),"Drainage must be acyclic and reach an outlet");
-		}
-		Check(Build(s,repeat,error)&&Fingerprint(plan)==Fingerprint(repeat),"Same seed/settings must reproduce all semantic layers");
-		s.seed^=17;Check(Build(s,repeat,error)&&Fingerprint(plan)!=Fingerprint(repeat),"Changing seed must change world");
+static void Check(bool condition, const char* message) {
+	if (!condition) {
+		throw std::runtime_error(message);
 	}
 }
 
-static void TestValidation(){
-	Settings s;std::string error;Plan plan;
-	for(int invalid:{0,-1,31,4097}){s.width=invalid;Check(!Build(s,plan,error)&&!error.empty(),"Invalid dimensions must fail before allocation");}
-	s=Settings();s.width=4096;s.height=4096;Check(!Build(s,plan,error),"Surface budget must be enforced");
-	s=Settings();s.width=2048;s.height=2048;s.caveDepth=8;Check(!Build(s,plan,error),"Layer budget must be enforced");
-	s=Settings();s.caveDepth=9;Check(!Build(s,plan,error),"Invalid depth must fail");
-	s=Settings();s.width=64;s.height=64;s.caveDepth=1;Check(Build(s,plan,error),"Fixture build");
-	plan.links[0].upper.x=-1;Check(!Validate(plan).valid,"Out-of-bounds vertical links must be rejected");
-	Check(Build(s,plan,error),"Fixture rebuild");plan.layers[1].cells.clear();Check(!Validate(plan).valid,"Malformed layer must fail safely");
+static int CountConnected(const Layer& layer, int width, int height) {
+	std::vector<bool> seen(layer.cells.size());
+	int components = 0;
+	for (int i = 0; i < int(layer.cells.size()); ++i) {
+		if (seen[i] || !IsWalkable(layer.cells[i])) {
+			continue;
+		}
+		++components;
+		std::queue<int> queue;
+		queue.push(i);
+		seen[i] = true;
+		while (!queue.empty()) {
+			const int p = queue.front();
+			queue.pop();
+			for (const auto [dx, dy] : { std::pair { 1, 0 }, std::pair { -1, 0 }, std::pair { 0, 1 }, std::pair { 0, -1 } }) {
+				int x = p % width + dx, y = p / width + dy;
+				if (x < 0 || y < 0 || x >= width || y >= height) {
+					continue;
+				}
+				int n = y * width + x;
+				if (!seen[n] && IsWalkable(layer.cells[n])) {
+					seen[n] = true;
+					queue.push(n);
+				}
+			}
+		}
+	}
+	return components;
 }
 
-int main(){try{TestCaves();TestWorlds();TestValidation();std::cout<<"PASS: world geography, drainage, cave topology, vertical landings, settings budgets and deterministic plans\n";return 0;}catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}}
+static void TestCaves() {
+	const int w = 33, h = 25;
+	Layer layer;
+	layer.cells.resize(w * h);
+	for (auto& c : layer.cells) {
+		c.terrain = Terrain::CaveWall;
+	}
+	for (int y = 2; y < h - 2; y += 5) {
+		for (int x = 2; x < w - 2; x += 5) {
+			layer.cells[y * w + x].terrain = Terrain::CaveFloor;
+		}
+	}
+	Check(CountConnected(layer, w, h) > 10, "Fixture must have disconnected rooms");
+	Check(ConnectCave(layer.cells, w, h) == 1, "Cave connector must join all rooms");
+	Check(CountConnected(layer, w, h) == 1, "Independent flood fill must reach all carved rooms");
+	for (int x = 0; x < w; ++x) {
+		Check(layer.cells[x].terrain == Terrain::CaveWall && layer.cells[(h - 1) * w + x].terrain == Terrain::CaveWall, "Cave boundary must remain sealed");
+	}
+	for (int y = 0; y < h; ++y) {
+		Check(layer.cells[y * w].terrain == Terrain::CaveWall && layer.cells[y * w + w - 1].terrain == Terrain::CaveWall, "Cave boundary must remain sealed");
+	}
+	Check(ConnectCave(layer.cells, w, h) == 1, "Connecting a connected cave must be stable");
+}
+
+static void TestWorlds() {
+	for (uint32_t seed : { 1u, 42u, 1337u, 0xffffffffu }) {
+		for (LandShape shape : { LandShape::Continent, LandShape::Archipelago }) {
+			Settings s;
+			s.width = 96;
+			s.height = 80;
+			s.seed = seed;
+			s.shape = shape;
+			s.caveDepth = 2;
+			s.buildingLevels = 3;
+			Plan plan, repeat;
+			std::string error;
+			Check(Build(s, plan, error), "World build must succeed");
+			const Report report = Validate(plan);
+			if (!report.valid) {
+				for (const auto& message : report.errors) {
+					std::cerr << message << '\n';
+				}
+			}
+			Check(report.valid, "Generated world must pass semantic validation");
+			Check(report.landTiles > 0 && report.waterTiles > 0, "World must have land and ocean");
+			Check(plan.layers.size() == 5, "Requested building/cave floors must exist");
+			for (int z = 1; z <= 2; ++z) {
+				Check(CountConnected(*plan.FindLayer(z), s.width, s.height) == 1, "Every cave floor must be connected");
+			}
+			for (int i = 0; i < int(plan.drainage.size()); ++i) {
+				int steps = 0;
+				for (int p = i; p >= 0; p = plan.drainage[p]) {
+					Check(++steps <= int(plan.drainage.size()), "Drainage must be acyclic and reach an outlet");
+				}
+			}
+			Check(Build(s, repeat, error) && Fingerprint(plan) == Fingerprint(repeat), "Same seed/settings must reproduce all semantic layers");
+			s.seed ^= 17;
+			Check(Build(s, repeat, error) && Fingerprint(plan) != Fingerprint(repeat), "Changing seed must change world");
+		}
+	}
+}
+
+static void TestValidation() {
+	Settings s;
+	std::string error;
+	Plan plan;
+	for (int invalid : { 0, -1, 31, 4097 }) {
+		s.width = invalid;
+		Check(!Build(s, plan, error) && !error.empty(), "Invalid dimensions must fail before allocation");
+	}
+	s = Settings();
+	s.width = 4096;
+	s.height = 4096;
+	Check(!Build(s, plan, error), "Surface budget must be enforced");
+	s = Settings();
+	s.width = 2048;
+	s.height = 2048;
+	s.caveDepth = 8;
+	Check(!Build(s, plan, error), "Layer budget must be enforced");
+	s = Settings();
+	s.caveDepth = 9;
+	Check(!Build(s, plan, error), "Invalid depth must fail");
+	s = Settings();
+	s.width = 64;
+	s.height = 64;
+	s.caveDepth = 1;
+	Check(Build(s, plan, error), "Fixture build");
+	plan.links[0].upper.x = -1;
+	Check(!Validate(plan).valid, "Out-of-bounds vertical links must be rejected");
+	Check(Build(s, plan, error), "Fixture rebuild");
+	plan.layers[1].cells.clear();
+	Check(!Validate(plan).valid, "Malformed layer must fail safely");
+}
+
+int main() {
+	try {
+		TestCaves();
+		TestWorlds();
+		TestValidation();
+		std::cout << "PASS: world geography, drainage, cave topology, vertical landings, settings budgets and deterministic plans\n";
+		return 0;
+	} catch (const std::exception& e) {
+		std::cerr << "FAIL: " << e.what() << '\n';
+		return 1;
+	}
+}

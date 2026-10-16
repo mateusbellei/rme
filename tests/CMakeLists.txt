@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+set(CMAKE_POLICY_DEFAULT_CMP0167 OLD)
 project(rme_procedural_tests LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -37,6 +38,10 @@ add_library(procedural_integration_compile OBJECT
     ../source/procedural_common.cpp
     ../source/image_mask_generator.cpp
     ../source/procedural_dialog.cpp
+    ../source/world_editor.cpp
+    ../source/procedural_generator.cpp
+    ../source/procedural_recipe.cpp
+    ../source/mt_rand.cpp
 )
 target_include_directories(procedural_integration_compile PRIVATE
     ../source ../source/ext/glad/include ../source/ext/glm ${Boost_INCLUDE_DIRS})
@@ -49,3 +54,21 @@ endif()
 enable_testing()
 add_test(NAME procedural_masks COMMAND procedural_mask_tests)
 set_tests_properties(procedural_masks PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+add_executable(procedural_recipe_tests
+    recipe_tests.cpp
+    ../source/procedural_recipe.cpp
+    ../source/common.cpp
+    ../source/mt_rand.cpp
+    ../source/json/json_spirit_reader.cpp
+    ../source/json/json_spirit_value.cpp
+    ../source/json/json_spirit_writer.cpp
+)
+target_include_directories(procedural_recipe_tests PRIVATE ../source ${Boost_INCLUDE_DIRS})
+target_compile_definitions(procedural_recipe_tests PRIVATE wxNO_LIB)
+target_link_libraries(procedural_recipe_tests PRIVATE procedural_world ${wxWidgets_LIBRARIES} Boost::thread)
+if(MSVC)
+    target_compile_options(procedural_recipe_tests PRIVATE /bigobj /Zc:strictStrings-)
+endif()
+add_test(NAME procedural_recipes COMMAND procedural_recipe_tests)
+set_tests_properties(procedural_recipes PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")

@@ -9,6 +9,7 @@
 #include "procedural_common.h"
 #include "editor.h"
 #include "gui.h"
+#include "world_editor.h"
 
 namespace ProceduralBackends {
 	bool GenerateFromImage(Editor& editor, const GenerationSpec& spec, wxString& error);
@@ -16,6 +17,9 @@ namespace ProceduralBackends {
 }
 
 bool ProceduralGenerator::Run(Editor& editor, const GenerationSpec& spec, wxString& error) {
+	if (spec.source == GenerationSource::WorldPlan) {
+		return WorldEditor::Generate(editor, spec, error);
+	}
 	GenerationSpec resolved = spec;
 
 	if (resolved.useSidecar) {

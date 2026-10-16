@@ -104,6 +104,8 @@ ${CMAKE_CURRENT_LIST_DIR}/waypoint_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/world_plan.h
+${CMAKE_CURRENT_LIST_DIR}/world_editor.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_generator.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_common.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_legend.h
@@ -251,6 +253,8 @@ ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_reader.cpp
 ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_value.cpp
 ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_writer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/world_plan.cpp
+${CMAKE_CURRENT_LIST_DIR}/world_editor.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_generator.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_common.cpp
 ${CMAKE_CURRENT_LIST_DIR}/prompt_generator.cpp

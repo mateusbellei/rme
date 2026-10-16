@@ -49,6 +49,46 @@ marks walls, magenta marks doors and yellow marks vertical connections.
 The independent tests verify drainage outlets, deterministic plans, multiple
 seeds and land shapes, connected cave floors, landing validity and input limits.
 
+## Editor workflow
+
+Open **File → Generate Map**, choose **World planner**, then **World settings**.
+Set the land shape, sea level, river/settlement counts, building floors and cave
+depth. Choose a region within the current map dimensions or use a single-floor
+selection. The selection defines a bounding rectangle; irregular selection
+shapes are not a clipping mask. **Preview world** displays terrain, elevation,
+moisture and temperature, and allows inspecting each floor before applying.
+
+The default `world_legend.json` maps every semantic category to generic brush
+names. These must exist in the loaded client; customize names or use explicit
+ground server IDs. Missing categories fail rather than guessing. Materials,
+autoborders and walls must preserve the plan's walkable routes and solid barriers.
+
+Multi-floor travel currently uses pairs of non-blocking teleport items with
+explicit OTBM destinations. Arrival tiles are next to the reciprocal portal,
+not on it, avoiding automatic teleport loops. The server ID can be configured;
+0 selects the first suitable type in the loaded client. This is a functional
+travel representation, not a claim that physical stairs/ramps are generated.
+Actual server behavior still needs client-specific in-game QA.
+
+**Protect existing tiles** defaults on and rejects the operation if any affected
+tile is occupied. Turning it off allows replacing ordinary ground/items.
+House tiles, spawns, creatures, zones, map flags, unique items, house exits,
+waypoints and town exits remain protected. Void cells on upper floors are not
+affected. Live-client generation is rejected to prevent visibility clipping.
+
+The adapter builds a temporary map, processes borders/walls against final
+neighbors, adds travel objects and checks material walkability before touching
+the editor map. One undo batch replaces each affected tile exactly once. Ground
+and wall brush randomness uses per-cell scoped seeds that restore the global
+editor RNG. No partially prepared result is committed on validation failure.
+
+Application is limited to 1,048,576 non-void tiles; larger semantic plans remain
+available through the standalone planner. Recipe version 4 saves world options,
+target origins and the complete uint32 seed; existing version-3 recipes remain
+loadable. `example_continent.json` and `example_world_layers.json` are generic
+starting points. The default world path currently does not scatter doodads;
+that is a following delivery with placement and route constraints.
+
 ## Delivery stages
 
 1. Semantic world planning and standalone regression checks.

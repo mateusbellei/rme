@@ -1,0 +1,20 @@
+{
+  "default": "grass",
+  "entries": [
+    { "color": "#0000FF", "brush": "water" },
+    { "color": "#2060D0", "brush": "water" },
+    { "color": "#4080FF", "brush": "water" },
+    { "color": "#FFD700", "brush": "sand" },
+    { "color": "#00FF00", "brush": "grass" },
+    { "color": "#008000", "brush": "grass" },
+    { "color": "#E8C060", "brush": "sand" },
+    { "color": "#F0F8FF", "brush": "snow" },
+    { "color": "#654321", "brush": "mountain" },
+    { "color": "#A0522D", "brush": "cobblestone" },
+    { "color": "#B08050", "brush": "wood" },
+    { "color": "#D0C0A0", "brush": "cobblestone" },
+    { "color": "#DEB887", "brush": "wood" },
+    { "color": "#808080", "brush": "mountain" },
+    { "color": "#C0C0C0", "brush": "cave" }
+  ]
+}

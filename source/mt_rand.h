@@ -18,6 +18,28 @@
 #ifndef RME_MT_RAND_H_
 #define RME_MT_RAND_H_
 
+#include <array>
+
+// Scoped deterministic brush calls must restore the editor's random sequence.
+struct MTRandomState {
+	std::array<unsigned long, 624> values;
+	int index;
+};
+
+MTRandomState mt_capture_state();
+void mt_restore_state(const MTRandomState& state);
+
+class ScopedMTRandom {
+public:
+	explicit ScopedMTRandom(unsigned long seed);
+	~ScopedMTRandom();
+	ScopedMTRandom(const ScopedMTRandom&) = delete;
+	ScopedMTRandom& operator=(const ScopedMTRandom&) = delete;
+
+private:
+	MTRandomState previous;
+};
+
 void mt_seed(unsigned long s);
 unsigned long mt_randi();
 double mt_randd();

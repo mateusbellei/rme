@@ -159,7 +159,8 @@ or visual verification with a consumer's client assets.
 The semantic validator also checks the component graph across all floors:
 every upper/underground component must have a route to a surface component,
 and building doors must connect to their own settlement plaza. A settings
-matrix exercises 150 combinations of dimensions, climate, shape and floors.
+matrix exercises 300 combinations of dimensions, climate, shape, floors and
+both settlement-distribution modes, with required successful multi-town coverage.
 
 Validation also cross-checks settlement ownership lists, source biomes,
 construction dimensions/entrances/rotation/height against the catalog, footprint

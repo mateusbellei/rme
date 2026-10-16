@@ -180,41 +180,48 @@ static void TestPlanMetadata() {
 }
 
 static void TestSettingsMatrix() {
-	for (uint32_t seed = 0; seed < 150; ++seed) {
-		Settings s;
-		s.width = 32 + int(seed % 4) * 24;
-		s.height = 32 + int((seed / 4) % 4) * 24;
-		s.seed = seed;
-		s.seaLevel = 2000 + int(seed % 10) * 500;
-		s.shape = seed % 2 ? LandShape::Continent : LandShape::Archipelago;
-		s.caveDepth = int(seed % 4);
-		s.caveEntrances = 1 + int(seed % 8);
-		s.buildingLevels = 1 + int(seed % 4);
-		s.settlementCount = int(seed % 6);
-		s.buildingsPerSettlement = int(seed % 10);
-		s.caveFill = 20 + int(seed % 46);
-		s.roadWidth = 1 + int(seed % 4);
-		s.coastRoughness = int(seed % 101);
-		s.relief = seed % 3 ? ReliefStyle::Ridges : ReliefStyle::Smooth;
-		s.biomeDetail = int(seed % 101);
-		s.temperatureBias = int(seed % 11) * 1000 - 5000;
-		s.moistureBias = int(seed % 9) * 1000 - 4000;
-		s.riverWidth = 1 + int(seed % 4) * 2;
-		s.settlementLayout = seed % 3 ? SettlementLayout::Organic : SettlementLayout::Blocks;
-		Plan plan;
-		std::string error;
-		if (!Build(s, plan, error)) {
-			Check(!error.empty(), "Rejected settings/landing must explain the failure");
-			continue;
-		}
-		const auto report = Validate(plan);
-		if (!report.valid) {
-			std::string message = "Settings matrix seed=" + std::to_string(seed) + ": ";
-			for (const auto& issue : report.errors) {
-				message += issue + "; ";
+	for (bool diverse : { false, true }) {
+		int accepted = 0, multipleTowns = 0;
+		for (uint32_t seed = 0; seed < 150; ++seed) {
+			Settings s;
+			s.diverseSettlements = diverse;
+			s.width = 32 + int(seed % 4) * 24;
+			s.height = 32 + int((seed / 4) % 4) * 24;
+			s.seed = seed;
+			s.seaLevel = 2000 + int(seed % 10) * 500;
+			s.shape = seed % 2 ? LandShape::Continent : LandShape::Archipelago;
+			s.caveDepth = int(seed % 4);
+			s.caveEntrances = 1 + int(seed % 8);
+			s.buildingLevels = 1 + int(seed % 4);
+			s.settlementCount = int(seed % 6);
+			s.buildingsPerSettlement = int(seed % 10);
+			s.caveFill = 20 + int(seed % 46);
+			s.roadWidth = 1 + int(seed % 4);
+			s.coastRoughness = int(seed % 101);
+			s.relief = seed % 3 ? ReliefStyle::Ridges : ReliefStyle::Smooth;
+			s.biomeDetail = int(seed % 101);
+			s.temperatureBias = int(seed % 11) * 1000 - 5000;
+			s.moistureBias = int(seed % 9) * 1000 - 4000;
+			s.riverWidth = 1 + int(seed % 4) * 2;
+			s.settlementLayout = seed % 3 ? SettlementLayout::Organic : SettlementLayout::Blocks;
+			Plan plan;
+			std::string error;
+			if (!Build(s, plan, error)) {
+				Check(!error.empty(), "Rejected settings/landing must explain the failure");
+				continue;
 			}
-			throw std::runtime_error(message);
+			const auto report = Validate(plan);
+			++accepted;
+			multipleTowns += plan.settlements.size() >= 2;
+			if (!report.valid) {
+				std::string message = "Settings matrix seed=" + std::to_string(seed) + " diverse=" + std::to_string(diverse) + ": ";
+				for (const auto& issue : report.errors) {
+					message += issue + "; ";
+				}
+				throw std::runtime_error(message);
+			}
 		}
+		Check(accepted >= 25 && multipleTowns >= 5, "Each settlement distribution mode must exercise successful terrain and multi-town worlds across the settings matrix");
 	}
 }
 

@@ -161,6 +161,12 @@ every upper/underground component must have a route to a surface component,
 and building doors must connect to their own settlement plaza. A settings
 matrix exercises 150 combinations of dimensions, climate, shape and floors.
 
+Validation also cross-checks settlement ownership lists, source biomes,
+construction dimensions/entrances/rotation/height against the catalog, footprint
+setbacks, and one-to-one connection markers versus explicit travel endpoints.
+Applying a plan with a different painting seed is rejected before staging, so
+the displayed seed cannot silently produce different material variants.
+
 ## Construction catalogs
 
 `data/procedural/buildings.json` contains weighted, reusable construction

@@ -1,6 +1,7 @@
 #include "world_plan.h"
 
 #include <iostream>
+#include <limits>
 #include <queue>
 #include <stdexcept>
 #include <unordered_set>
@@ -140,6 +141,41 @@ static void TestValidation() {
 	Check(Build(s, plan, error), "Fixture rebuild");
 	plan.links.clear();
 	Check(!Validate(plan).valid, "Underground floors without a route to the surface must fail");
+}
+
+static void TestPlanMetadata() {
+	Settings settings;
+	settings.settlementCount = 1;
+	settings.buildingsPerSettlement = 4;
+	settings.buildingLevels = 3;
+	settings.caveDepth = 1;
+	settings.riverCount = 0;
+	GeographyInput input;
+	input.elevation.assign(256 * 256, 6000);
+	input.biomes.assign(256 * 256, Terrain::Grass);
+	Plan plan;
+	std::string error;
+	Check(Build(settings, plan, error, nullptr, &input) && Validate(plan).valid && plan.buildings.size() == 4, "Metadata fixture must contain a complete valid town");
+	auto reject = [&](auto change, const char* message) {
+		auto invalid = plan;
+		change(invalid);
+		Check(!Validate(invalid).valid, message);
+	};
+	reject([](Plan& p) { p.settlements[0].center = { -1, -1 }; }, "Out-of-bounds town centers must fail safely");
+	reject([](Plan& p) { p.settlements[0].biome = Terrain::Mountain; }, "Town source biomes must be supported construction habitats");
+	reject([](Plan& p) { p.settings.settlementCount = 2; auto town = p.settlements[0]; town.buildings.clear(); p.settlements.push_back(town); }, "Duplicate town centers must fail");
+	reject([](Plan& p) { p.settlements[0].buildings[0] = std::numeric_limits<int>::max(); }, "Invalid construction indices must fail without indexing outside the plan");
+	reject([](Plan& p) { p.settlements[0].buildings[1] = p.settlements[0].buildings[0]; }, "Duplicate ownership references must fail");
+	reject([](Plan& p) { p.settlements[0].buildings.clear(); }, "Unlisted constructions must fail");
+	reject([](Plan& p) { p.buildings[0].settlement = 1; }, "Construction ownership must match the town list");
+	reject([](Plan& p) { p.buildings[0].width = std::numeric_limits<int>::max(); }, "Excessive footprint dimensions must fail before coordinate addition can overflow");
+	reject([](Plan& p) { --p.buildings[0].width; }, "Footprint dimensions must match the rotated template");
+	reject([](Plan& p) { p.buildings[0].rotation = 1; p.catalog[p.buildings[0].blueprint].allowRotation = false; }, "Nonrotating templates cannot declare a rotated construction");
+	reject([](Plan& p) { p.catalog[p.buildings[0].blueprint].maxLevels = 1; }, "Constructed height cannot exceed its template limit");
+	reject([](Plan& p) { p.catalog[p.buildings[0].blueprint].biomes = { "snow" }; }, "Templates cannot be assigned to a disallowed town biome");
+	reject([](Plan& p) { p.buildings[1] = p.buildings[0]; }, "Overlapping footprints must fail independently of valid surface navigation");
+	reject([](Plan& p) { const auto& link = p.links[0]; p.FindLayer(link.upperOffsetZ)->cells[p.Index(link.upper)].flags &= uint8_t(~Connection); }, "Travel endpoints need connection markers");
+	reject([](Plan& p) { p.FindLayer(0)->cells[0].flags |= Connection; }, "Orphaned connection markers must fail");
 }
 
 static void TestSettingsMatrix() {
@@ -494,6 +530,7 @@ int main() {
 		TestCaveEntrances();
 		TestWorlds();
 		TestValidation();
+		TestPlanMetadata();
 		TestSettingsMatrix();
 		std::cout << "PASS: world geography, drainage, cave topology, vertical landings, settings budgets and deterministic plans\n";
 		return 0;

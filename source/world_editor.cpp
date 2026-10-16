@@ -780,6 +780,10 @@ namespace WorldEditor {
 			error = "Cannot apply an invalid or mismatched world plan.";
 			return false;
 		}
+		if (resolved.seed != plan.settings.seed) {
+			error = "World seed differs from the displayed plan. Rebuild the preview before applying.";
+			return false;
+		}
 		if (!CheckRegion(editor, resolved, &plan, error)) {
 			return false;
 		}

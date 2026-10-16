@@ -1209,6 +1209,10 @@ namespace WorldGen {
 			fail(error);
 			return report;
 		}
+		if (plan.settlements.size() > size_t(plan.settings.settlementCount) || plan.buildings.size() > size_t(plan.settings.settlementCount * plan.settings.buildingsPerSettlement)) {
+			fail("Construction metadata exceeds the requested settlement/building limits.");
+			return report;
+		}
 
 		std::vector<int> offsets;
 		struct Topology {
@@ -1217,6 +1221,7 @@ namespace WorldGen {
 		};
 		std::vector<Topology> topology;
 		int totalComponents = 0;
+		size_t flaggedConnections = 0;
 		for (const auto& layer : plan.layers) {
 			if (layer.cells.size() != count) {
 				fail("Layer dimensions do not match world dimensions.");
@@ -1233,6 +1238,7 @@ namespace WorldGen {
 			bool invalidCell = false;
 			for (const auto& cell : layer.cells) {
 				report.plannedTiles += cell.terrain != Terrain::Void;
+				flaggedConnections += (cell.flags & Connection) != 0;
 				invalidCell = invalidCell || static_cast<unsigned>(cell.terrain) > static_cast<unsigned>(Terrain::Void) || cell.elevation > 10000 || cell.moisture > 10000 || cell.temperature > 10000 || (cell.flags & ~(Reserved | Wall | Entrance | Connection)) || (layer.offsetZ >= 0 && cell.terrain == Terrain::Void);
 			}
 			if (invalidCell) {
@@ -1271,10 +1277,33 @@ namespace WorldGen {
 		if (!report.valid) {
 			return report;
 		}
+		std::vector<int> listedBuildings(plan.buildings.size(), 0);
+		std::set<std::pair<int, int>> townCenters;
+		for (size_t t = 0; t < plan.settlements.size(); ++t) {
+			const auto& town = plan.settlements[t];
+			if (!plan.Contains(town.center) || town.biome < Terrain::Beach || town.biome > Terrain::Snow || !townCenters.insert({ town.center.x, town.center.y }).second) {
+				fail("Invalid settlement center or source biome.");
+				continue;
+			}
+			const auto& plaza = surface->cells[plan.Index(town.center)];
+			if (plaza.terrain != Terrain::Plaza || !IsWalkable(plaza) || !(plaza.flags & Reserved) || town.buildings.size() > size_t(plan.settings.buildingsPerSettlement)) {
+				fail("A settlement needs a reserved walkable plaza and bounded construction list.");
+			}
+			for (int index : town.buildings) {
+				if (index < 0 || size_t(index) >= plan.buildings.size() || plan.buildings[size_t(index)].settlement != int(t) || ++listedBuildings[size_t(index)] != 1) {
+					fail("Settlement construction references must have unique, matching ownership.");
+				}
+			}
+		}
+		if (std::any_of(listedBuildings.begin(), listedBuildings.end(), [](int count) { return count != 1; })) {
+			fail("Every construction must appear exactly once in its settlement's list.");
+		}
+		if (!report.valid) return report;
 		std::vector<int> roots(totalComponents);
 		std::iota(roots.begin(), roots.end(), 0);
 		auto root = [&](int value) { while (roots[value] != value) { roots[value]=roots[roots[value]];value=roots[value]; } return value; };
 		auto component = [&](int floor, Point p) {
+			if (!plan.Contains(p)) return -1;
 			for (const auto& graph : topology) {
 				if (graph.floor == floor) {
 					const int label = graph.labels[plan.Index(p)];
@@ -1295,6 +1324,9 @@ namespace WorldGen {
 				fail("Vertical link needs adjacent floors and walkable landings.");
 				continue;
 			}
+			if (!(upper->cells[plan.Index(link.upper)].flags & Connection) || !(lower->cells[plan.Index(link.lower)].flags & Connection)) {
+				fail("Vertical travel endpoints must be marked as connections.");
+			}
 			if (!endpoints.insert({ link.upperOffsetZ, link.upper.x, link.upper.y }).second || !endpoints.insert({ link.lowerOffsetZ, link.lower.x, link.lower.y }).second) {
 				fail("Vertical travel endpoints overlap on the same tile.");
 			}
@@ -1312,6 +1344,9 @@ namespace WorldGen {
 			if (a >= 0 && b >= 0) {
 				roots[root(a)] = root(b);
 			}
+		}
+		if (flaggedConnections != endpoints.size()) {
+			fail("Connection markers must match the explicit vertical travel endpoints.");
 		}
 		std::set<int> surfaceRoots;
 		for (const auto& graph : topology) {
@@ -1341,7 +1376,7 @@ namespace WorldGen {
 				fail("Invalid building template, rotation or levels.");
 				continue;
 			}
-			if (!plan.Contains(building.origin) || building.width < 3 || building.height < 3 || !plan.Contains({ building.origin.x + building.width - 1, building.origin.y + building.height - 1 }) || !plan.Contains(building.entrance)) {
+			if (!plan.Contains(building.origin) || building.width < 3 || building.height < 3 || building.width > 32 || building.height > 32 || !plan.Contains({ building.origin.x + building.width - 1, building.origin.y + building.height - 1 }) || !plan.Contains(building.entrance)) {
 				fail("Invalid building footprint.");
 				continue;
 			}
@@ -1353,6 +1388,14 @@ namespace WorldGen {
 				continue;
 			}
 			const auto& blueprint = plan.catalog[building.blueprint];
+			const auto rotated = RotateBlueprint(blueprint, building.rotation);
+			const auto [doorX, doorY] = FindBlueprintSymbol(rotated.rows, '+');
+			if (building.width != int(rotated.rows.front().size()) || building.height != int(rotated.rows.size()) || building.levels > blueprint.maxLevels || (!blueprint.allowRotation && building.rotation != 0) || !(building.entrance == Point { building.origin.x + doorX, building.origin.y + doorY })) {
+				fail("Construction dimensions, height, rotation or entrance do not match its template.");
+			}
+			if (!blueprint.biomes.empty() && std::find(blueprint.biomes.begin(), blueprint.biomes.end(), TerrainName(plan.settlements[building.settlement].biome)) == blueprint.biomes.end()) {
+				fail("Construction template is not allowed in its settlement biome.");
+			}
 			++templateCounts[building.settlement][building.blueprint];
 			if (blueprint.maxPerSettlement && templateCounts[building.settlement][building.blueprint] > blueprint.maxPerSettlement) {
 				fail("A settlement exceeds its construction template limit.");
@@ -1368,6 +1411,17 @@ namespace WorldGen {
 				const auto& biomes = blueprint.biomes;
 				if ((biomes.empty() || std::find(biomes.begin(), biomes.end(), TerrainName(plan.settlements[t].biome)) != biomes.end()) && templateCounts[t][i] < blueprint.minPerSettlement) {
 					fail("A settlement is missing its required construction minimum: " + blueprint.id + ".");
+				}
+			}
+		}
+		if (report.valid) {
+			for (size_t i = 0; i < plan.buildings.size(); ++i) {
+				for (size_t j = i + 1; j < plan.buildings.size(); ++j) {
+					const auto& a = plan.buildings[i];
+					const auto& b = plan.buildings[j];
+					if (!(a.origin.x + a.width < b.origin.x || b.origin.x + b.width < a.origin.x || a.origin.y + a.height < b.origin.y || b.origin.y + b.height < a.origin.y)) {
+						fail("Construction footprints overlap or omit the required setback.");
+					}
 				}
 			}
 		}

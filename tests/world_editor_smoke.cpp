@@ -410,6 +410,13 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		Check(inspectedRole, "Role preview must contain an inspectable interior");
 		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, {}, 1) && MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Tile budget rejection must happen before staging or undo mutations");
 		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, {}, WorldEditor::MaximumTileBudget + 1) && MapHash(editor.map) == before, "Tile budgets above the supported memory bound must fail");
+		auto wrongSeed = resolved;
+		wrongSeed.seed ^= 1u;
+		const bool acceptedWrongSeed = WorldEditor::ApplyPlan(editor, wrongSeed, plan, error);
+		Check(!acceptedWrongSeed && error.Contains("seed") && MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Mismatched seeds must fail before staging or undo mutations");
+		auto wrongOwnership = plan;
+		wrongOwnership.settlements[0].buildings.clear();
+		Check(!WorldEditor::ApplyPlan(editor, resolved, wrongOwnership, error) && MapHash(editor.map) == before, "Malformed settlement ownership must fail before editor mutation");
 		mt_seed(717);
 		const auto randomBefore = mt_capture_state();
 		for (const char* stage : { "Checking target and materials", "Copying existing context", "Preparing grounds and walls", "Resolving borders and walls", "Decorating biomes", "Furnishing construction templates", "Validating physical navigation", "Applying world as one undo operation" }) {

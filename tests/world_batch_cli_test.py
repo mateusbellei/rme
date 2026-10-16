@@ -1,10 +1,23 @@
 """Exercise the public 10.98 profile through the installed application entry point."""
 import hashlib
 import json
+import struct
+import zlib
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+
+
+def flat_biome_png(path, rgb):
+    def chunk(kind, payload):
+        return (struct.pack(">I", len(payload)) + kind + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff))
+    size = 8
+    scanlines = (b"\0" + bytes(rgb) * size) * size
+    path.write_bytes(b"\x89PNG\r\n\x1a\n"
+                     + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(scanlines)) + chunk(b"IEND", b""))
 
 
 def main():
@@ -76,8 +89,29 @@ def main():
         assert ridged_report["skippedFurniture"] == 0 and ridged_report["previews"] == []
         assert sum(link["upper"][2] == 0 and link["lower"][2] == 1 for link in ridged_plan["verticalLinks"]) == 4
         assert not list(ridged_output.glob("preview_*.png"))
+
+        for biome, rgb in [("desert", (232, 192, 96)), ("snow", (240, 248, 255))]:
+            hint = Path(temporary) / (biome + ".png")
+            flat_biome_png(hint, rgb)
+            ridged_recipe["world"]["biomeHints"] = str(hint)
+            recipe_path = Path(temporary) / (biome + "-recipe.json")
+            recipe_path.write_text(json.dumps(ridged_recipe), encoding="utf-8")
+            regional_output = Path(temporary) / (biome + "-world")
+            regional_command = ridged_command.copy()
+            regional_command[2], regional_command[6] = str(recipe_path), str(regional_output)
+            generated = subprocess.run(regional_command, cwd=temporary, capture_output=True,
+                                       text=True, errors="replace", timeout=60)
+            if generated.returncode:
+                raise AssertionError(f"{biome} CLI returned {generated.returncode}: {generated.stdout} {generated.stderr}")
+            regional = json.loads((regional_output / "plan.json").read_text(encoding="utf-8"))
+            placements = json.loads((regional_output / "generation.json").read_text(encoding="utf-8"))
+            residences = [b for b in regional["buildings"] if b["role"] == "residential"]
+            assert residences and all(b["blueprint"] == biome + "_residence" for b in residences)
+            assert regional["settlements"][0]["biome"] == biome
+            assert placements["furniture"] > 0 and placements["skippedFurniture"] == 0
         print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
-              f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite")
+              f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite; "
+              "ridged cave entrances and desert/snow architecture")
 
 
 if __name__ == "__main__":

@@ -547,3 +547,12 @@ recipes. `example_ridged_continent.json` requests six entrances; the world
 settings dialog, recipes and diagnostic manifest expose the count. Editor tests
 exercise three entrances through cancellation, undo/redo and actual OTBM reload;
 the stock 10.98 CLI also exercises a ridged world with four entrances.
+
+
+The 10.98 catalog also demonstrates regional architecture. Temperate/coastal
+settlements use wooden residences; desert residences bind sandstone floors and
+Egyptian stone walls, while snowy residences use stone floors/walls. All variants
+share explicit rotated furniture and the residential role. Selection uses the
+settlement's center biome, keeping a town's style coherent across its lots.
+External regressions supply real categorical biome PNGs to force desert/snow
+settlements and validate those client materials, furniture and cave links.

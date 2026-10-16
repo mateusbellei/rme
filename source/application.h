@@ -39,12 +39,19 @@ class Application : public wxApp {
 public:
 	~Application();
 	virtual bool OnInit();
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	int OnRun() override;
+#endif
 	virtual void OnEventLoopEnter(wxEventLoopBase* loop);
 	virtual void MacOpenFiles(const wxArrayString& fileNames);
 	virtual int OnExit();
 	void Unload();
 
 private:
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	bool m_worldSelfTest = false;
+	wxString m_worldTestOutput;
+#endif
 	bool m_startup;
 	wxString m_file_to_open;
 	void FixVersionDiscrapencies();

@@ -632,11 +632,11 @@ EditorTab* GUI::GetTab(int idx) {
 }
 
 int GUI::GetTabCount() const {
-	return tabbook->GetTabCount();
+	return tabbook ? tabbook->GetTabCount() : 0;
 }
 
 EditorTab* GUI::GetCurrentTab() {
-	return tabbook->GetCurrentTab();
+	return tabbook ? tabbook->GetCurrentTab() : nullptr;
 }
 
 MapTab* GUI::GetCurrentMapTab() const {
@@ -1068,6 +1068,7 @@ void GUI::RefreshView() {
 }
 
 void GUI::RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1) {
+	if (!tabbook) return;
 	for (int32_t index = 0; index < tabbook->GetTabCount(); ++index) {
 		auto* mapTab = dynamic_cast<MapTab*>(tabbook->GetTab(index));
 		if (!mapTab) {
@@ -1080,6 +1081,7 @@ void GUI::RefreshMapRegion(int map_x0, int map_y0, int map_x1, int map_y1) {
 }
 
 void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
+	if (!root || !tabbook) return;
 	progressText = message;
 
 	progressFrom = 0;
@@ -1105,6 +1107,7 @@ void GUI::SetLoadScale(int32_t from, int32_t to) {
 }
 
 bool GUI::SetLoadDone(int32_t done, const wxString& newMessage) {
+	if (!tabbook) return true;
 	if (done == 100) {
 		DestroyLoadBar();
 		return true;
@@ -1330,7 +1333,7 @@ void GUI::ChangeFloor(int new_floor) {
 }
 
 void GUI::SetStatusText(wxString text) {
-	g_gui.root->SetStatusText(text, 0);
+	if (root) root->SetStatusText(text, 0);
 }
 
 void GUI::SetTitle(wxString title) {
@@ -1373,6 +1376,7 @@ void GUI::SetTitle(wxString title) {
 }
 
 void GUI::UpdateTitle() {
+	if (!root || !tabbook) return;
 	if (tabbook->GetTabCount() > 0) {
 		SetTitle(tabbook->GetCurrentTab()->GetTitle());
 		for (int idx = 0; idx < tabbook->GetTabCount(); ++idx) {
@@ -1386,6 +1390,7 @@ void GUI::UpdateTitle() {
 }
 
 void GUI::UpdateMenus() {
+	if (!root) return;
 	wxCommandEvent evt(EVT_UPDATE_MENUS);
 	g_gui.root->AddPendingEvent(evt);
 }

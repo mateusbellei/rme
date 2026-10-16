@@ -753,6 +753,12 @@ namespace WorldGen {
 			return report;
 		}
 		std::vector<int> offsets;
+		struct Topology {
+			int floor, base, count;
+			std::vector<int> labels;
+		};
+		std::vector<Topology> topology;
+		int totalComponents = 0;
 		for (const auto& layer : plan.layers) {
 			if (layer.cells.size() != count) {
 				fail("Layer dimensions do not match world dimensions.");
@@ -762,8 +768,22 @@ namespace WorldGen {
 				fail("Duplicate floor offset.");
 			}
 			offsets.push_back(layer.offsetZ);
+			if (layer.offsetZ < 1 - plan.settings.buildingLevels || layer.offsetZ > plan.settings.caveDepth) {
+				fail("Floor offset is outside the requested world layers.");
+				continue;
+			}
+			bool invalidCell = false;
+			for (const auto& cell : layer.cells) {
+				invalidCell = invalidCell || static_cast<unsigned>(cell.terrain) > static_cast<unsigned>(Terrain::Void) || cell.elevation > 10000 || cell.moisture > 10000 || cell.temperature > 10000 || (cell.flags & ~(Reserved | Wall | Entrance | Connection)) || (layer.offsetZ >= 0 && cell.terrain == Terrain::Void);
+			}
+			if (invalidCell) {
+				fail("Layer has an invalid terrain, flag or normalized value.");
+				continue;
+			}
 			int components = 0;
-			Components(layer.cells, plan.settings.width, plan.settings.height, components);
+			auto labels = Components(layer.cells, plan.settings.width, plan.settings.height, components);
+			topology.push_back({ layer.offsetZ, totalComponents, components, std::move(labels) });
+			totalComponents += components;
 			if (layer.offsetZ == 0) {
 				report.surfaceComponents = components;
 				for (const auto& c : layer.cells) {
@@ -784,6 +804,26 @@ namespace WorldGen {
 				}
 			}
 		}
+		for (int z = 1 - plan.settings.buildingLevels; z <= plan.settings.caveDepth; ++z) {
+			if (!plan.FindLayer(z)) {
+				fail("Requested world floor is missing.");
+			}
+		}
+		if (!report.valid) {
+			return report;
+		}
+		std::vector<int> roots(totalComponents);
+		std::iota(roots.begin(), roots.end(), 0);
+		auto root = [&](int value) { while (roots[value] != value) { roots[value]=roots[roots[value]];value=roots[value]; } return value; };
+		auto component = [&](int floor, Point p) {
+			for (const auto& graph : topology) {
+				if (graph.floor == floor) {
+					const int label = graph.labels[plan.Index(p)];
+					return label < 0 ? -1 : graph.base + label;
+				}
+			}
+			return -1;
+		};
 		std::set<std::tuple<int, int, int>> endpoints;
 		for (const auto& link : plan.links) {
 			const auto* upper = plan.FindLayer(link.upperOffsetZ);
@@ -794,6 +834,7 @@ namespace WorldGen {
 			}
 			if (link.lowerOffsetZ != link.upperOffsetZ + 1 || !IsWalkable(upper->cells[plan.Index(link.upper)]) || !IsWalkable(lower->cells[plan.Index(link.lower)])) {
 				fail("Vertical link needs adjacent floors and walkable landings.");
+				continue;
 			}
 			if (!endpoints.insert({ link.upperOffsetZ, link.upper.x, link.upper.y }).second || !endpoints.insert({ link.lowerOffsetZ, link.lower.x, link.lower.y }).second) {
 				fail("Vertical travel endpoints overlap on the same tile.");
@@ -808,6 +849,28 @@ namespace WorldGen {
 					fail("Vertical travel arrival is blocked or creates a portal loop.");
 				}
 			}
+			const int a = component(link.upperOffsetZ, link.upper), b = component(link.lowerOffsetZ, link.lower);
+			if (a >= 0 && b >= 0) {
+				roots[root(a)] = root(b);
+			}
+		}
+		std::set<int> surfaceRoots;
+		for (const auto& graph : topology) {
+			if (graph.floor == 0) {
+				for (int i = 0; i < graph.count; ++i) {
+					surfaceRoots.insert(root(graph.base + i));
+				}
+			}
+		}
+		for (const auto& graph : topology) {
+			if (graph.floor != 0) {
+				for (int i = 0; i < graph.count; ++i) {
+					if (!surfaceRoots.count(root(graph.base + i))) {
+						fail("An upper/underground walkable component has no vertical route to the surface.");
+						break;
+					}
+				}
+			}
 		}
 		for (const auto& building : plan.buildings) {
 			if (!plan.Contains(building.origin) || building.width < 3 || building.height < 3 || !plan.Contains({ building.origin.x + building.width - 1, building.origin.y + building.height - 1 }) || !plan.Contains(building.entrance)) {
@@ -816,6 +879,14 @@ namespace WorldGen {
 			}
 			if (!IsWalkable(surface->cells[plan.Index(building.entrance)]) || !(surface->cells[plan.Index(building.entrance)].flags & Entrance)) {
 				fail("Building entrance is blocked.");
+			}
+			if (building.settlement < 0 || building.settlement >= int(plan.settlements.size()) || !plan.Contains(plan.settlements[building.settlement].center)) {
+				fail("Building has an invalid settlement reference.");
+				continue;
+			}
+			const auto center = plan.settlements[building.settlement].center;
+			if (component(0, building.entrance) < 0 || component(0, building.entrance) != component(0, center)) {
+				fail("Building entrance is disconnected from its settlement plaza.");
 			}
 		}
 		return report;

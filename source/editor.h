@@ -37,6 +37,9 @@ public:
 	Editor(CopyBuffer& copybuffer, LiveClient* client);
 	Editor(CopyBuffer& copybuffer, const FileName& fn);
 	Editor(CopyBuffer& copybuffer);
+	// Automation entry point: caller supplies the already loaded item registry
+	// and matching map version. Does not discover assets or open GUI dialogs.
+	Editor(CopyBuffer& copybuffer, const MapVersion& version);
 	~Editor();
 
 protected:

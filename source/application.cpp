@@ -94,6 +94,13 @@ Application::~Application() {
 }
 
 bool Application::OnInit() {
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	if (argc >= 2 && wxString(argv[1]) == "--world-self-test") {
+		m_worldSelfTest = true;
+		m_worldTestOutput = argc >= 3 ? wxString(argv[2]) : wxFileName::GetTempDir() + "/rme-world-self-test";
+		return true;
+	}
+#endif
 #if defined __DEBUG_MODE__ && defined __WINDOWS__
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
@@ -333,12 +340,24 @@ void Application::Unload() {
 }
 
 int Application::OnExit() {
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	if (m_worldSelfTest) return 0;
+#endif
 #ifdef _USE_PROCESS_COM
 	wxDELETE(m_proc_server);
 	wxDELETE(m_single_instance_checker);
 #endif
 	return 1;
 }
+
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+int RunWorldEditorSelfTest(const wxString& outputDirectory);
+
+int Application::OnRun() {
+	if (m_worldSelfTest) return RunWorldEditorSelfTest(m_worldTestOutput);
+	return wxApp::OnRun();
+}
+#endif
 
 void Application::OnFatalException() {
 	////

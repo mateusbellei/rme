@@ -99,3 +99,35 @@ that is a following delivery with placement and route constraints.
 
 Existing legacy presets remain supported. This planner is a new opt-in path;
 it does not silently replace image-mask or legacy cave generation.
+
+## Actual editor/OTBM regression
+
+The optional `RME_ENABLE_WORLD_SELF_TEST` CMake build enables
+`rme --world-self-test <output-directory>` and a CTest entry. This path starts
+without the main window, asset discovery, user settings writes or private client
+files. It supplies synthetic item/wall definitions and uses the production
+`Editor`, action queue, map, wall brushes and OTBM reader/writer.
+
+The regression applies a world with buildings and two underground floors,
+checks portal destinations and adjacent walkable arrivals, verifies one undo
+and exact redo, tests collision/material rejection without mutation, preserves
+the global brush RNG, and compares the reloaded OTBM content to the generated
+map. It also retains an unrelated tile outside the generated area.
+
+```powershell
+cmake -S . -B build/editor -DRME_ENABLE_WORLD_SELF_TEST=ON
+cmake --build build/editor --config Release
+ctest --test-dir build/editor -C Release --output-on-failure --timeout 90
+```
+
+The full editor requires wxWidgets, Boost thread/system, OpenGL/GLUT, zlib,
+libarchive and GLM. On Windows, use the existing dependency toolchain and put
+its runtime DLL directory on PATH. On Linux, run the editor test under Xvfb;
+the application creates no main window in self-test mode. The test command is
+disabled in normal builds. Passing it does not replace actual game-server QA
+or visual verification with a consumer's client assets.
+
+The semantic validator also checks the component graph across all floors:
+every upper/underground component must have a route to a surface component,
+and building doors must connect to their own settlement plaza. A settings
+matrix exercises 150 combinations of dimensions, climate, shape and floors.

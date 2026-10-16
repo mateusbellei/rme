@@ -134,6 +134,43 @@ static void TestValidation() {
 	Check(Build(s, plan, error), "Fixture rebuild");
 	plan.layers[1].cells.clear();
 	Check(!Validate(plan).valid, "Malformed layer must fail safely");
+	Check(Build(s, plan, error), "Fixture rebuild");
+	plan.layers[0].cells[0].terrain = static_cast<Terrain>(255);
+	Check(!Validate(plan).valid, "Unknown terrain values must fail before material indexing");
+	Check(Build(s, plan, error), "Fixture rebuild");
+	plan.links.clear();
+	Check(!Validate(plan).valid, "Underground floors without a route to the surface must fail");
+}
+
+static void TestSettingsMatrix() {
+	for (uint32_t seed = 0; seed < 150; ++seed) {
+		Settings s;
+		s.width = 32 + int(seed % 4) * 24;
+		s.height = 32 + int((seed / 4) % 4) * 24;
+		s.seed = seed;
+		s.seaLevel = 2000 + int(seed % 10) * 500;
+		s.shape = seed % 2 ? LandShape::Continent : LandShape::Archipelago;
+		s.caveDepth = int(seed % 4);
+		s.buildingLevels = 1 + int(seed % 4);
+		s.settlementCount = int(seed % 6);
+		s.buildingsPerSettlement = int(seed % 10);
+		s.caveFill = 20 + int(seed % 46);
+		s.roadWidth = 1 + int(seed % 4);
+		Plan plan;
+		std::string error;
+		if (!Build(s, plan, error)) {
+			Check(!error.empty(), "Rejected settings/landing must explain the failure");
+			continue;
+		}
+		const auto report = Validate(plan);
+		if (!report.valid) {
+			std::string message = "Settings matrix seed=" + std::to_string(seed) + ": ";
+			for (const auto& issue : report.errors) {
+				message += issue + "; ";
+			}
+			throw std::runtime_error(message);
+		}
+	}
 }
 
 int main() {
@@ -141,6 +178,7 @@ int main() {
 		TestCaves();
 		TestWorlds();
 		TestValidation();
+		TestSettingsMatrix();
 		std::cout << "PASS: world geography, drainage, cave topology, vertical landings, settings budgets and deterministic plans\n";
 		return 0;
 	} catch (const std::exception& e) {

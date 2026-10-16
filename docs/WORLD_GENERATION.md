@@ -585,6 +585,13 @@ The bundled diverse profile's default seed was also exported with the public
 one settlement in each of grass, desert, forest and snow. Its OTBM passed
 read/re-encode verification, and the bundle included editable PNGs.
 
+![Semantic terrain preview of the diverse continent](images/world-diverse-continent.png)
+
+Semantic preview exported by that recipe with seed 1337; colors identify terrain
+and construction footprints. This is a planner diagnostic, not a client-sprite
+render. Ocean is blue, lakes/rivers lighter blue, ridges brown, desert tan and
+snow white; four settlement clusters occupy different habitats.
+
 A blueprint's optional `role` is a short identifier such as `residential`,
 `commercial`, `industrial` or `civic`. It labels the plan and role preview; it
 does not create NPCs, house ownership or server scripts. `maxPerSettlement`

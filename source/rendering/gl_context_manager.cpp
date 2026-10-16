@@ -3,6 +3,8 @@
 
 #ifdef __WXMSW__
 	#include <windows.h>
+#else
+	#include <dlfcn.h>
 #endif
 
 namespace {
@@ -19,7 +21,20 @@ GLADapiproc gladLoadProc(const char* name) {
 	}
 	return nullptr;
 #else
-	return reinterpret_cast<GLADapiproc>(wxGLCanvas::GetProcAddress(name));
+	// wx 3.2 has no cross-platform wxGLCanvas::GetProcAddress API.
+#ifdef __WXOSX__
+	static void* library = dlopen("/System/Library/Frameworks/OpenGL.framework/OpenGL", RTLD_LAZY | RTLD_LOCAL);
+	return library ? reinterpret_cast<GLADapiproc>(dlsym(library, name)) : nullptr;
+#else
+	static void* library = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+	if (!library) return nullptr;
+	using GLXGetProc = GLADapiproc (*)(const unsigned char*);
+	static auto resolve = reinterpret_cast<GLXGetProc>(dlsym(library, "glXGetProcAddressARB"));
+	if (resolve) {
+		if (auto proc = resolve(reinterpret_cast<const unsigned char*>(name))) return proc;
+	}
+	return reinterpret_cast<GLADapiproc>(dlsym(library, name));
+#endif
 #endif
 }
 

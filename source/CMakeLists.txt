@@ -97,6 +97,9 @@ ${CMAKE_CURRENT_LIST_DIR}/templates.h
 ${CMAKE_CURRENT_LIST_DIR}/threads.h
 ${CMAKE_CURRENT_LIST_DIR}/tile.h
 ${CMAKE_CURRENT_LIST_DIR}/tileset.h
+${CMAKE_CURRENT_LIST_DIR}/add_item_window.h
+${CMAKE_CURRENT_LIST_DIR}/add_tileset_window.h
+${CMAKE_CURRENT_LIST_DIR}/tileset_window.h
 ${CMAKE_CURRENT_LIST_DIR}/town.h
 ${CMAKE_CURRENT_LIST_DIR}/updater.h
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.h
@@ -239,6 +242,9 @@ ${CMAKE_CURRENT_LIST_DIR}/templatemap854.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemapclassic.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tile.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tileset.cpp
+${CMAKE_CURRENT_LIST_DIR}/add_item_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/add_tileset_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/tileset_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/town.cpp
 ${CMAKE_CURRENT_LIST_DIR}/updater.cpp
 ${CMAKE_CURRENT_LIST_DIR}/wall_brush.cpp

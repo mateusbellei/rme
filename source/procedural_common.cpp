@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <filesystem>
 #include <limits>
 #include <map>
 #include <cctype>
@@ -279,7 +280,7 @@ bool ProceduralCommon::LoadLegend(const wxString& path, LegendMapping& mapping, 
 		return true;
 	}
 
-	std::ifstream input(nstr(path).c_str());
+	std::ifstream input(std::filesystem::u8path(nstr(path)));
 	if (!input.good()) {
 		error = "Failed to open legend JSON: " + path;
 		return false;
@@ -667,7 +668,7 @@ bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec
 
 	if (!loaded) {
 		const wxString path = g_gui.GetProceduralDataDirectory() + wxString("biome_doodads.json");
-		std::ifstream input(nstr(path).c_str());
+		std::ifstream input(std::filesystem::u8path(nstr(path)));
 		if (input.good()) {
 			json::mValue root;
 			if (json::read(input, root) && root.type() == json::obj_type) {

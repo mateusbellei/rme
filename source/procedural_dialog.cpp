@@ -478,6 +478,19 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	grid->Add(new wxStaticText(&dialog, wxID_ANY, "Building wall brush:"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* wall = new wxTextCtrl(&dialog, wxID_ANY, worldSettings.wallBrushName);
 	grid->Add(wall, 1, wxEXPAND);
+	grid->Add(new wxStaticText(&dialog, wxID_ANY, "Construction catalog (blank = default):"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* catalogRow = new wxBoxSizer(wxHORIZONTAL);
+	auto* catalog = new wxTextCtrl(&dialog, wxID_ANY, worldSettings.catalogPath);
+	auto* browseCatalog = new wxButton(&dialog, wxID_ANY, "Browse...");
+	catalogRow->Add(catalog, 1, wxRIGHT, 4);
+	catalogRow->Add(browseCatalog, 0);
+	grid->Add(catalogRow, 1, wxEXPAND);
+	browseCatalog->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+		wxFileDialog picker(&dialog, "Choose construction catalog", "", "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+		if (picker.ShowModal() == wxID_OK) {
+			catalog->SetValue(picker.GetPath());
+		}
+	});
 	layout->Add(grid, 1, wxEXPAND | wxALL, 12);
 	auto* note = new wxStaticText(&dialog, wxID_ANY, "Multi-floor travel uses paired teleports with safe arrival tiles.\nThe legend must match the grounds and brushes of your loaded client.");
 	layout->Add(note, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
@@ -499,6 +512,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.roadWidth = road->GetValue();
 	candidate.connectionItemId = travel->GetValue();
 	candidate.wallBrushName = wall->GetValue();
+	candidate.catalogPath = catalog->GetValue();
 	worldSettings = candidate;
 }
 

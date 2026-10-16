@@ -87,6 +87,7 @@ struct GenerationWorld {
 	// Zero selects an appropriate teleport type from the active client.
 	int connectionItemId = 0;
 	wxString wallBrushName = "stone";
+	wxString catalogPath;
 };
 
 struct GenerationSpec {

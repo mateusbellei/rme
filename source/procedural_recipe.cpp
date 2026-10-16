@@ -8,6 +8,7 @@
 #include "json.h"
 
 #include <fstream>
+#include <filesystem>
 
 namespace {
 	static std::string PresetToString(GenerationPreset preset) {
@@ -135,9 +136,10 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["protectExisting"] = json::mValue(spec.world.protectExisting);
 	world["connectionItemId"] = json::mValue(spec.world.connectionItemId);
 	world["wallBrush"] = json::mValue(nstr(spec.world.wallBrushName));
+	world["catalog"] = json::mValue(nstr(spec.world.catalogPath));
 	root["world"] = world;
 
-	std::ofstream output(nstr(path).c_str());
+	std::ofstream output(std::filesystem::u8path(nstr(path)));
 	if (!output.good()) {
 		error = "Could not write recipe: " + path;
 		return false;
@@ -152,7 +154,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 }
 
 bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxString& error) {
-	std::ifstream input(nstr(path).c_str());
+	std::ifstream input(std::filesystem::u8path(nstr(path)));
 	if (!input.good()) {
 		error = "Could not open recipe: " + path;
 		return false;
@@ -336,6 +338,14 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 				return false;
 			}
 			spec.world.protectExisting = protect->second.get_bool();
+		}
+		const auto catalog = world.find("catalog");
+		if (catalog != world.end()) {
+			if (catalog->second.type() != json::str_type) {
+				error = "World catalog must be a path string.";
+				return false;
+			}
+			spec.world.catalogPath = wxstr(catalog->second.get_str());
 		}
 		const auto wall = world.find("wallBrush");
 		if (wall != world.end()) {

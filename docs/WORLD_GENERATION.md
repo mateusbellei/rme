@@ -131,3 +131,37 @@ The semantic validator also checks the component graph across all floors:
 every upper/underground component must have a route to a surface component,
 and building doors must connect to their own settlement plaza. A settings
 matrix exercises 150 combinations of dimensions, climate, shape and floors.
+
+## Construction catalogs
+
+`data/procedural/buildings.json` contains weighted, reusable construction
+blueprints. The same generic templates are compiled into the standalone
+planner as a fallback. In World settings, select a custom construction catalog
+to replace that set. Empty/default paths use the bundled catalog when available.
+
+Each version-1 catalog contains a `templates` array. Templates declare a unique
+`id`, `weight`, `maxLevels`, `rotate`, rectangular `rows`, optional `upperRows`,
+and optional allowed `biomes` (grass, forest, desert, snow or beach). Symbols:
+
+| Symbol | Meaning |
+| --- | --- |
+| `#` | Wall |
+| `.` | Interior floor |
+| `+` | Ground-floor entrance facing the street |
+| `a`, `b` | Alternating travel anchors for multi-level buildings |
+| `,` | Courtyard grass on the base floor |
+| space | Void/no construction tile |
+
+Templates must be 5..32 cells per dimension, contain one street entrance,
+connect all rooms to that entrance, and provide safe, aligned `a`/`b` landings
+for multiple floors. Upper floors must have matching dimensions and no outer
+entrance. If `upperRows` is omitted, the base outline repeats with its outer
+door closed and courtyard grass left as void. Doors are rotated toward the
+settlement center where rotation is allowed; access paths route to the actual
+oriented door. Per-template height limits can create varied building heights.
+
+Invalid catalogs fail before map editing. Limits are 64 templates and 2 MiB
+of JSON. The catalog is a semantic footprint format; it does not yet import
+arbitrary OTBM chunks or rotate client item IDs. Client materials still come
+from the world legend and the chosen wall brush. Custom paths in recipes and
+JSON inputs support Unicode filenames.

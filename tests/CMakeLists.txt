@@ -4,7 +4,7 @@ project(rme_procedural_tests LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_library(procedural_world STATIC ../source/world_plan.cpp)
+add_library(procedural_world STATIC ../source/world_plan.cpp ../source/world_catalog.cpp)
 target_include_directories(procedural_world PUBLIC ../source)
 add_executable(procedural_world_tests world_plan_tests.cpp)
 target_link_libraries(procedural_world_tests PRIVATE procedural_world)
@@ -12,6 +12,9 @@ add_executable(rme_world_plan ../tools/world_plan_cli.cpp)
 target_link_libraries(rme_world_plan PRIVATE procedural_world)
 enable_testing()
 add_test(NAME procedural_world COMMAND procedural_world_tests)
+add_executable(procedural_catalog_tests world_catalog_tests.cpp)
+target_link_libraries(procedural_catalog_tests PRIVATE procedural_world)
+add_test(NAME procedural_catalog COMMAND procedural_catalog_tests)
 
 option(RME_TEST_EDITOR_INTEGRATION "Build wxWidgets mask tests and editor integration" ON)
 if(NOT RME_TEST_EDITOR_INTEGRATION)
@@ -57,6 +60,7 @@ set_tests_properties(procedural_masks PROPERTIES WORKING_DIRECTORY "${CMAKE_CURR
 
 add_executable(procedural_recipe_tests
     recipe_tests.cpp
+    ../source/world_catalog_json.cpp
     ../source/procedural_recipe.cpp
     ../source/common.cpp
     ../source/mt_rand.cpp

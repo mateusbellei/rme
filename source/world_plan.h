@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include "world_catalog.h"
 
 // Client-independent planning. No map, brush registry, GUI or global RNG access.
 namespace WorldGen {
@@ -60,11 +61,13 @@ namespace WorldGen {
 		int width = 0, height = 0, levels = 1;
 		Point entrance;
 		int settlement = -1;
+		int blueprint = 0, rotation = 0;
 	};
 
 	struct Settlement {
 		Point center;
 		int radius = 0;
+		Terrain biome = Terrain::Grass;
 		std::vector<int> buildings;
 	};
 
@@ -95,6 +98,7 @@ namespace WorldGen {
 
 	struct Plan {
 		Settings settings;
+		BlueprintCatalog catalog;
 		std::vector<Layer> layers;
 		std::vector<Settlement> settlements;
 		std::vector<Building> buildings;
@@ -121,7 +125,7 @@ namespace WorldGen {
 	const char* TerrainName(Terrain terrain);
 	uint32_t TerrainColor(Terrain terrain);
 	bool ValidateSettings(const Settings& settings, std::string& error);
-	bool Build(const Settings& settings, Plan& plan, std::string& error);
+	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog = nullptr);
 	Report Validate(const Plan& plan);
 	uint64_t Fingerprint(const Plan& plan);
 

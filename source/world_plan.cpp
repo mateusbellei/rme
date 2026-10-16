@@ -255,7 +255,7 @@ namespace WorldGen {
 		}
 
 		bool DryBuildable(const Cell& cell) {
-			return !IsWater(cell.terrain) && cell.terrain != Terrain::Mountain && !(cell.flags & Reserved);
+			return !IsWater(cell.terrain) && cell.terrain != Terrain::Mountain && !(cell.flags & (Reserved | Wall));
 		}
 
 		// Weighted shortest paths avoid mountains and water; rivers may be bridged.
@@ -371,6 +371,7 @@ namespace WorldGen {
 				}
 				Settlement town;
 				town.center = center;
+				town.biome = cells[candidate.index].terrain;
 				town.radius = std::max(10, std::min(28, std::min(s.width, s.height) / 8));
 				for (int dy = -2; dy <= 2; ++dy) {
 					for (int dx = -2; dx <= 2; ++dx) {
@@ -414,10 +415,37 @@ namespace WorldGen {
 			for (int t = 0; t < int(plan.settlements.size()); ++t) {
 				auto& town = plan.settlements[t];
 				// Lots grow around the central plaza, with setbacks and a path to each door.
-				for (int ring = 1; ring <= 4 && int(town.buildings.size()) < s.buildingsPerSettlement; ++ring) {
+				for (int ring = 1; ring <= std::max(4, (s.buildingsPerSettlement + 3) / 4) && int(town.buildings.size()) < s.buildingsPerSettlement; ++ring) {
 					for (int side = 0; side < 8 && int(town.buildings.size()) < s.buildingsPerSettlement; ++side) {
 						static const Point slots[] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
-						const int w = 5 + int(Hash(s.seed, t * 97 + ring * 8 + side, 31) % 3), h = 5 + int(Hash(s.seed, t * 97 + ring * 8 + side, 32) % 3);
+
+						std::vector<int> eligible;
+						int totalWeight = 0;
+						for (int i = 0; i < int(plan.catalog.size()); ++i) {
+							const auto& candidate = plan.catalog[i];
+							if (candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end()) {
+								eligible.push_back(i);
+								totalWeight += candidate.weight;
+							}
+						}
+						if (eligible.empty()) {
+							continue;
+						}
+						int roll = int(Hash(s.seed, t * 97 + ring * 8 + side, 31) % uint32_t(totalWeight));
+						int templateIndex = eligible.back();
+						for (int i : eligible) {
+							if (roll < plan.catalog[i].weight) {
+								templateIndex = i;
+								break;
+							}
+							roll -= plan.catalog[i].weight;
+						}
+						int rotation = slots[side].x != 0 ? (slots[side].x > 0 ? 1 : 3) : (slots[side].y > 0 ? 2 : 0);
+						if (!plan.catalog[templateIndex].allowRotation) {
+							rotation = 0;
+						}
+						const auto blueprint = RotateBlueprint(plan.catalog[templateIndex], rotation);
+						const int w = int(blueprint.rows.front().size()), h = int(blueprint.rows.size());
 						const Point origin { town.center.x + slots[side].x * ring * 10 - w / 2, town.center.y + slots[side].y * ring * 10 - h / 2 };
 						if (origin.x < 2 || origin.y < 2 || origin.x + w >= s.width - 2 || origin.y + h >= s.height - 2) {
 							continue;
@@ -435,14 +463,25 @@ namespace WorldGen {
 						if (!clear || high - low > 1300) {
 							continue;
 						}
-						const Point entrance { origin.x + w / 2, origin.y + h - 1 };
+						const auto [doorX, doorY] = FindBlueprintSymbol(blueprint.rows, '+');
+						const Point entrance { origin.x + doorX, origin.y + doorY };
+						Point approach = entrance;
+						if (doorX == 0) {
+							--approach.x;
+						} else if (doorX == w - 1) {
+							++approach.x;
+						} else if (doorY == 0) {
+							--approach.y;
+						} else {
+							++approach.y;
+						}
 						// Reserve the footprint temporarily so the access road routes outside it.
 						for (int y = origin.y; y < origin.y + h; ++y) {
 							for (int x = origin.x; x < origin.x + w; ++x) {
 								cells[size_t(y) * s.width + x].flags |= Wall;
 							}
 						}
-						const bool access = Road(plan, { entrance.x, entrance.y + 1 }, town.center);
+						const bool access = Road(plan, approach, town.center);
 						for (int y = origin.y; y < origin.y + h; ++y) {
 							for (int x = origin.x; x < origin.x + w; ++x) {
 								cells[size_t(y) * s.width + x].flags &= uint8_t(~Wall);
@@ -455,7 +494,9 @@ namespace WorldGen {
 						building.origin = origin;
 						building.width = w;
 						building.height = h;
-						building.levels = s.buildingLevels;
+						building.levels = std::min(s.buildingLevels, blueprint.maxLevels);
+						building.blueprint = templateIndex;
+						building.rotation = rotation;
 						building.entrance = entrance;
 						building.settlement = t;
 						const int index = int(plan.buildings.size());
@@ -466,16 +507,18 @@ namespace WorldGen {
 								cells[size_t(y) * s.width + x].flags |= Reserved;
 							}
 						}
-						for (int y = origin.y; y < origin.y + h; ++y) {
-							for (int x = origin.x; x < origin.x + w; ++x) {
-								Cell& c = cells[size_t(y) * s.width + x];
-								c.terrain = Terrain::BuildingFloor;
-								if (x == origin.x || y == origin.y || x == origin.x + w - 1 || y == origin.y + h - 1) {
-									c.flags |= Wall;
+
+						for (int y = 0; y < h; ++y) {
+							for (int x = 0; x < w; ++x) {
+								const char symbol = blueprint.rows[y][x];
+								if (symbol == ' ') {
+									continue;
 								}
+								Cell& c = cells[size_t(origin.y + y) * s.width + origin.x + x];
+								c.terrain = symbol == ',' ? Terrain::Grass : Terrain::BuildingFloor;
+								c.flags = uint8_t(Reserved | (symbol == '#' ? Wall : 0) | (symbol == '+' ? Entrance : 0));
 							}
 						}
-						cells[plan.Index(entrance)].flags = (cells[plan.Index(entrance)].flags & uint8_t(~Wall)) | Entrance;
 					}
 				}
 				if (int(town.buildings.size()) < s.buildingsPerSettlement) {
@@ -540,15 +583,28 @@ namespace WorldGen {
 				Layer upper;
 				upper.offsetZ = -level;
 				upper.cells.resize(size_t(s.width) * s.height);
+
 				for (const Building& b : plan.buildings) {
-					for (int y = b.origin.y; y < b.origin.y + b.height; ++y) {
-						for (int x = b.origin.x; x < b.origin.x + b.width; ++x) {
-							Cell& c = upper.cells[size_t(y) * s.width + x];
-							c.terrain = Terrain::BuildingFloor;
-							c.flags = Reserved;
-							if (x == b.origin.x || y == b.origin.y || x == b.origin.x + b.width - 1 || y == b.origin.y + b.height - 1) {
-								c.flags |= Wall;
+					if (level >= b.levels) {
+						continue;
+					}
+					const auto blueprint = RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
+					auto rows = blueprint.upperRows.empty() ? blueprint.rows : blueprint.upperRows;
+					for (int y = 0; y < b.height; ++y) {
+						for (int x = 0; x < b.width; ++x) {
+							char symbol = rows[y][x];
+							if (symbol == '+') {
+								symbol = '#';
 							}
+							if (symbol == ',') {
+								symbol = ' ';
+							}
+							if (symbol == ' ') {
+								continue;
+							}
+							Cell& c = upper.cells[size_t(b.origin.y + y) * s.width + b.origin.x + x];
+							c.terrain = Terrain::BuildingFloor;
+							c.flags = uint8_t(Reserved | (symbol == '#' ? Wall : 0));
 						}
 					}
 				}
@@ -556,7 +612,9 @@ namespace WorldGen {
 			}
 			for (const Building& b : plan.buildings) {
 				for (int level = 1; level < b.levels; ++level) {
-					Point p { b.origin.x + (level % 2 ? 1 : 3), b.origin.y + 2 };
+					const auto blueprint = RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
+					const auto [landingX, landingY] = FindBlueprintSymbol(blueprint.rows, level % 2 ? 'a' : 'b');
+					Point p { b.origin.x + landingX, b.origin.y + landingY };
 					plan.links.push_back({ p, p, -level, -level + 1 });
 					plan.FindLayer(-level)->cells[plan.Index(p)].flags |= Connection;
 					plan.FindLayer(-level + 1)->cells[plan.Index(p)].flags |= Connection;
@@ -682,9 +740,13 @@ namespace WorldGen {
 		return true;
 	}
 
-	bool Build(const Settings& settings, Plan& plan, std::string& error) {
+	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog) {
 		plan = Plan();
 		if (!ValidateSettings(settings, error)) {
+			return false;
+		}
+		plan.catalog = catalog ? *catalog : DefaultBlueprints();
+		if (!ValidateCatalog(plan.catalog, error)) {
 			return false;
 		}
 		plan.settings = settings;
@@ -752,6 +814,11 @@ namespace WorldGen {
 			fail("Missing or invalid surface layer.");
 			return report;
 		}
+		if (!ValidateCatalog(plan.catalog, error)) {
+			fail(error);
+			return report;
+		}
+
 		std::vector<int> offsets;
 		struct Topology {
 			int floor, base, count;
@@ -873,6 +940,10 @@ namespace WorldGen {
 			}
 		}
 		for (const auto& building : plan.buildings) {
+			if (building.blueprint < 0 || building.blueprint >= int(plan.catalog.size()) || building.rotation < 0 || building.rotation > 3 || building.levels < 1 || building.levels > plan.settings.buildingLevels) {
+				fail("Invalid building template, rotation or levels.");
+				continue;
+			}
 			if (!plan.Contains(building.origin) || building.width < 3 || building.height < 3 || !plan.Contains({ building.origin.x + building.width - 1, building.origin.y + building.height - 1 }) || !plan.Contains(building.entrance)) {
 				fail("Invalid building footprint.");
 				continue;

@@ -284,7 +284,21 @@ namespace WorldEditor {
 			return false;
 		}
 		std::string buildError;
-		if (!WorldGen::Build(settings, plan, buildError)) {
+		WorldGen::BlueprintCatalog catalog;
+		wxString catalogPath = spec.world.catalogPath;
+		const bool explicitCatalog = !catalogPath.empty();
+		if (catalogPath.empty()) {
+			catalogPath = g_gui.GetProceduralDataDirectory() + "buildings.json";
+		}
+		if (explicitCatalog || wxFileExists(catalogPath)) {
+			if (!WorldGen::LoadBlueprintCatalog(nstr(catalogPath), catalog, buildError)) {
+				error = wxstr(buildError);
+				return false;
+			}
+		} else {
+			catalog = WorldGen::DefaultBlueprints();
+		}
+		if (!WorldGen::Build(settings, plan, buildError, &catalog)) {
 			error = wxstr(buildError);
 			return false;
 		}

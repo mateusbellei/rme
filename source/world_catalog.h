@@ -1,0 +1,35 @@
+#ifndef RME_WORLD_CATALOG_H_
+#define RME_WORLD_CATALOG_H_
+
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace WorldGen {
+
+	// A reusable client-independent construction footprint. Symbols:
+	// # wall, . floor, + street entrance, a/b alternating vertical landings,
+	// , courtyard ground, space = void (no tile above/below is implied).
+	struct Blueprint {
+		std::string id;
+		int weight = 1;
+		int maxLevels = 4;
+		bool allowRotation = true;
+		std::vector<std::string> rows;
+		std::vector<std::string> upperRows;
+		std::vector<std::string> biomes;
+	};
+
+	using BlueprintCatalog = std::vector<Blueprint>;
+
+	bool ValidateBlueprint(const Blueprint& blueprint, std::string& error);
+	bool ValidateCatalog(const BlueprintCatalog& catalog, std::string& error);
+	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns);
+	std::pair<int, int> FindBlueprintSymbol(const std::vector<std::string>& rows, char symbol);
+	const BlueprintCatalog& DefaultBlueprints();
+
+	// JSON/file adapter; compiled with the existing json_spirit parser.
+	bool LoadBlueprintCatalog(const std::string& filename, BlueprintCatalog& catalog, std::string& error);
+
+}
+#endif

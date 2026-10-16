@@ -77,7 +77,8 @@ namespace WorldGen {
 					out << ',';
 				}
 				first = false;
-				out << "{\"offsetZ\":" << layer.offsetZ << ",\"cells\":" << layer.cells.size() << '}';
+				const auto tiles = std::count_if(layer.cells.begin(), layer.cells.end(), [](const Cell& cell) { return cell.terrain != Terrain::Void; });
+				out << "{\"offsetZ\":" << layer.offsetZ << ",\"cells\":" << layer.cells.size() << ",\"tiles\":" << tiles << '}';
 			}
 			out << "],\n  \"settlements\": [";
 			first = true;

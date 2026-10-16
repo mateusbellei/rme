@@ -153,16 +153,22 @@ namespace WorldGen {
 		if (!ValidateRows(b.rows, false, b.maxLevels > 1, error)) {
 			return false;
 		}
-		if (!b.upperRows.empty()) {
-			if (b.upperRows.size() != b.rows.size() || b.upperRows.front().size() != b.rows.front().size()) {
+		if (!b.upperFloors.empty() && (!b.upperRows.empty() || b.upperFloors.size() != size_t(b.maxLevels - 1))) {
+			error = "upperFloors must define every upper level and cannot be combined with upperRows.";
+			return false;
+		}
+		const size_t upperCount = b.upperFloors.empty() ? size_t(!b.upperRows.empty()) : b.upperFloors.size();
+		for (size_t level = 0; level < upperCount; ++level) {
+			const auto& rows = b.upperFloors.empty() ? b.upperRows : b.upperFloors[level];
+			if (rows.size() != b.rows.size() || rows.front().size() != b.rows.front().size()) {
 				error = "Upper blueprint floor dimensions must match the base.";
 				return false;
 			}
-			if (!ValidateRows(b.upperRows, true, b.maxLevels > 1, error)) {
+			if (!ValidateRows(rows, true, b.maxLevels > 1, error)) {
 				return false;
 			}
 			for (char symbol : { 'a', 'b' }) {
-				if (FindBlueprintSymbol(b.rows, symbol) != FindBlueprintSymbol(b.upperRows, symbol)) {
+				if (FindBlueprintSymbol(b.rows, symbol) != FindBlueprintSymbol(rows, symbol)) {
 					error = "Blueprint landings must align between floors.";
 					return false;
 				}
@@ -178,7 +184,7 @@ namespace WorldGen {
 				error = "Blueprint furniture coordinates, floor or orientation brushes are invalid.";
 				return false;
 			}
-			const auto& rows = object.floor > 0 && !b.upperRows.empty() ? b.upperRows : b.rows;
+			const auto& rows = BlueprintRowsForFloor(b, object.floor);
 			const char symbol = rows[object.y][object.x];
 			if (symbol != '.' || !occupied.emplace(object.floor, object.x, object.y).second) {
 				error = "Furniture anchors need distinct plain interior floor cells, away from entrances and landings.";
@@ -218,6 +224,18 @@ namespace WorldGen {
 		return true;
 	}
 
+	const std::vector<std::string>& BlueprintRowsForFloor(const Blueprint& blueprint, int level) {
+		if (level > 0) {
+			if (size_t(level) <= blueprint.upperFloors.size()) {
+				return blueprint.upperFloors[size_t(level - 1)];
+			}
+			if (!blueprint.upperRows.empty()) {
+				return blueprint.upperRows;
+			}
+		}
+		return blueprint.rows;
+	}
+
 	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns) {
 		Blueprint result = blueprint;
 		const int turns = ((quarterTurns % 4) + 4) % 4;
@@ -238,6 +256,9 @@ namespace WorldGen {
 		}
 		if (!result.upperRows.empty()) {
 			result.upperRows = RotateRows(result.upperRows, turns);
+		}
+		for (auto& rows : result.upperFloors) {
+			rows = RotateRows(rows, turns);
 		}
 		return result;
 	}

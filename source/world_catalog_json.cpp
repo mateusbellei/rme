@@ -70,6 +70,28 @@ namespace WorldGen {
 				error = "Template rows, upperRows and biomes must be bounded string arrays.";
 				return false;
 			}
+			const auto upperFloors = entry.find("upperFloors");
+			if (upperFloors != entry.end()) {
+				if (upperFloors->second.type() != json::array_type || upperFloors->second.get_array().empty() || upperFloors->second.get_array().size() > 3) {
+					error = "upperFloors must be an array of 1..3 bounded row arrays.";
+					return false;
+				}
+				for (const auto& floor : upperFloors->second.get_array()) {
+					if (floor.type() != json::array_type || floor.get_array().size() < 5 || floor.get_array().size() > 32) {
+						error = "Each upperFloors entry must contain 5..32 rows.";
+						return false;
+					}
+					std::vector<std::string> rows;
+					for (const auto& row : floor.get_array()) {
+						if (row.type() != json::str_type || row.get_str().size() > 32) {
+							error = "Upper floor rows must be strings of at most 32 cells.";
+							return false;
+						}
+						rows.push_back(row.get_str());
+					}
+					blueprint.upperFloors.push_back(std::move(rows));
+				}
+			}
 			const auto materials = entry.find("materials");
 			if (materials != entry.end()) {
 				if (materials->second.type() != json::obj_type) {

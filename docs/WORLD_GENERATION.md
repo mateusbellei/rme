@@ -164,7 +164,8 @@ planner as a fallback. In World settings, select a custom construction catalog
 to replace that set. Empty/default paths use the bundled catalog when available.
 
 Each version-1 catalog contains a `templates` array. Templates declare a unique
-`id`, `weight`, `maxLevels`, `rotate`, rectangular `rows`, optional `upperRows`,
+`id`, `weight`, `maxLevels`, `rotate`, rectangular `rows`, optional `upperRows` or
+`upperFloors`,
 and optional allowed `biomes` (grass, forest, desert, snow or beach). Symbols:
 
 | Symbol | Meaning |
@@ -179,10 +180,27 @@ and optional allowed `biomes` (grass, forest, desert, snow or beach). Symbols:
 Templates must be 5..32 cells per dimension, contain one street entrance,
 connect all rooms to that entrance, and provide safe, aligned `a`/`b` landings
 for multiple floors. Upper floors must have matching dimensions and no outer
-entrance. If `upperRows` is omitted, the base outline repeats with its outer
+entrance. If both upper definitions are omitted, the base outline repeats with its outer
 door closed and courtyard grass left as void. Doors are rotated toward the
 settlement center where rotation is allowed; access paths route to the actual
 oriented door. Per-template height limits can create varied building heights.
+
+`upperRows` repeats a single upper layout. For a different layout at every
+height, use `upperFloors`: an array of row arrays for levels 1 through
+`maxLevels-1` (one to three entries). Supply every upper level and omit
+`upperRows`. Each array has the same rectangular dimensions as the base; spaces
+can inset a tower, leave a courtyard open or remove an entire corner from one
+level. All rooms must remain connected and both `a`/`b` anchors must align with
+the base. Furniture anchors are checked against their actual floor's layout.
+Rotation transforms every floor and its furniture together.
+
+`example_layered_town.json` uses `layered_buildings.json`: three-floor buildings
+with interior partitions on the middle floor and a narrower 9×9 top inside a
+13×13 footprint. The CLI regression exports and byte-verifies the OTBM, checks
+all vertical routes, and compares planned per-floor tile counts with the actual
+export. `plan.json` now records both raster `cells` and non-void `tiles` per
+layer. These plans still use the configured floor/wall materials and teleport
+bindings; they do not infer a client's roof or physical stair sprites.
 
 Invalid catalogs fail before map editing. Limits are 64 templates and 2 MiB
 of JSON. The catalog is a semantic footprint format; it does not yet import

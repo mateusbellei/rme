@@ -31,6 +31,8 @@ namespace WorldGen {
 		std::string role;
 		int maxPerSettlement = 0; // Zero means unlimited.
 		int minPerSettlement = 0; // Required in each generated settlement of an allowed biome.
+		// Optional explicit rows for levels 1..maxLevels-1; exclusive with upperRows.
+		std::vector<std::vector<std::string>> upperFloors;
 	};
 
 	using BlueprintCatalog = std::vector<Blueprint>;
@@ -38,6 +40,7 @@ namespace WorldGen {
 	bool ValidateBlueprint(const Blueprint& blueprint, std::string& error);
 	bool ValidateCatalog(const BlueprintCatalog& catalog, std::string& error);
 	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns);
+	const std::vector<std::string>& BlueprintRowsForFloor(const Blueprint& blueprint, int level);
 	std::pair<int, int> FindBlueprintSymbol(const std::vector<std::string>& rows, char symbol);
 	const BlueprintCatalog& DefaultBlueprints();
 	const std::string& BlueprintRole(const Blueprint& blueprint);

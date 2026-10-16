@@ -333,6 +333,66 @@ static void TestCityBlocks() {
 	Check(Build(settings, plan, error, &catalog, &input) && plan.buildings.size() == 1 && !plan.warnings.empty(), "An exhausted catalog must report an underfilled settlement without exceeding caps");
 }
 
+static void TestLayeredBuildings() {
+	Blueprint blueprint;
+	blueprint.id = "layered";
+	blueprint.maxLevels = 3;
+	blueprint.allowRotation = false;
+	blueprint.rows = { "#########", "#.......#", "#.a...b.#", "#.......#", "#.......#", "#.......#", "#.......#", "#.......#", "####+####" };
+	auto middle = blueprint.rows;
+	middle.back() = "#########";
+	middle[4] = "#..#.#..#";
+	blueprint.upperFloors = { middle, { "         ", " ####### ", " #a...b# ", " #.....# ", " #.....# ", " #.....# ", " #.....# ", " ####### ", "         " } };
+	Settings settings;
+	settings.width = settings.height = 128;
+	settings.settlementCount = 1;
+	settings.buildingsPerSettlement = 1;
+	settings.buildingLevels = 3;
+	settings.riverCount = 0;
+	GeographyInput input;
+	input.elevation.assign(128 * 128, 6000);
+	input.biomes.assign(128 * 128, Terrain::Grass);
+	std::string error;
+	for (int rotation = 0; rotation < 4; ++rotation) {
+		BlueprintCatalog catalog { RotateBlueprint(blueprint, rotation) };
+		Plan plan;
+		Check(Build(settings, plan, error, &catalog, &input) && Validate(plan).valid && plan.buildings.size() == 1, "Each rotated floor-specific construction must remain connected");
+		Check(plan.links.size() == 2, "Three-floor buildings must retain both vertical routes");
+		const auto& building = plan.buildings.front();
+		for (int level = 1; level <= 2; ++level) {
+			size_t occupied = 0;
+			for (const auto& cell : plan.FindLayer(-level)->cells) occupied += cell.terrain != Terrain::Void;
+			Check(occupied == size_t(level == 1 ? 81 : 49), "Upper floors must use their own stepped footprint rather than a repeated lower floor");
+			for (int y = 0; y < building.height; ++y) {
+				for (int x = 0; x < building.width; ++x) {
+					const char symbol = BlueprintRowsForFloor(catalog[0], level)[y][x];
+					const auto& cell = plan.FindLayer(-level)->cells[plan.Index({ building.origin.x + x, building.origin.y + y })];
+					Check((symbol == ' ') == (cell.terrain == Terrain::Void), "Explicit voids must survive plan stamping at every rotation");
+				}
+			}
+		}
+		auto changed = plan;
+		changed.catalog[0].upperFloors[0][1][1] = '#';
+		Check(Fingerprint(changed) != Fingerprint(plan), "Fingerprint must cover every explicit upper floor");
+		const auto restored = RotateBlueprint(catalog[0], 4 - rotation);
+		Check(restored.upperFloors == blueprint.upperFloors, "Four rotations must restore all explicit upper floors");
+	}
+	auto invalid = blueprint;
+	invalid.upperFloors.pop_back();
+	Check(!ValidateBlueprint(invalid, error), "Incomplete explicit floor lists must fail");
+	invalid = blueprint;
+	invalid.upperRows = middle;
+	Check(!ValidateBlueprint(invalid, error), "Repeated and explicit upper definitions cannot be mixed");
+	invalid = blueprint;
+	invalid.upperFloors[1][2] = " #.a.b.# ";
+	Check(!ValidateBlueprint(invalid, error), "Landings must align in every explicitly defined floor");
+	invalid = blueprint;
+	invalid.objects.push_back({ 1, 1, 1, { "chair" }, true });
+	Check(ValidateBlueprint(invalid, error), "Furniture anchors must use the selected floor layout");
+	invalid.objects.back().floor = 2;
+	Check(!ValidateBlueprint(invalid, error), "Furniture cannot float in another floor's void or wall");
+}
+
 static void TestConstructionMinimums() {
 	Settings settings;
 	settings.width = settings.height = 256;
@@ -425,6 +485,7 @@ int main() {
 		TestReliefAndBiomeDetail();
 		TestCityBlocks();
 		TestConstructionMinimums();
+		TestLayeredBuildings();
 		TestCancellation();
 		TestCaves();
 		TestCaveEntrances();

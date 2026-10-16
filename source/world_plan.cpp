@@ -869,7 +869,7 @@ namespace WorldGen {
 						continue;
 					}
 					const auto blueprint = RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
-					auto rows = blueprint.upperRows.empty() ? blueprint.rows : blueprint.upperRows;
+					const auto& rows = BlueprintRowsForFloor(blueprint, level);
 					for (int y = 0; y < b.height; ++y) {
 						for (int x = 0; x < b.width; ++x) {
 							char symbol = rows[y][x];
@@ -1407,6 +1407,14 @@ namespace WorldGen {
 			if (blueprint.minPerSettlement) {
 				string("construction-minimum");
 				add(uint32_t(blueprint.minPerSettlement));
+			}
+			if (!blueprint.upperFloors.empty()) {
+				string("explicit-upper-floors");
+				add(uint32_t(blueprint.upperFloors.size()));
+				for (const auto& rows : blueprint.upperFloors) {
+					add(uint32_t(rows.size()));
+					for (const auto& row : rows) string(row);
+				}
 			}
 			add(blueprint.weight);
 			add(blueprint.maxLevels);

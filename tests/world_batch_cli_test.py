@@ -128,6 +128,23 @@ def main():
         assert failed.returncode == 1 and "minimums exceed" in failed.stderr
         assert not Path(balanced_command[6]).exists()
 
+        layered_output = Path(temporary) / "layered-town"
+        layered_command = command.copy()
+        layered_command[2] = str(source / "data/procedural/recipes/example_layered_town.json")
+        layered_command[6] = str(layered_output)
+        layered_command.append("--no-previews")
+        generated = subprocess.run(layered_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        layered = json.loads((layered_output / "plan.json").read_text(encoding="utf-8"))
+        layered_report = json.loads((layered_output / "generation.json").read_text(encoding="utf-8"))
+        layer_tiles = {layer["offsetZ"]: layer["tiles"] for layer in layered["layers"]}
+        assert layered["buildings"] and all(building["levels"] == 3 for building in layered["buildings"])
+        assert layer_tiles[-1] == len(layered["buildings"]) * 13 * 13
+        assert layer_tiles[-2] == len(layered["buildings"]) * 9 * 9
+        assert sum(layer_tiles.values()) == layered_report["tiles"]
+        assert layered_report["verifiedOTBM"] is True
+
         for biome, rgb in [("desert", (232, 192, 96)), ("snow", (240, 248, 255))]:
             hint = Path(temporary) / (biome + ".png")
             flat_biome_png(hint, rgb)

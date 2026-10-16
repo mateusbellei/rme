@@ -109,7 +109,7 @@ static void TestRecipes() {
 	for (const char* example : { "example_forest.json", "example_village_forest.json", "example_desert_village.json", "example_training_ground.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error), "Existing v3 recipes must remain loadable");
 	}
-	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json", "example_ridged_continent.json", "example_large_continent_1098.json", "example_balanced_city.json" }) {
+	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json", "example_ridged_continent.json", "example_large_continent_1098.json", "example_balanced_city.json", "example_layered_town.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error) && loaded.source == GenerationSource::WorldPlan, "Bundled world recipes must load");
 	}
 	std::filesystem::remove(path);
@@ -193,6 +193,11 @@ static void TestCatalogJson() {
 		Check(catalog[i].id == WorldGen::DefaultBlueprints()[i].id && catalog[i].rows == WorldGen::DefaultBlueprints()[i].rows && catalog[i].upperRows == WorldGen::DefaultBlueprints()[i].upperRows, "Data catalog must match the fallback used without client files");
 	}
 	const auto path = std::filesystem::temp_directory_path() / ("rme-world-catalog-" + std::to_string(wxGetProcessId()) + ".json");
+	Check(WorldGen::LoadBlueprintCatalog("data/procedural/layered_buildings.json", catalog, error) && catalog[0].upperFloors.size() == 2, "Explicit upper floor arrays must parse from the bundled layered catalog");
+	for (const char* floors : { "false", "[]", "[[]]", "[[1,2,3,4,5]]", "[null]", "[[\"#####\",\"#a.b#\",\"#...#\",\"#####\"]]" }) {
+		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"layered\",\"maxLevels\":2,\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"upperFloors\":" << floors << "}]}";
+		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error) && catalog[0].upperFloors.size() == 2, "Malformed upper floor arrays must fail without replacing the previous catalog");
+	}
 	{
 		std::ifstream input("data/procedural/buildings.json", std::ios::binary);
 		const std::string saved((std::istreambuf_iterator<char>(input)), {});

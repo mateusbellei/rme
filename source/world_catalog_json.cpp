@@ -2,6 +2,7 @@
 
 #include "world_catalog.h"
 #include "json.h"
+#include "procedural_json.h"
 
 #include <fstream>
 #include <filesystem>
@@ -9,20 +10,15 @@
 namespace WorldGen {
 	bool LoadBlueprintCatalog(const std::string& filename, BlueprintCatalog& catalog, std::string& error) {
 		error.clear();
-		std::ifstream input(std::filesystem::u8path(filename));
-		if (input) {
-			input.seekg(0, std::ios::end);
-			if (input.tellg() > 2 * 1024 * 1024) {
-				error = "Construction catalog exceeds the 2 MiB input limit.";
-				return false;
-			}
-			input.seekg(0, std::ios::beg);
-		}
 		json::mValue root;
-		if (!input || !json::read(input, root) || root.type() != json::obj_type) {
-			error = "Cannot read construction catalog JSON: " + filename;
+		if (!ProceduralJSON::ReadFile(filename, 2 * 1024 * 1024, root, error)) {
 			return false;
 		}
+		if (root.type() != json::obj_type) {
+			error = "Construction catalog JSON must be an object.";
+			return false;
+		}
+
 		const auto& object = root.get_obj();
 		const auto version = object.find("version"), templates = object.find("templates");
 		if (version == object.end() || version->second.type() != json::int_type || version->second.get_int64() != 1 || templates == object.end() || templates->second.type() != json::array_type || templates->second.get_array().size() > 64) {

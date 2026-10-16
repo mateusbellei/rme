@@ -119,6 +119,7 @@ ${CMAKE_CURRENT_LIST_DIR}/procedural_common.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_legend.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_mask.h
 ${CMAKE_CURRENT_LIST_DIR}/prompt_generator.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_json.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_recipe.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_sidecar.h
 ${CMAKE_CURRENT_LIST_DIR}/image_mask_generator.h

@@ -61,13 +61,26 @@ static void TestRecipes() {
 	Check(loaded.world.connectionItemId == 1387 && loaded.world.wallBrushName == "Stone walls" && !loaded.world.protectExisting, "Client/protection settings must round-trip");
 	Check(loaded.world.catalogPath == original.world.catalogPath, "Construction catalog path must round-trip");
 	Check(loaded.world.heightmapPath == original.world.heightmapPath && loaded.world.biomeHintsPath == original.world.biomeHintsPath, "World raster paths must round-trip");
+	{
+		std::ifstream input(path, std::ios::binary);
+		const std::string saved((std::istreambuf_iterator<char>(input)), {});
+		input.close();
+		std::ofstream(path, std::ios::binary) << "\xef\xbb\xbf" << saved;
+		Check(ProceduralRecipe::Load(file, loaded, error) && loaded.seed == original.seed, "UTF-8 BOM recipes must preserve their settings");
+		auto invalidWall = original;
+		invalidWall.world.wallBrushName = wxString::FromUTF8(std::string("stone\0other", 11));
+		Check(!ProceduralRecipe::Save(file, invalidWall, error), "Saving a NUL wall binding must fail before truncating its name");
+		Check(ProceduralRecipe::Load(file, loaded, error) && loaded.world.wallBrushName == original.world.wallBrushName, "Invalid wall binding must preserve the existing recipe file");
+		std::ofstream(path, std::ios::binary) << "{\"legend\":\"" << char(255) << "\"}";
+		Check(!ProceduralRecipe::Load(file, loaded, error), "Invalid UTF-8 paths must not silently become blank defaults");
+	}
 	const auto unicodePath = std::filesystem::temp_directory_path() / std::filesystem::path(u8"rme-world-\u00E7-\u6D4B\u8BD5.json");
 	const auto encodedPath = unicodePath.u8string();
 	const wxString unicodeFile = wxString::FromUTF8(std::string(encodedPath.begin(), encodedPath.end()));
 	Check(ProceduralRecipe::Save(unicodeFile, original, error) && ProceduralRecipe::Load(unicodeFile, loaded, error), "Recipe paths must support Unicode on Windows and Linux");
 	std::filesystem::remove(unicodePath);
 	for (const char* malformed : {
-			 R"({"version":99})", R"({"pathBase":"unknown"})", R"({"legend":"bad\u0000path"})", R"({"world":{"heightmap":"bad\u0000path"}})", R"({"source":false})", R"({"preset":"typo"})", R"({"region":[]})", R"({"seed":1,"useSelection":0})", R"({"referenceWeight":101})", R"({"doodads":{"density":4294967296}})", R"({"doodads":{"enabled":1}})", R"({"pipeline":{"borderize":"yes"}})", R"({"seed":4294967296})", R"({"seed":1.5})",
+			 R"({"version":99})", R"({"world":{"wallBrush":"stone\u0000other"}})", "{} trailing", "{} {}", R"({"pathBase":"unknown"})", R"({"legend":"bad\u0000path"})", R"({"world":{"heightmap":"bad\u0000path"}})", R"({"source":false})", R"({"preset":"typo"})", R"({"region":[]})", R"({"seed":1,"useSelection":0})", R"({"referenceWeight":101})", R"({"doodads":{"density":4294967296}})", R"({"doodads":{"enabled":1}})", R"({"pipeline":{"borderize":"yes"}})", R"({"seed":4294967296})", R"({"seed":1.5})",
 			 R"({"source":"world","world":{"caveDepth":9}})",
 			 R"({"source":"world","world":{"seaLevel":4294967296}})",
 			 R"({"source":"world","world":{"shape":"typo"}})",
@@ -175,6 +188,14 @@ static void TestCatalogJson() {
 		Check(catalog[i].id == WorldGen::DefaultBlueprints()[i].id && catalog[i].rows == WorldGen::DefaultBlueprints()[i].rows && catalog[i].upperRows == WorldGen::DefaultBlueprints()[i].upperRows, "Data catalog must match the fallback used without client files");
 	}
 	const auto path = std::filesystem::temp_directory_path() / ("rme-world-catalog-" + std::to_string(wxGetProcessId()) + ".json");
+	{
+		std::ifstream input("data/procedural/buildings.json", std::ios::binary);
+		const std::string saved((std::istreambuf_iterator<char>(input)), {});
+		std::ofstream(path, std::ios::binary) << "\xef\xbb\xbf" << saved;
+		Check(WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "UTF-8 BOM construction catalogs must load");
+		std::ofstream(path, std::ios::binary) << saved << "{}";
+		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "A second JSON document must not be silently ignored");
+	}
 	for (const char* invalid : {
 			 R"({"version":2,"templates":[]})", R"({"version":1,"templates":[false]})",
 			 R"({"version":1,"templates":[{"id":"bad","rows":"not an array"}]})",

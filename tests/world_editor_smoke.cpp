@@ -145,8 +145,8 @@ namespace {
 	}
 
 	void WriteFurnishedCatalog(const std::filesystem::path& path) {
-		std::ofstream out(path);
-		out << "{\"version\":1,\"templates\":[";
+		std::ofstream out(path, std::ios::binary);
+		out << "\xef\xbb\xbf" << "{\"version\":1,\"templates\":[";
 		bool first = true;
 		for (const auto& b : WorldGen::DefaultBlueprints()) {
 			if (!first) {
@@ -188,8 +188,8 @@ namespace {
 	}
 
 	void WriteLegend(const std::filesystem::path& path, bool bad = false) {
-		std::ofstream out(path);
-		out << "{\"entries\":[";
+		std::ofstream out(path, std::ios::binary);
+		out << "\xef\xbb\xbf" << "{\"entries\":[";
 		for (int i = 0; i < int(WorldGen::Terrain::Void); ++i) {
 			const auto terrain = static_cast<WorldGen::Terrain>(i);
 			const uint32_t color = WorldGen::TerrainColor(terrain);

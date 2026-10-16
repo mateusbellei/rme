@@ -6,6 +6,7 @@
 
 #include "procedural_recipe.h"
 #include "json.h"
+#include "procedural_json.h"
 
 #include <fstream>
 #include <filesystem>
@@ -125,6 +126,11 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 		file.MakeRelativeTo(recipe.GetPath()); // Different volumes retain their absolute path.
 		return nstr(file.GetFullPath(wxPATH_UNIX));
 	};
+	if (spec.world.wallBrushName.find(wxUniChar(0)) != wxString::npos || spec.world.wallBrushName.utf8_string().size() > 128) {
+		error = "World wall brush must be at most 128 bytes without embedded NUL.";
+		return false;
+	}
+
 	json::mObject root = MakeObject();
 	root["version"] = json::mValue(4);
 	if (paths == PathMode::RelativeToRecipe) {
@@ -209,23 +215,10 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		error = "Recipe filename contains an embedded NUL.";
 		return false;
 	}
-	std::ifstream input(std::filesystem::u8path(nstr(path)));
-	if (!input.good()) {
-		error = "Could not open recipe: " + path;
-		return false;
-	}
-
-	input.seekg(0, std::ios::end);
-	const auto bytes = input.tellg();
-	input.seekg(0, std::ios::beg);
-	if (bytes < 0 || bytes > 4 * 1024 * 1024) {
-		error = "Recipe exceeds the 4 MiB input limit.";
-		return false;
-	}
-
 	json::mValue root;
-	if (!json::read(input, root) || root.type() != json::obj_type) {
-		error = "Invalid recipe JSON: " + path;
+	std::string readError;
+	if (!ProceduralJSON::ReadFile(nstr(path), 4 * 1024 * 1024, root, readError) || root.type() != json::obj_type) {
+		error = readError.empty() ? wxString("Recipe JSON must be an object.") : wxString::FromUTF8(readError);
 		return false;
 	}
 
@@ -493,7 +486,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 				error = "World wallBrush must be a string.";
 				return false;
 			}
-			spec.world.wallBrushName = wxstr(wall->second.get_str());
+			spec.world.wallBrushName = wxString::FromUTF8(wall->second.get_str());
 		}
 	}
 	if (!validNumbers || spec.reference.blendWeight < 0 || spec.reference.blendWeight > 100 || spec.elevation.maxLevels < 0 || spec.elevation.maxLevels > MAP_MAX_LAYER || spec.world.connectionItemId < 0 || spec.world.connectionItemId > 65535 || spec.region.width <= 0 || spec.region.height <= 0 || spec.region.z < 0 || spec.region.z > MAP_MAX_LAYER || spec.region.originX < 0 || spec.region.originY < 0) {
@@ -510,6 +503,11 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			return false;
 		}
 	}
+	if (spec.world.wallBrushName.find(wxUniChar(0)) != wxString::npos || spec.world.wallBrushName.utf8_string().size() > 128) {
+		error = "World wall brush must be at most 128 bytes without embedded NUL.";
+		return false;
+	}
+
 	const auto pathBase = object.find("pathBase");
 	bool relative = false;
 	if (pathBase != object.end()) {

@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "world_editor.h"
+#include "procedural_json.h"
 #include "procedural_common.h"
 #include "procedural_legend.h"
 #include "editor.h"
@@ -96,44 +97,33 @@ namespace WorldEditor {
 			keywords[5] = { "palm", "shell", "coral", "beach" };
 			const char* names[] = { "", "forest", "desert", "ice", "cave", "coast" };
 			const wxString path = g_gui.GetProceduralDataDirectory() + "biome_doodads.json";
-			std::ifstream input(std::filesystem::u8path(nstr(path)), std::ios::binary);
-			if (input) {
-				input.seekg(0, std::ios::end);
-				const auto size = input.tellg();
-				input.seekg(0, std::ios::beg);
-				std::string contents;
-				if (size >= 0 && size <= 1024 * 1024) {
-					contents.assign(std::istreambuf_iterator<char>(input), {});
-					if (contents.compare(0, 3, "\xef\xbb\xbf") == 0) {
-						contents.erase(0, 3);
-					}
-				}
-				json::mValue root;
-				if (!contents.empty() && json::read(contents, root) && root.type() == json::obj_type) {
-					const auto presets = root.get_obj().find("presets");
-					if (presets != root.get_obj().end() && presets->second.type() == json::obj_type) {
-						for (int habitat = 1; habitat <= 5; ++habitat) {
-							const auto preset = presets->second.get_obj().find(names[habitat]);
-							if (preset == presets->second.get_obj().end() || preset->second.type() != json::obj_type) {
-								continue;
-							}
-							const auto list = preset->second.get_obj().find("keywords");
-							if (list == preset->second.get_obj().end() || list->second.type() != json::array_type || list->second.get_array().size() > 64) {
-								continue;
-							}
-							std::vector<std::string> parsed;
-							for (const auto& value : list->second.get_array()) {
-								if (value.type() == json::str_type && !value.get_str().empty() && value.get_str().size() <= 128) {
-									parsed.push_back(as_lower_str(value.get_str()));
-								}
-							}
-							keywords[habitat] = std::move(parsed);
+			json::mValue root;
+			std::string readError;
+			if (ProceduralJSON::ReadFile(nstr(path), 1024 * 1024, root, readError) && root.type() == json::obj_type) {
+				const auto presets = root.get_obj().find("presets");
+				if (presets != root.get_obj().end() && presets->second.type() == json::obj_type) {
+					for (int habitat = 1; habitat <= 5; ++habitat) {
+						const auto preset = presets->second.get_obj().find(names[habitat]);
+						if (preset == presets->second.get_obj().end() || preset->second.type() != json::obj_type) {
+							continue;
 						}
+						const auto list = preset->second.get_obj().find("keywords");
+						if (list == preset->second.get_obj().end() || list->second.type() != json::array_type || list->second.get_array().size() > 64) {
+							continue;
+						}
+						std::vector<std::string> parsed;
+						for (const auto& value : list->second.get_array()) {
+							if (value.type() == json::str_type && !value.get_str().empty() && value.get_str().size() <= 128) {
+								parsed.push_back(as_lower_str(value.get_str()));
+							}
+						}
+						keywords[habitat] = std::move(parsed);
 					}
-				} else {
-					stats.warnings.push_back("Biome decoration settings could not be read; built-in keyword groups were used.");
 				}
+			} else {
+				stats.warnings.push_back("Biome decoration settings could not be read; built-in keyword groups were used.");
 			}
+
 			std::array<std::vector<DoodadBrush*>, 6> brushes;
 			for (int i = 1; i <= 5; ++i) {
 				if (!keywords[i].empty()) {

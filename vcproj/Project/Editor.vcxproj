@@ -487,6 +487,7 @@
     <ClCompile Include="..\..\source\world_catalog_json.cpp" />
     <ClInclude Include="..\..\source\world_plan.h" />
     <ClInclude Include="..\..\source\world_editor.h" />
+    <ClInclude Include="..\..\source\procedural_json.h" />
     <ClInclude Include="..\..\source\procedural_legend.h" />
     <ClInclude Include="..\..\source\procedural_mask.h" />
     <ClCompile Include="..\..\source\world_plan.cpp">

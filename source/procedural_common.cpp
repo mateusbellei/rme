@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "procedural_json.h"
 
 #include "procedural_common.h"
 #include "procedural_generator.h"
@@ -287,15 +288,14 @@ bool ProceduralCommon::LoadLegend(const wxString& path, LegendMapping& mapping, 
 		return true;
 	}
 
-	std::ifstream input(std::filesystem::u8path(nstr(path)));
-	if (!input.good()) {
-		error = "Failed to open legend JSON: " + path;
+	if (path.find(wxUniChar(0)) != wxString::npos) {
+		error = "Legend filename contains an embedded NUL.";
 		return false;
 	}
-
 	json::mValue root;
-	if (!json::read(input, root) || root.type() != json::obj_type) {
-		error = "Invalid legend JSON: " + path;
+	std::string readError;
+	if (!ProceduralJSON::ReadFile(nstr(path), 4 * 1024 * 1024, root, readError) || root.type() != json::obj_type) {
+		error = readError.empty() ? wxString("Legend JSON must be an object.") : wxString::FromUTF8(readError);
 		return false;
 	}
 

@@ -478,3 +478,11 @@ colors interiors by role, retains wall/entrance/travel markers, and lists role
 counts and colors below the image. Diagnostic building records include the role;
 PNG export includes an additional roles view per floor. Both role and quota
 bindings contribute to the plan fingerprint.
+
+
+Recipe, construction-catalog, legend and biome-decoration JSON files accept UTF-8
+with or without a byte-order marker. Loading consumes one complete document;
+trailing documents/text and invalid raw UTF-8 fail. Input limits are 4 MiB for
+recipes/legends, 2 MiB for catalogs and 1 MiB for biome decoration settings.
+Invalid recipe/catalog loads preserve the caller's configuration. Wall brush
+names also reject embedded NUL instead of being silently truncated on saving.

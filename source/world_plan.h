@@ -104,6 +104,7 @@ namespace WorldGen {
 		int buildingsPerSettlement = 8;
 		int buildingLevels = 1;
 		int caveDepth = 0;
+		int caveEntrances = 1;
 		int caveFill = 45;
 		int roadWidth = 2;
 		SettlementLayout settlementLayout = SettlementLayout::Organic;

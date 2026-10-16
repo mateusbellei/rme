@@ -33,7 +33,8 @@
     "relief": "ridges",
     "biomeDetail": 75,
     "temperatureBias": -900,
-    "riverWidth": 5
+    "riverWidth": 5,
+    "caveEntrances": 6
   },
   "doodads": {
     "enabled": true,

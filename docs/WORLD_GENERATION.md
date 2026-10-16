@@ -527,3 +527,23 @@ recipes. Both settings are editable in World settings, recorded in recipes and
 diagnostics, and included in the plan fingerprint. Try the generic
 `example_ridged_continent.json`; the standalone planner also accepts optional
 `[smooth|ridges] [biome detail 0-100]` arguments after its building count.
+
+
+## Distributed cave entrances
+
+`world.caveEntrances` requests 1–16 separated surface access sites when cave
+depth is nonzero. The first remains at the main settlement (or nearest suitable
+central dry landing). Additional sites prefer mountain foothills and require a
+clear natural surface patch outside roads, buildings and existing reservations.
+The first cave floor receives corresponding safe landing rooms; its connector
+joins any newly carved room to the underground component. Every link has a
+walkable arrival beside its return portal. The setting uses the same paired
+teleport travel as other world levels; physical holes/stairs need client-specific
+travel support.
+
+Sites and arrivals are reserved before decoration. If the requested separation
+cannot fit, the plan reports fewer entrances. Default 1 preserves earlier
+recipes. `example_ridged_continent.json` requests six entrances; the world
+settings dialog, recipes and diagnostic manifest expose the count. Editor tests
+exercise three entrances through cancellation, undo/redo and actual OTBM reload;
+the stock 10.98 CLI also exercises a ridged world with four entrances.

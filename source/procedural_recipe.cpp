@@ -181,6 +181,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["buildings"] = json::mValue(spec.world.settings.buildingsPerSettlement);
 	world["buildingLevels"] = json::mValue(spec.world.settings.buildingLevels);
 	world["caveDepth"] = json::mValue(spec.world.settings.caveDepth);
+	world["caveEntrances"] = spec.world.settings.caveEntrances;
 	world["caveFill"] = json::mValue(spec.world.settings.caveFill);
 	world["roadWidth"] = json::mValue(spec.world.settings.roadWidth);
 	world["layout"] = json::mValue(spec.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks ? "blocks" : "organic");
@@ -437,6 +438,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		integer("buildings", spec.world.settings.buildingsPerSettlement);
 		integer("buildingLevels", spec.world.settings.buildingLevels);
 		integer("caveDepth", spec.world.settings.caveDepth);
+		integer("caveEntrances", spec.world.settings.caveEntrances);
 		integer("caveFill", spec.world.settings.caveFill);
 		integer("roadWidth", spec.world.settings.roadWidth);
 		integer("connectionItemId", spec.world.connectionItemId);

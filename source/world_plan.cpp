@@ -914,6 +914,70 @@ namespace WorldGen {
 					plan.links.push_back({ incoming, incoming, depth - 1, depth });
 				}
 			}
+			if (s.caveDepth > 0 && s.caveEntrances > 1) {
+				struct CaveSite {
+					int index, score;
+				};
+				std::vector<CaveSite> sites;
+				Layer* surface = plan.FindLayer(0);
+				Layer* cave = plan.FindLayer(1);
+				std::vector<Point> entrances;
+				for (const auto& link : plan.links) {
+					if (link.upperOffsetZ == 0 && link.lowerOffsetZ == 1) {
+						entrances.push_back(link.upper);
+					}
+				}
+				for (int y = 2; y < s.height - 2; y += 2) {
+					if ((y & 15) == 2) {
+						control.Poll();
+					}
+					for (int x = 2; x < s.width - 2; x += 2) {
+						bool clear = true;
+						for (int dy = -1; dy <= 1; ++dy) {
+							for (int dx = -1; dx <= 1; ++dx) {
+								const auto& upper = surface->cells[size_t(y + dy) * s.width + x + dx];
+								const auto& lower = cave->cells[size_t(y + dy) * s.width + x + dx];
+								clear = clear && DryBuildable(upper) && !(lower.flags & Reserved);
+							}
+						}
+						if (!clear) {
+							continue;
+						}
+						int mountains = 0;
+						for (Point d : kDirections) {
+							for (int distance : { 2, 3 }) {
+								const int nx = x + d.x * distance, ny = y + d.y * distance;
+								if (Inside(nx, ny, s.width, s.height)) {
+									mountains += surface->cells[size_t(ny) * s.width + nx].terrain == Terrain::Mountain;
+								}
+							}
+						}
+						const int index = y * s.width + x;
+						sites.push_back({ index, mountains * 1000 + surface->cells[index].elevation / 10 + int(Hash(s.seed, index, 97) % 400) });
+					}
+				}
+				std::sort(sites.begin(), sites.end(), [](CaveSite a, CaveSite b) { return a.score != b.score ? a.score > b.score : a.index < b.index; });
+				const int spacing = std::max(10, std::min(s.width, s.height) / 6);
+				for (CaveSite site : sites) {
+					if (int(entrances.size()) >= s.caveEntrances) {
+						break;
+					}
+					const Point p { site.index % s.width, site.index / s.width };
+					if (std::any_of(entrances.begin(), entrances.end(), [&](Point q) { return std::abs(p.x - q.x) + std::abs(p.y - q.y) < spacing; })) {
+						continue;
+					}
+					ClearLanding(plan, *surface, p, surface->cells[site.index].terrain);
+					ClearLanding(plan, *cave, p, Terrain::CaveFloor);
+					plan.links.push_back({ p, p, 0, 1 });
+					entrances.push_back(p);
+				}
+				if (entrances.size() > 1) {
+					ConnectCave(cave->cells, s.width, s.height);
+				}
+				if (int(entrances.size()) < s.caveEntrances) {
+					plan.warnings.push_back("Fewer separated cave entrance sites fit than requested.");
+				}
+			}
 			for (auto& link : plan.links) {
 				auto arrival = [&](int floor, Point portal, Point& target) {
 					Layer* layer = plan.FindLayer(floor);
@@ -986,7 +1050,7 @@ namespace WorldGen {
 			error = "World dimensions must be 32..4096 with at most 4,194,304 surface cells.";
 			return false;
 		}
-		if ((s.relief != ReliefStyle::Smooth && s.relief != ReliefStyle::Ridges) || s.biomeDetail < 0 || s.biomeDetail > 100 || (s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
+		if ((s.relief != ReliefStyle::Smooth && s.relief != ReliefStyle::Ridges) || s.biomeDetail < 0 || s.biomeDetail > 100 || (s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveEntrances < 1 || s.caveEntrances > 16 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
 			error = "World settings are outside supported ranges.";
 			return false;
 		}
@@ -1239,6 +1303,10 @@ namespace WorldGen {
 				}
 			}
 		}
+		const auto caveEntrances = std::count_if(plan.links.begin(), plan.links.end(), [](const VerticalLink& link) { return link.upperOffsetZ == 0 && link.lowerOffsetZ == 1; });
+		if (caveEntrances > plan.settings.caveEntrances || (plan.settings.caveDepth > 0 && caveEntrances == 0)) {
+			fail("Invalid number of surface cave entrances.");
+		}
 		std::vector<std::vector<int>> templateCounts(plan.settlements.size(), std::vector<int>(plan.catalog.size(), 0));
 		for (const auto& building : plan.buildings) {
 			if (building.blueprint < 0 || building.blueprint >= int(plan.catalog.size()) || building.rotation < 0 || building.rotation > 3 || building.levels < 1 || building.levels > plan.settings.buildingLevels) {
@@ -1273,6 +1341,10 @@ namespace WorldGen {
 		auto add = [&](uint32_t value) {for(int byte=0;byte<4;++byte){hash^=(value>>(byte*8))&255;hash*=1099511628211ull;} };
 		auto string = [&](const std::string& value) {add(uint32_t(value.size()));for(unsigned char byte:value){hash^=byte;hash*=1099511628211ull;} };
 		add(AlgorithmVersion);
+		if (plan.settings.caveEntrances != 1) {
+			string("cave-entrances");
+			add(uint32_t(plan.settings.caveEntrances));
+		}
 		if (plan.settings.relief != ReliefStyle::Smooth || plan.settings.biomeDetail) {
 			string("relief-biome-detail");
 			add(uint32_t(plan.settings.relief));

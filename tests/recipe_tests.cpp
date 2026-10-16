@@ -39,6 +39,7 @@ static void TestRecipes() {
 	original.world.settings.buildingsPerSettlement = 5;
 	original.world.settings.buildingLevels = 3;
 	original.world.settings.caveDepth = 2;
+	original.world.settings.caveEntrances = 5;
 	original.world.settings.caveFill = 40;
 	original.world.settings.roadWidth = 3;
 	original.world.settings.settlementLayout = WorldGen::SettlementLayout::Blocks;
@@ -60,6 +61,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.settlementCount == 4 && loaded.world.settings.buildingsPerSettlement == 5 && loaded.world.settings.buildingLevels == 3, "World settlement settings must round-trip");
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
 	Check(loaded.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks, "City street layout must round-trip");
+	Check(loaded.world.settings.caveEntrances == 5, "Surface cave entrance count must round-trip");
 	Check(loaded.world.settings.relief == WorldGen::ReliefStyle::Ridges && loaded.world.settings.biomeDetail == 67, "Relief and local biome variation must round-trip");
 	Check(loaded.world.connectionItemId == 1387 && loaded.world.wallBrushName == "Stone walls" && !loaded.world.protectExisting, "Client/protection settings must round-trip");
 	Check(loaded.world.catalogPath == original.world.catalogPath, "Construction catalog path must round-trip");
@@ -83,7 +85,7 @@ static void TestRecipes() {
 	Check(ProceduralRecipe::Save(unicodeFile, original, error) && ProceduralRecipe::Load(unicodeFile, loaded, error), "Recipe paths must support Unicode on Windows and Linux");
 	std::filesystem::remove(unicodePath);
 	for (const char* malformed : {
-			 R"({"version":99})", R"({"source":"world","world":{"relief":"unknown"}})", R"({"source":"world","world":{"biomeDetail":101}})", R"({"world":{"wallBrush":"stone\u0000other"}})", "{} trailing", "{} {}", R"({"pathBase":"unknown"})", R"({"legend":"bad\u0000path"})", R"({"world":{"heightmap":"bad\u0000path"}})", R"({"source":false})", R"({"preset":"typo"})", R"({"region":[]})", R"({"seed":1,"useSelection":0})", R"({"referenceWeight":101})", R"({"doodads":{"density":4294967296}})", R"({"doodads":{"enabled":1}})", R"({"pipeline":{"borderize":"yes"}})", R"({"seed":4294967296})", R"({"seed":1.5})",
+			 R"({"version":99})", R"({"source":"world","world":{"caveEntrances":17}})", R"({"source":"world","world":{"relief":"unknown"}})", R"({"source":"world","world":{"biomeDetail":101}})", R"({"world":{"wallBrush":"stone\u0000other"}})", "{} trailing", "{} {}", R"({"pathBase":"unknown"})", R"({"legend":"bad\u0000path"})", R"({"world":{"heightmap":"bad\u0000path"}})", R"({"source":false})", R"({"preset":"typo"})", R"({"region":[]})", R"({"seed":1,"useSelection":0})", R"({"referenceWeight":101})", R"({"doodads":{"density":4294967296}})", R"({"doodads":{"enabled":1}})", R"({"pipeline":{"borderize":"yes"}})", R"({"seed":4294967296})", R"({"seed":1.5})",
 			 R"({"source":"world","world":{"caveDepth":9}})",
 			 R"({"source":"world","world":{"seaLevel":4294967296}})",
 			 R"({"source":"world","world":{"shape":"typo"}})",

@@ -56,7 +56,7 @@ def main():
         ridged_recipe["legend"] = str(source / "data/procedural/world_legend.json")
         ridged_recipe["world"].update(catalog=str(source / "data/procedural/profiles/1098/buildings.json"),
                                       relief="ridges", biomeDetail=75, settlements=1, buildings=8,
-                                      buildingLevels=2, caveDepth=1)
+                                      buildingLevels=2, caveDepth=1, caveEntrances=4)
         ridged_recipe["region"].update(width=256, height=256)
         recipe_path = Path(temporary) / "ridged-recipe.json"
         recipe_path.write_text(json.dumps(ridged_recipe), encoding="utf-8")
@@ -74,6 +74,7 @@ def main():
         assert ridged_plan["settings"]["relief"] == "ridges" and ridged_plan["settings"]["biomeDetail"] == 75
         assert len(ridged_plan["buildings"]) >= 4 and ridged_report["furniture"] > 0
         assert ridged_report["skippedFurniture"] == 0 and ridged_report["previews"] == []
+        assert sum(link["upper"][2] == 0 and link["lower"][2] == 1 for link in ridged_plan["verticalLinks"]) == 4
         assert not list(ridged_output.glob("preview_*.png"))
         print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
               f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite")

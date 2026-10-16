@@ -151,6 +151,7 @@ static void TestSettingsMatrix() {
 		s.seaLevel = 2000 + int(seed % 10) * 500;
 		s.shape = seed % 2 ? LandShape::Continent : LandShape::Archipelago;
 		s.caveDepth = int(seed % 4);
+		s.caveEntrances = 1 + int(seed % 8);
 		s.buildingLevels = 1 + int(seed % 4);
 		s.settlementCount = int(seed % 6);
 		s.buildingsPerSettlement = int(seed % 10);
@@ -219,6 +220,36 @@ static void TestClimateAndCoast() {
 	settings.riverWidth = 7;
 	Check(Build(settings, wide, error), "Wide rivers must build");
 	Check(count(wide, Terrain::River) > count(narrow, Terrain::River) && Validate(wide).valid, "Runoff-dependent width must expand river channels without invalidating drainage");
+}
+
+static void TestCaveEntrances() {
+	Settings settings;
+	settings.width = 128;
+	settings.height = 96;
+	settings.settlementCount = 0;
+	settings.caveDepth = 3;
+	settings.caveEntrances = 6;
+	GeographyInput input;
+	input.elevation.assign(128 * 96, 6000);
+	input.biomes.assign(128 * 96, Terrain::Grass);
+	Plan plan, repeat;
+	std::string error;
+	Check(Build(settings, plan, error, nullptr, &input) && Validate(plan).valid, "Multiple surface entrances must connect to the complete cave stack");
+	int surfaceLinks = 0;
+	for (const auto& link : plan.links) {
+		if (link.upperOffsetZ == 0 && link.lowerOffsetZ == 1) {
+			++surfaceLinks;
+			Check(IsWalkable(plan.FindLayer(0)->cells[plan.Index(link.upperArrival)]) && IsWalkable(plan.FindLayer(1)->cells[plan.Index(link.lowerArrival)]), "Every cave entrance must retain walkable adjacent arrivals");
+		}
+	}
+	Check(surfaceLinks == 6, "A spacious dry region must fit the requested separated entrances");
+	for (int z = 1; z <= 3; ++z) Check(CountConnected(*plan.FindLayer(z), settings.width, settings.height) == 1, "Every added cave arrival must join its cave's walkable component");
+	Check(Build(settings, repeat, error, nullptr, &input) && Fingerprint(repeat) == Fingerprint(plan), "Distributed cave sites must be deterministic");
+	auto invalid = plan;
+	invalid.settings.caveEntrances = 1;
+	Check(!Validate(invalid).valid, "Plan validation must reject cave entrance counts above the requested cap");
+	settings.caveEntrances = 17;
+	Check(!Build(settings, repeat, error), "Cave entrance limit must be checked before allocation");
 }
 
 static void TestReliefAndBiomeDetail() {
@@ -343,6 +374,7 @@ int main() {
 		TestCityBlocks();
 		TestCancellation();
 		TestCaves();
+		TestCaveEntrances();
 		TestWorlds();
 		TestValidation();
 		TestSettingsMatrix();

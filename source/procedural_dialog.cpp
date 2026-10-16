@@ -534,6 +534,10 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	auto* buildings = spin("Buildings per settlement:", 0, 64, settings.buildingsPerSettlement);
 	auto* floors = spin("Building floors:", 1, 4, settings.buildingLevels);
 	auto* depth = spin("Cave floors below surface:", 0, 8, settings.caveDepth);
+	auto* caveEntrances = spin("Surface cave entrances:", 1, 16, settings.caveEntrances);
+	caveEntrances->Enable(settings.caveDepth > 0);
+	depth->Bind(wxEVT_SPINCTRL, [=](wxSpinEvent&) { caveEntrances->Enable(depth->GetValue() > 0); });
+	depth->Bind(wxEVT_TEXT, [=](wxCommandEvent& event) { caveEntrances->Enable(depth->GetValue() > 0); event.Skip(); });
 	auto* fill = spin("Cave initial rock density %:", 20, 65, settings.caveFill);
 	auto* road = spin("Road width:", 1, 4, settings.roadWidth);
 	auto* travel = spin("Travel teleport server ID (0 = auto):", 0, 65535, worldSettings.connectionItemId);
@@ -595,6 +599,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.buildingsPerSettlement = buildings->GetValue();
 	candidate.settings.buildingLevels = floors->GetValue();
 	candidate.settings.caveDepth = depth->GetValue();
+	candidate.settings.caveEntrances = caveEntrances->GetValue();
 	candidate.settings.caveFill = fill->GetValue();
 	candidate.settings.roadWidth = road->GetValue();
 	candidate.connectionItemId = travel->GetValue();

@@ -331,6 +331,7 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		spec.world.settings.settlementCount = 2;
 		spec.world.settings.buildingsPerSettlement = 4;
 		spec.world.settings.caveDepth = 2;
+		spec.world.settings.caveEntrances = 3;
 		spec.world.settings.buildingLevels = 3;
 		spec.world.connectionItemId = 103;
 		spec.world.catalogPath = wxString::FromUTF8((directory / "furnished-catalog.json").string());
@@ -531,10 +532,11 @@ static int RunBatchScenario(const wxString& outputDirectory) {
 		options.itemsOtb = outputDirectory + "/batch-items.otb";
 		options.itemsXml = outputDirectory + "/batch-items.xml";
 		options.materials = outputDirectory + "/batch-materials.xml";
-		options.outputDirectory = outputDirectory + "/batch-" + std::to_string(wxGetProcessId());
+		options.outputDirectory = outputDirectory + "/batch-" + std::to_string(wxGetProcessId()) + "-" + std::to_string(wxGetUTCTimeMillis().GetValue());
 		WorldBatch::Result result;
 		wxString error;
-		Check(WorldBatch::Generate(options, result, error), "Batch registry/XML/recipe generation: " + nstr(error));
+		const bool generatedBatch = WorldBatch::Generate(options, result, error);
+		Check(generatedBatch, "Batch registry/XML/recipe generation: " + nstr(error));
 		Check(std::none_of(result.warnings.begin(), result.warnings.end(), [](const wxString& warning) { return warning.Contains("Biome decoration settings could not be read"); }), "UTF-8 BOM biome settings must load without silently replacing configured keywords");
 		Check(g_items[20001].isTeleport(), "Explicit registry client version must preserve modern item XML IDs");
 		Check(g_items[65535].name == "maximum item", "Maximum server ID must load without a uint16 range-loop wrap");
@@ -610,9 +612,10 @@ static int RunMetadataScenario(const wxString& outputDirectory) {
 		options.dataDirectory = wxString::FromUTF8(data.string());
 		options.clientDat = filename;
 		options.exportPreviews = false;
-		options.outputDirectory = outputDirectory + "/metadata-" + std::to_string(wxGetProcessId());
+		options.outputDirectory = outputDirectory + "/metadata-" + std::to_string(wxGetProcessId()) + "-" + std::to_string(wxGetUTCTimeMillis().GetValue());
 		WorldBatch::Result result;
-		Check(WorldBatch::Generate(options, result, error), "Batch generation with explicit metadata: " + nstr(error));
+		const bool generatedMetadata = WorldBatch::Generate(options, result, error);
+		Check(generatedMetadata, "Batch generation with explicit metadata: " + nstr(error));
 		Check(!wxFileExists(options.outputDirectory + "/preview_z7_terrain.png"), "Disabling preview export must leave the OTBM bundle usable without PNG artifacts");
 		Check(g_items[300].sprite && g_items[300].sprite->width == 2 && result.application.furniture > 0, "Batch adapter must bind real metadata before placing decorations and furniture");
 		Check(std::none_of(result.warnings.begin(), result.warnings.end(), [](const wxString& warning) { return warning.Contains("No client DAT supplied"); }), "Loaded metadata must not be reported as unavailable");

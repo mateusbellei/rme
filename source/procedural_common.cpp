@@ -407,7 +407,7 @@ bool ProceduralCommon::ApplyColorMask(Editor& editor, const GenerationSpec& spec
 			Tile* existing = location->get();
 			Tile* newTile = existing ? existing->deepCopy(editor.map) : editor.map.allocator(location);
 
-			if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
+			if (spec.pipeline.borderizeAfter && g_settings.getInteger(Config::USE_AUTOMAGIC)) {
 				newTile->cleanBorders();
 			}
 
@@ -421,7 +421,7 @@ bool ProceduralCommon::ApplyColorMask(Editor& editor, const GenerationSpec& spec
 				target->draw(&editor.map, newTile, nullptr);
 			}
 
-			if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
+			if (spec.pipeline.borderizeAfter && g_settings.getInteger(Config::USE_AUTOMAGIC)) {
 				newTile->borderize(&editor.map);
 			}
 			action->addChange(newd Change(newTile));

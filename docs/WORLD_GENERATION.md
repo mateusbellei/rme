@@ -2,6 +2,23 @@
 
 Tracking: https://github.com/mateusbellei/rme/issues/5
 
+## Quick start
+
+1. Load a matching client and open an empty map of at least 512×512 at surface
+   z=7. For the bundled furniture example, use the 10.98 materials/client.
+2. Choose **File → Generate Map… → Load recipe…** and open
+   `data/procedural/recipes/example_furnished_city_1098.json`. For terrain-first
+   exploration with your own legend, try `example_ridged_continent.json`.
+3. Choose **Preview world…**. Inspect the floor/terrain/climate/role views, compare
+   seeds, and adjust **World settings…** from the main dialog as needed.
+4. Choose **Apply displayed world**. One undo restores the previous map; save the
+   result as OTBM normally. Existing tiles are protected by default.
+
+For a complete batch bundle, use the command-line section below. The large
+1024×1024 example requires an explicit larger tile budget and is intended for
+batch export; the editor's default application limit remains one million tiles.
+The client-independent planner can be built from `tests/` without game assets.
+
 ## Semantic planner
 
 `WorldGen::Build` creates a client-independent `Plan` before any map editing.
@@ -368,7 +385,7 @@ The application accepts a batch command before loading the editor window, user
 preferences or single-instance state:
 
 ```powershell
-rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY --data-dir path/to/rme/data
+rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY --data-dir path/to/rme/data | Out-Host
 ```
 
 Use a `source:world` recipe with an explicit region and `useSelection:false`.
@@ -416,11 +433,11 @@ furniture aliases from `procedural_furniture.xml`; this recipe is therefore
 usable both in the editor with that client loaded and through the batch command:
 
 ```powershell
-rme --generate-world data/procedural/recipes/example_furnished_city_1098.json data/1098/items_original1098.otb data/1098/items_original1098.xml data/1098/materials.xml build/furnished-world --data-dir data
+rme --generate-world data/procedural/recipes/example_furnished_city_1098.json data/1098/items_original1098.otb data/1098/items_original1098.xml data/1098/materials.xml build/furnished-world --data-dir data | Out-Host
 ```
 
 The default seed creates two settlements with 24 buildings and 216 required
-furniture composites, including rotated beds and 2�2 tables. Three building
+furniture composites, including rotated beds and 2×2 tables. Three building
 floors and two cave levels produce approximately 792,000 non-void tiles, within the application
 limit. Furniture count means accepted composite placements, rather than item
 count. These IDs and orientations are specific to the bundled 10.98 data;
@@ -468,7 +485,7 @@ A blueprint's optional `role` is a short identifier such as `residential`,
 `commercial`, `industrial` or `civic`. It labels the plan and role preview; it
 does not create NPCs, house ownership or server scripts. `maxPerSettlement`
 limits how often that template can appear in each settlement (0 means unlimited,
-1�64 are hard caps). Selection retains biome filtering and weighted random
+1–64 are hard caps). Selection retains biome filtering and weighted random
 choice among templates that have not reached their caps. Limits reset per town.
 If all eligible templates are exhausted or terrain does not fit, the planner
 reports fewer buildings instead of breaking a cap.
@@ -520,7 +537,7 @@ simulation. Supplied heightmap elevations retain priority: breaching is disabled
 when any authored height pixel is present; an entirely transparent heightmap
 still uses procedural relief normally.
 
-`world.biomeDetail` (0�100) adds coherent local humidity/temperature variation on
+`world.biomeDetail` (0–100) adds coherent local humidity/temperature variation on
 top of regional climate. It creates smaller biome patches without randomizing
 individual tiles. Defaults `relief:"smooth"` and `biomeDetail:0` preserve existing
 recipes. Both settings are editable in World settings, recorded in recipes and
@@ -531,7 +548,7 @@ diagnostics, and included in the plan fingerprint. Try the generic
 
 ## Distributed cave entrances
 
-`world.caveEntrances` requests 1�16 separated surface access sites when cave
+`world.caveEntrances` requests 1–16 separated surface access sites when cave
 depth is nonzero. The first remains at the main settlement (or nearest suitable
 central dry landing). Additional sites prefer mountain foothills and require a
 clear natural surface patch outside roads, buildings and existing reservations.
@@ -578,7 +595,7 @@ NPCs, houses, ownership and server scripts are separate authoring tasks.
 
 `--tile-budget MAX_TILES` changes the allowed number of non-void tiles for a batch
 export. The editor and default batch limit remain 1,048,576. A 64-bit build can
-explicitly allow up to 4,194,304 tiles, covering a 1024�1024 surface with two full
+explicitly allow up to 4,194,304 tiles, covering a 1024×1024 surface with two full
 cave levels plus building floors. A 32-bit build retains the default maximum.
 The semantic planner's separate 8,388,608-cell total limit still applies.
 
@@ -590,7 +607,7 @@ because the staged world and undo transaction coexist until export completes.
 
 
 A local Windows x64 Release run with the bundled 10.98 registry/materials exported
-an optional-ridged 1024�1024 continent, two cave levels and three-floor buildings:
+an optional-ridged 1024×1024 continent, two cave levels and three-floor buildings:
 3,161,744 tiles, 64 buildings, four registered towns, 576 furniture placements,
 79,193 biome doodads and 25 preview PNGs. With `--verify`, observed elapsed time
 was 16.4 seconds, peak working set 1,989.9 MiB and OTBM size 27.13 MiB. These are one machine's
@@ -623,7 +640,7 @@ this round-trip behavior.
 Reproduce the larger verified example with the public profile:
 
 ```powershell
-rme --generate-world data/procedural/recipes/example_large_continent_1098.json data/1098/items_original1098.otb data/1098/items_original1098.xml data/1098/materials.xml build/large-world --data-dir data --tile-budget 4194304 --town-prefix "Frontier" --verify
+rme --generate-world data/procedural/recipes/example_large_continent_1098.json data/1098/items_original1098.otb data/1098/items_original1098.xml data/1098/materials.xml build/large-world --data-dir data --tile-budget 4194304 --town-prefix "Frontier" --verify | Out-Host
 ```
 
 Equivalent-ground objects are excluded from composite decorations/furniture,
@@ -637,3 +654,10 @@ sprite table fails before creating output; unused registry IDs do not need
 sprites. Without DAT, the existing explicit report warning and physical checks
 remain available. Editor-only meta items are rejected as grounds/materials or
 required furniture because the OTBM writer intentionally omits them.
+
+
+On Windows, the application is a GUI-subsystem executable. In interactive
+PowerShell, piping the batch command to `Out-Host` waits for completion and shows
+progress/errors; inspect `$LASTEXITCODE` afterward. The same pipeline was tested
+with the stock 10.98 profile and verification enabled. The `Out-Host` suffix is
+PowerShell syntax; on Linux use `xvfb-run -a rme ...` as described above.

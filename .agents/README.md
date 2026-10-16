@@ -19,7 +19,9 @@ Este repositório é **público**. Não incluir IPs, temas, receitas ou paths de
 
 | Feature | Status |
 |---------|--------|
-| Procedural v3 (image/prompt/recipe) | Beta |
+| Procedural v3 (image/prompt/recipe) | Beta legado |
+| World planner v4 (continentes, cidades, cavernas) | Draft PR #7 — `docs/WORLD_GENERATION.md` |
+| Exportação OTBM em lote / verificação | Draft PR #7 — `--generate-world`, `--verify` |
 | Auto-borders runtime | Maduro |
 | Data Editor → Borders | Beta |
 | Data Editor → Grounds/Tilesets | Placeholder |
@@ -36,6 +38,8 @@ Este repositório é **público**. Não incluir IPs, temas, receitas ou paths de
 - `example_village_forest.json`
 - `example_desert_village.json`
 - `example_training_ground.json`
+- `example_continent.json`, `example_ridged_continent.json`
+- `example_furnished_city_1098.json`, `example_large_continent_1098.json` (bindings públicos 10.98)
 
 Receitas temáticas de um jogo específico ficam no **repositório privado de assets** do consumidor, não aqui.
 

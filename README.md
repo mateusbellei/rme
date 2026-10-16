@@ -9,6 +9,21 @@ You can find an engine compatible with OTBM format at [OTAcademy](https://github
 
 Visit [OTAcademy discord](http://discord.gg/OTAcademy) if you are looking for support or updates.
 
+Procedural world generation
+===========================
+
+The development world planner builds seeded continents, biomes, urban blocks,
+furnished multi-floor buildings and connected caves. PNGs can guide elevation
+and biome regions; generation is previewed before one undoable application.
+
+See the [world generation guide](docs/WORLD_GENERATION.md) for editor usage,
+recipes, client bindings and the `rme --generate-world` batch command. The
+[bundled 10.98 city](data/procedural/recipes/example_furnished_city_1098.json)
+provides a reproducible furniture example. The
+[large continent profile](data/procedural/recipes/example_large_continent_1098.json)
+exports more than three million tiles with an explicit batch budget and optional
+OTBM readback verification. Tracking: [issue #5](https://github.com/mateusbellei/rme/issues/5).
+
 I want to contribute
 ====================
 

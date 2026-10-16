@@ -1,9 +1,24 @@
 #include "world_plan.h"
+#include "world_export.h"
+#include <charconv>
 
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <string>
+
+namespace {
+	template <class T>
+	T Number(const char* text) {
+		const std::string value = text;
+		T number {};
+		const auto result = std::from_chars(value.data(), value.data() + value.size(), number);
+		if (result.ec != std::errc() || result.ptr != value.data() + value.size()) {
+			throw std::runtime_error("Arguments must be complete decimal integers in range");
+		}
+		return number;
+	}
+}
 
 // Client-independent diagnostic: rme_world_plan [output prefix] [seed] [size].
 // Outputs PPM masks per floor and a JSON summary, not a playable OTBM.
@@ -11,8 +26,13 @@ int main(int argc, char** argv) {
 	try {
 		const std::string prefix = argc > 1 ? argv[1] : "world";
 		WorldGen::Settings settings;
-		settings.seed = argc > 2 ? uint32_t(std::stoul(argv[2])) : 1337;
-		settings.width = settings.height = argc > 3 ? std::stoi(argv[3]) : 256;
+		if (argc > 6) {
+			throw std::runtime_error("Usage: rme_world_plan [prefix] [uint32 seed] [size] [organic|blocks] [buildings]");
+		}
+		if (argc > 2) {
+			settings.seed = Number<uint32_t>(argv[2]);
+		}
+		settings.width = settings.height = argc > 3 ? Number<int>(argv[3]) : 256;
 		if (argc > 4) {
 			const std::string layout = argv[4];
 			if (layout != "organic" && layout != "blocks") {
@@ -21,7 +41,7 @@ int main(int argc, char** argv) {
 			settings.settlementLayout = layout == "blocks" ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
 		}
 		if (argc > 5) {
-			settings.buildingsPerSettlement = std::stoi(argv[5]);
+			settings.buildingsPerSettlement = Number<int>(argv[5]);
 		}
 		settings.caveDepth = 2;
 		settings.buildingLevels = 2;
@@ -33,32 +53,11 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 		const auto report = WorldGen::Validate(plan);
-		for (const auto& layer : plan.layers) {
-			std::ofstream output(prefix + "_z" + std::to_string(layer.offsetZ) + ".ppm", std::ios::binary);
-			if (!output) {
-				std::cerr << "Cannot write preview\n";
-				return 1;
-			}
-			output << "P6\n"
-				   << settings.width << ' ' << settings.height << "\n255\n";
-			for (const auto& cell : layer.cells) {
-				uint32_t color = WorldGen::TerrainColor(cell.terrain);
-				if (cell.flags & WorldGen::Wall) {
-					color = 0x404040;
-				}
-				if (cell.flags & WorldGen::Entrance) {
-					color = 0xFF40FF;
-				}
-				if (cell.flags & WorldGen::Connection) {
-					color = 0xFFFF00;
-				}
-				char rgb[] = { char(color >> 16), char(color >> 8), char(color) };
-				output.write(rgb, 3);
-			}
+		if (!WorldGen::ExportDiagnostics(plan, prefix, error)) {
+			std::cerr << error << '\n';
+			return 1;
 		}
 		const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-		std::ofstream summary(prefix + ".json");
-		summary << "{\n  \"seed\": " << settings.seed << ",\n  \"size\": " << settings.width << ",\n  \"fingerprint\": \"" << WorldGen::Fingerprint(plan) << "\",\n  \"valid\": " << (report.valid ? "true" : "false") << ",\n  \"settlements\": " << plan.settlements.size() << ",\n  \"buildings\": " << plan.buildings.size() << ",\n  \"verticalLinks\": " << plan.links.size() << ",\n  \"landTiles\": " << report.landTiles << ",\n  \"waterTiles\": " << report.waterTiles << ",\n  \"milliseconds\": " << milliseconds << "\n}\n";
 		std::cout << "seed=" << settings.seed << " size=" << settings.width << " settlements=" << plan.settlements.size() << " buildings=" << plan.buildings.size() << " links=" << plan.links.size() << " valid=" << report.valid << " ms=" << milliseconds << '\n';
 		for (const auto& warning : plan.warnings) {
 			std::cout << "Warning: " << warning << '\n';

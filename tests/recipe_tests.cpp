@@ -2,6 +2,8 @@
 #include "mt_rand.h"
 #include "world_catalog.h"
 #include "world_inputs.h"
+#include "world_export.h"
+#include "json.h"
 
 #include <filesystem>
 #include <fstream>
@@ -26,6 +28,10 @@ static void TestRecipes() {
 	original.region.height = 96;
 	original.world.settings.shape = WorldGen::LandShape::Archipelago;
 	original.world.settings.seaLevel = 4000;
+	original.world.settings.coastRoughness = 80;
+	original.world.settings.temperatureBias = -3200;
+	original.world.settings.moistureBias = 2100;
+	original.world.settings.riverWidth = 5;
 	original.world.settings.riverCount = 6;
 	original.world.settings.settlementCount = 4;
 	original.world.settings.buildingsPerSettlement = 5;
@@ -48,6 +54,7 @@ static void TestRecipes() {
 	Check(loaded.source == original.source && loaded.seed == original.seed, "Full uint32 seed and world source must round-trip");
 	Check(loaded.region.originX == 200 && loaded.region.originY == 300 && loaded.region.width == 128 && loaded.region.height == 96, "Target origin and dimensions must round-trip");
 	Check(loaded.world.settings.shape == original.world.settings.shape && loaded.world.settings.seaLevel == 4000 && loaded.world.settings.riverCount == 6, "World geography must round-trip");
+	Check(loaded.world.settings.coastRoughness == 80 && loaded.world.settings.temperatureBias == -3200 && loaded.world.settings.moistureBias == 2100 && loaded.world.settings.riverWidth == 5, "Coast, climate and river width must round-trip");
 	Check(loaded.world.settings.settlementCount == 4 && loaded.world.settings.buildingsPerSettlement == 5 && loaded.world.settings.buildingLevels == 3, "World settlement settings must round-trip");
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
 	Check(loaded.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks, "City street layout must round-trip");
@@ -66,7 +73,7 @@ static void TestRecipes() {
 			 R"({"source":"world","world":{"shape":"typo"}})",
 			 R"({"source":"world","world":{"protectExisting":0}})",
 			 R"({"source":"world","world":{"wallBrush":false}})",
-			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"heightmap":42}})" }) {
+			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"algorithmVersion":99}})", R"({"world":{"heightmap":42}})" }) {
 		std::ofstream output(path);
 		output << malformed;
 		output.close();
@@ -150,6 +157,36 @@ static void TestCatalogJson() {
 	std::filesystem::remove(path);
 }
 
+static void TestDiagnostics() {
+	WorldGen::Settings settings;
+	settings.width = settings.height = 64;
+	settings.caveDepth = 1;
+	WorldGen::Plan plan;
+	std::string error;
+	Check(WorldGen::Build(settings, plan, error), "Diagnostic fixture must build");
+	plan.warnings.push_back("Quote \" and slash \\ and newline\n and tab\t");
+	const auto prefix = std::filesystem::temp_directory_path() / std::filesystem::path(u8"rme-world-export-\u00E7");
+	const auto encoded = prefix.u8string();
+	const std::string path(encoded.begin(), encoded.end());
+	Check(WorldGen::ExportDiagnostics(plan, path, error), "Diagnostics must support Unicode filenames");
+	std::ifstream file(std::filesystem::u8path(path + ".json"));
+	json::mValue root;
+	Check(json::read(file, root) && root.type() == json::obj_type, "Diagnostic manifest must be valid JSON, including escaped warnings");
+	Check(root.get_obj().at("algorithmVersion").get_int() == WorldGen::AlgorithmVersion, "Manifest must identify the planner algorithm");
+	Check(root.get_obj().at("fingerprint").get_str() == std::to_string(WorldGen::Fingerprint(plan)), "Manifest must preserve the complete 64-bit plan fingerprint without JSON rounding");
+	Check(root.get_obj().at("warnings").get_array().back().get_str() == plan.warnings.back(), "Diagnostic strings must round-trip control characters");
+	Check(root.get_obj().at("layers").get_array().size() == plan.layers.size() && root.get_obj().at("verticalLinks").get_array().size() == plan.links.size(), "Manifest must describe every floor and travel edge");
+	for (const auto& layer : plan.layers) {
+		const auto pathLayer = std::filesystem::u8path(path + "_z" + std::to_string(layer.offsetZ) + ".ppm");
+		Check(std::filesystem::file_size(pathLayer) > layer.cells.size() * 3, "Each terrain diagnostic must include all raster cells");
+		std::filesystem::remove(pathLayer);
+	}
+	file.close();
+	std::filesystem::remove(std::filesystem::u8path(path + ".json"));
+	plan.layers.clear();
+	Check(!WorldGen::ExportDiagnostics(plan, path, error), "Invalid plans must fail before diagnostic output");
+}
+
 static void TestWorldInputs() {
 	WorldGen::GeographyInput input;
 	wxString error;
@@ -209,6 +246,7 @@ static void TestWorldInputs() {
 
 int main() {
 	try {
+		TestDiagnostics();
 		TestWorldInputs();
 		TestRecipes();
 		TestScopedRandom();

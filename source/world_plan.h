@@ -10,6 +10,7 @@
 
 // Client-independent planning. No map, brush registry, GUI or global RNG access.
 namespace WorldGen {
+	inline constexpr uint32_t AlgorithmVersion = 1;
 
 	enum class Terrain : uint8_t {
 		Ocean,
@@ -90,6 +91,9 @@ namespace WorldGen {
 		uint32_t seed = 1337;
 		LandShape shape = LandShape::Continent;
 		int seaLevel = 4200;
+		int coastRoughness = 55;
+		int temperatureBias = 0, moistureBias = 0;
+		int riverWidth = 3;
 		int riverCount = 8;
 		int settlementCount = 3;
 		int buildingsPerSettlement = 8;

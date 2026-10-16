@@ -124,8 +124,13 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	root["pipeline"] = pipeline;
 
 	json::mObject world;
+	world["algorithmVersion"]=json::mValue(int(WorldGen::AlgorithmVersion));
 	world["shape"] = json::mValue(spec.world.settings.shape == WorldGen::LandShape::Archipelago ? "archipelago" : "continent");
 	world["seaLevel"] = json::mValue(spec.world.settings.seaLevel);
+	world["coastRoughness"] = json::mValue(spec.world.settings.coastRoughness);
+	world["temperatureBias"] = json::mValue(spec.world.settings.temperatureBias);
+	world["moistureBias"] = json::mValue(spec.world.settings.moistureBias);
+	world["riverWidth"] = json::mValue(spec.world.settings.riverWidth);
 	world["rivers"] = json::mValue(spec.world.settings.riverCount);
 	world["settlements"] = json::mValue(spec.world.settings.settlementCount);
 	world["buildings"] = json::mValue(spec.world.settings.buildingsPerSettlement);
@@ -306,18 +311,25 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			return false;
 		}
 		const auto& world = worldIt->second.get_obj();
+		const auto algorithm=world.find("algorithmVersion");
+		if(algorithm!=world.end() && (algorithm->second.type()!=json::int_type || algorithm->second.get_int64()!=WorldGen::AlgorithmVersion)){error="Unsupported world generation algorithm version.";return false;}
+
 		auto integer = [&](const char* key, int& target) {
 			const auto it = world.find(key);
 			if (it == world.end()) {
 				return;
 			}
-			if (it->second.type() != json::int_type || it->second.get_int64() < 0 || it->second.get_int64() > 65535) {
+			if (it->second.type() != json::int_type || it->second.get_int64() < -5000 || it->second.get_int64() > 65535) {
 				validNumbers = false;
 				return;
 			}
 			target = static_cast<int>(it->second.get_int64());
 		};
 		integer("seaLevel", spec.world.settings.seaLevel);
+		integer("coastRoughness",spec.world.settings.coastRoughness);
+		integer("temperatureBias",spec.world.settings.temperatureBias);
+		integer("moistureBias",spec.world.settings.moistureBias);
+		integer("riverWidth",spec.world.settings.riverWidth);
 		integer("rivers", spec.world.settings.riverCount);
 		integer("settlements", spec.world.settings.settlementCount);
 		integer("buildings", spec.world.settings.buildingsPerSettlement);
@@ -370,7 +382,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			spec.world.wallBrushName = wxstr(wall->second.get_str());
 		}
 	}
-	if (!validNumbers || spec.region.width <= 0 || spec.region.height <= 0 || spec.region.z < 0 || spec.region.z > MAP_MAX_LAYER || spec.region.originX < 0 || spec.region.originY < 0) {
+	if (!validNumbers || spec.world.connectionItemId<0 || spec.world.connectionItemId>65535 || spec.region.width <= 0 || spec.region.height <= 0 || spec.region.z < 0 || spec.region.z > MAP_MAX_LAYER || spec.region.originX < 0 || spec.region.originY < 0) {
 		error = "Recipe contains invalid region or numeric settings.";
 		return false;
 	}

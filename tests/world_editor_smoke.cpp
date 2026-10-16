@@ -228,6 +228,8 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		const uint64_t before = MapHash(editor.map);
 		GenerationSpec spec;
 		spec.source = GenerationSource::WorldPlan;
+		spec.world.settings.coastRoughness = 0;
+		spec.world.settings.riverWidth = 1;
 		spec.world.settings.settlementLayout = blocks ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
 		spec.seed = blocks ? 42u : 1337u;
 		spec.region.originX = 16;

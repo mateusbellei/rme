@@ -156,6 +156,10 @@ static void TestSettingsMatrix() {
 		s.buildingsPerSettlement = int(seed % 10);
 		s.caveFill = 20 + int(seed % 46);
 		s.roadWidth = 1 + int(seed % 4);
+		s.coastRoughness = int(seed % 101);
+		s.temperatureBias = int(seed % 11) * 1000 - 5000;
+		s.moistureBias = int(seed % 9) * 1000 - 4000;
+		s.riverWidth = 1 + int(seed % 4) * 2;
 		s.settlementLayout = seed % 3 ? SettlementLayout::Organic : SettlementLayout::Blocks;
 		Plan plan;
 		std::string error;
@@ -172,6 +176,47 @@ static void TestSettingsMatrix() {
 			throw std::runtime_error(message);
 		}
 	}
+}
+
+static void TestClimateAndCoast() {
+	Settings settings;
+	settings.width = settings.height = 128;
+	settings.settlementCount = 0;
+	settings.riverCount = 0;
+	GeographyInput input;
+	input.elevation.assign(128 * 128, 6000);
+	std::string error;
+	Plan cold, hot, dry, wet, calm, rugged;
+	settings.temperatureBias = -5000;
+	Check(Build(settings, cold, error, nullptr, &input), "Cold climate must build");
+	settings.temperatureBias = 5000;
+	Check(Build(settings, hot, error, nullptr, &input), "Hot climate must build");
+	auto count = [](const Plan& plan, Terrain terrain) {size_t result=0;for(const auto& cell:plan.FindLayer(0)->cells){result+=cell.terrain==terrain;
+}return result; };
+	Check(count(cold, Terrain::Snow) > count(hot, Terrain::Snow), "Temperature adjustment must change snow coverage");
+	settings.temperatureBias = 0;
+	settings.moistureBias = -5000;
+	Check(Build(settings, dry, error, nullptr, &input), "Dry climate must build");
+	settings.moistureBias = 5000;
+	Check(Build(settings, wet, error, nullptr, &input), "Wet climate must build");
+	Check(count(wet, Terrain::Forest) > count(dry, Terrain::Forest), "Moisture adjustment must change forest coverage");
+	settings.moistureBias = 0;
+	settings.coastRoughness = 0;
+	Check(Build(settings, calm, error), "Calm coast must build");
+	settings.coastRoughness = 100;
+	Check(Build(settings, rugged, error), "Rugged coast must build");
+	Check(Fingerprint(calm) != Fingerprint(rugged) && Validate(rugged).valid, "Domain-warped coast must alter geography while preserving invariants");
+	settings.riverWidth = 2;
+	Check(!Build(settings, wet, error), "River width must be an odd supported diameter");
+	settings = Settings();
+	settings.width = settings.height = 256;
+	settings.settlementCount = 0;
+	settings.riverWidth = 1;
+	Plan narrow, wide;
+	Check(Build(settings, narrow, error), "Narrow rivers must build");
+	settings.riverWidth = 7;
+	Check(Build(settings, wide, error), "Wide rivers must build");
+	Check(count(wide, Terrain::River) > count(narrow, Terrain::River) && Validate(wide).valid, "Runoff-dependent width must expand river channels without invalidating drainage");
 }
 
 static void TestCityBlocks() {
@@ -224,10 +269,17 @@ static void TestCancellation() {
 	Plan observed;
 	Check(Build(settings, observed, error, nullptr, nullptr, [&](const char*, int percent) {Check(percent>=last,"Planning progress must be monotonic");last=percent;return true; }), "Progress observation must allow planning");
 	Check(last == 100 && Fingerprint(observed) == Fingerprint(expected), "Progress must not affect the generated plan");
+	auto altered = observed;
+	altered.catalog[0].id = "different-template";
+	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include template identity even if terrain cells match");
+	altered = observed;
+	altered.catalog[0].objects.push_back({ 2, 2, 0, { "table" }, false });
+	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include authored furniture and client brush bindings");
 }
 
 int main() {
 	try {
+		TestClimateAndCoast();
 		TestCityBlocks();
 		TestCancellation();
 		TestCaves();

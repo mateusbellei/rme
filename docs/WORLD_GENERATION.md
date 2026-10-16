@@ -302,3 +302,43 @@ required furniture on two floors and checks rotated server IDs, rollback for a
 missing required brush, RNG isolation, undo/redo and OTBM persistence for both
 village and city scenarios. The generic bundled catalog intentionally has no
 client-specific furniture names.
+
+
+## Coastlines, rivers and climate
+
+Coast roughness (0..100) controls a deterministic domain warp of continent and
+island outlines, making coves and peninsulas adjustable while keeping ocean
+boundaries. Heightmap pixels override this elevation field where opaque.
+Temperature and moisture adjustments (-5000..5000) shift climate before biome
+classification, allowing colder, hotter, drier or wetter world profiles.
+Explicit biome hints retain precedence on dry land.
+
+River width uses odd maximum diameters 1, 3, 5 or 7. Runoff widens downstream
+channels after centerline drainage is established. The drainage graph stays
+acyclic; rivers remain connected to their centerlines and the ocean boundary
+is preserved. City site scoring also considers dry land across the expected
+district area, reducing cities placed on narrow peninsulas that cannot fit their
+requested lots. Terrain constraints can still reduce the final building count.
+
+
+## Reproduction and diagnostic export
+
+**Export plan diagnostics** in the preview saves a versioned JSON manifest,
+terrain PPMs and PNGs for terrain/elevation/moisture/temperature on every floor.
+These are semantic diagnostics, not screenshots of client sprites or a substitute
+for saving the generated map as OTBM. The standalone planner uses the same
+manifest/PPM exporter without requiring client assets.
+
+Manifests record algorithm version, complete settings, a 64-bit fingerprint,
+terrain/component counts, settlement/building coordinates, template IDs,
+rotations, travel endpoints/arrivals and warnings. Fingerprints include settings,
+catalog definitions and furniture bindings, drainage, semantic cells and links.
+The value is encoded as a string to avoid loss of precision in JSON consumers.
+It is a diagnostic identity, not a cryptographic signature or an OTBM hash.
+
+Keep the recipe, original PNG inputs, catalog, client material definitions and
+matching application version to reproduce a world. Version-1 fingerprints are
+being developed in this PR; changes during development can alter worlds. Future
+released algorithm changes must bump the version. New recipes identify the
+algorithm and unsupported versions are rejected. Legacy recipes without that
+field remain supported.

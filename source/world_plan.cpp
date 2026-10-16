@@ -120,16 +120,20 @@ namespace WorldGen {
 					const int medium = Noise(x, y, s.width, s.height, 8, Hash(terrainSeed, 1));
 					const int fine = Noise(x, y, s.width, s.height, 24, Hash(terrainSeed, 2));
 					const int noise = (broad * 5 + medium * 2 + fine) / 8 - 5000;
+					const int warpFrequency = s.shape == LandShape::Continent ? 4 : 5;
+					const int warpScale = s.shape == LandShape::Continent ? 400 : 700;
+					const int warpX = s.coastRoughness ? (Noise(x, y, s.width, s.height, warpFrequency, Hash(terrainSeed, 71)) - 5000) * s.coastRoughness / warpScale : 0;
+					const int warpY = s.coastRoughness ? (Noise(x, y, s.width, s.height, warpFrequency, Hash(terrainSeed, 72)) - 5000) * s.coastRoughness / warpScale : 0;
 					int64_t falloff = 0;
 					if (s.shape == LandShape::Continent) {
-						const int64_t nx = int64_t(x) * 10000 / (s.width - 1) - 5000;
-						const int64_t ny = int64_t(y) * 10000 / (s.height - 1) - 5000;
+						const int64_t nx = int64_t(x) * 10000 / (s.width - 1) - 5000 + warpX;
+						const int64_t ny = int64_t(y) * 10000 / (s.height - 1) - 5000 + warpY;
 						falloff = (nx * nx + ny * ny) * 6500 / 25000000;
 					} else {
 						falloff = 20000;
 						for (Point center : islandCenters) {
-							const int64_t nx = int64_t(x - center.x) * 10000 / s.width;
-							const int64_t ny = int64_t(y - center.y) * 10000 / s.height;
+							const int64_t nx = int64_t(x - center.x) * 10000 / s.width + warpX;
+							const int64_t ny = int64_t(y - center.y) * 10000 / s.height + warpY;
 							falloff = std::min(falloff, (nx * nx + ny * ny) * 6500 / 3500000);
 						}
 					}
@@ -141,8 +145,8 @@ namespace WorldGen {
 						cell.elevation = 0;
 					}
 					const int latitude = std::abs(y * 10000 / (s.height - 1) - 5000) * 2;
-					cell.temperature = uint16_t(Clamp(10500 - latitude * 8 / 10 - std::max(0, int(cell.elevation) - s.seaLevel) * 7 / 10 + (Noise(x, y, s.width, s.height, 4, climateSeed) - 5000) / 5));
-					cell.moisture = uint16_t(Noise(x, y, s.width, s.height, 5, Hash(climateSeed, 1)));
+					cell.temperature = uint16_t(Clamp(10500 - latitude * 8 / 10 - std::max(0, int(cell.elevation) - s.seaLevel) * 7 / 10 + (Noise(x, y, s.width, s.height, 4, climateSeed) - 5000) / 5 + s.temperatureBias));
+					cell.moisture = uint16_t(Clamp(Noise(x, y, s.width, s.height, 5, Hash(climateSeed, 1)) + s.moistureBias));
 					cell.terrain = cell.elevation <= s.seaLevel ? Terrain::Ocean : Terrain::Grass;
 				}
 			}
@@ -234,6 +238,29 @@ namespace WorldGen {
 					}
 					if (cells[current].terrain != Terrain::Lake) {
 						cells[current].terrain = Terrain::River;
+					}
+				}
+			}
+			std::vector<int> riverCenters;
+			uint32_t maximumFlow = 1;
+			for (int i = 0; i < int(cells.size()); ++i) {
+				if (cells[i].terrain == Terrain::River) {
+					riverCenters.push_back(i);
+					maximumFlow = std::max(maximumFlow, plan.flow[i]);
+				}
+			}
+			for (int i : riverCenters) {
+				const int radius = std::min((s.riverWidth - 1) / 2, int(uint64_t(s.riverWidth - 1) * plan.flow[i] / maximumFlow));
+				const int x = i % s.width, y = i / s.width;
+				for (int dy = -radius; dy <= radius; ++dy) {
+					for (int dx = -radius; dx <= radius; ++dx) {
+						if (std::abs(dx) + std::abs(dy) > radius || !Interior({ x + dx, y + dy }, s.width, s.height)) {
+							continue;
+						}
+						auto& cell = cells[size_t(y + dy) * s.width + x + dx];
+						if (cell.terrain != Terrain::Ocean && cell.terrain != Terrain::Lake) {
+							cell.terrain = Terrain::River;
+						}
 					}
 				}
 			}
@@ -425,6 +452,37 @@ namespace WorldGen {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
 			const int margin = std::max(8, std::min(s.width, s.height) / 14);
+			std::vector<int> dryArea;
+			int cityRadius = 0;
+			if (s.settlementLayout == SettlementLayout::Blocks && s.buildingsPerSettlement > 0) {
+				int largest = 5, across = 1;
+				for (const auto& b : plan.catalog) {
+					largest = std::max(largest, std::max(int(b.rows.size()), int(b.rows.front().size())));
+				}
+				while (across * across < s.buildingsPerSettlement) {
+					++across;
+				}
+				cityRadius = (across + 1) * (largest + s.roadWidth + 4) / 2;
+				dryArea.assign(size_t(s.width + 1) * (s.height + 1), 0);
+				for (int y = 0; y < s.height; ++y) {
+					if ((y & 15) == 0) {
+						control.Poll();
+					}
+					int row = 0;
+					for (int x = 0; x < s.width; ++x) {
+						row += DryBuildable(cells[size_t(y) * s.width + x]);
+						dryArea[size_t(y + 1) * (s.width + 1) + x + 1] = dryArea[size_t(y) * (s.width + 1) + x + 1] + row;
+					}
+				}
+			}
+			auto cityFitness = [&](int x, int y) {
+				if (dryArea.empty()) {
+					return 0;
+				}
+				const int x0 = std::max(0, x - cityRadius), y0 = std::max(0, y - cityRadius), x1 = std::min(s.width, x + cityRadius + 1), y1 = std::min(s.height, y + cityRadius + 1);
+				const int count = dryArea[size_t(y1) * (s.width + 1) + x1] - dryArea[size_t(y0) * (s.width + 1) + x1] - dryArea[size_t(y1) * (s.width + 1) + x0] + dryArea[size_t(y0) * (s.width + 1) + x0];
+				return int(int64_t(count) * 15000 / ((cityRadius * 2 + 1) * (cityRadius * 2 + 1)));
+			};
 			struct Candidate {
 				int score, index;
 			};
@@ -448,7 +506,7 @@ namespace WorldGen {
 					if (clear < 81 || high - low > 1300) {
 						continue;
 					}
-					const int score = 10000 - (high - low) * 3 + cells[index].moisture / 4 + int(Hash(s.seed, index, 19) % 500);
+					const int score = 10000 - (high - low) * 3 + cells[index].moisture / 4 + int(Hash(s.seed, index, 19) % 500) + cityFitness(x, y);
 					candidates.push_back({ score, index });
 				}
 			}
@@ -868,7 +926,7 @@ namespace WorldGen {
 			error = "World dimensions must be 32..4096 with at most 4,194,304 surface cells.";
 			return false;
 		}
-		if ((s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
+		if ((s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
 			error = "World settings are outside supported ranges.";
 			return false;
 		}
@@ -1148,6 +1206,80 @@ namespace WorldGen {
 	uint64_t Fingerprint(const Plan& plan) {
 		uint64_t hash = 1469598103934665603ull;
 		auto add = [&](uint32_t value) {for(int byte=0;byte<4;++byte){hash^=(value>>(byte*8))&255;hash*=1099511628211ull;} };
+		auto string = [&](const std::string& value) {add(uint32_t(value.size()));for(unsigned char byte:value){hash^=byte;hash*=1099511628211ull;} };
+		add(AlgorithmVersion);
+		add(uint32_t(plan.settings.shape));
+		add(plan.settings.seaLevel);
+		add(plan.settings.coastRoughness);
+		add(plan.settings.temperatureBias);
+		add(plan.settings.moistureBias);
+		add(plan.settings.riverWidth);
+		add(plan.settings.riverCount);
+		add(plan.settings.settlementCount);
+		add(plan.settings.buildingsPerSettlement);
+		add(plan.settings.buildingLevels);
+		add(plan.settings.caveDepth);
+		add(plan.settings.caveFill);
+		add(plan.settings.roadWidth);
+		add(uint32_t(plan.settings.settlementLayout));
+		add(uint32_t(plan.catalog.size()));
+		for (const auto& blueprint : plan.catalog) {
+			string(blueprint.id);
+			add(blueprint.weight);
+			add(blueprint.maxLevels);
+			add(blueprint.allowRotation);
+			for (const auto* rows : { &blueprint.rows, &blueprint.upperRows, &blueprint.biomes }) {
+				add(uint32_t(rows->size()));
+				for (const auto& row : *rows) {
+					string(row);
+				}
+			}
+			add(uint32_t(blueprint.objects.size()));
+			for (const auto& object : blueprint.objects) {
+				add(object.x);
+				add(object.y);
+				add(object.floor);
+				add(object.required);
+				add(uint32_t(object.brushes.size()));
+				for (const auto& name : object.brushes) {
+					string(name);
+				}
+			}
+		}
+		add(uint32_t(plan.buildings.size()));
+		for (const auto& building : plan.buildings) {
+			add(building.origin.x);
+			add(building.origin.y);
+			add(building.width);
+			add(building.height);
+			add(building.levels);
+			add(building.entrance.x);
+			add(building.entrance.y);
+			add(building.settlement);
+			add(building.blueprint);
+			add(building.rotation);
+		}
+		add(uint32_t(plan.settlements.size()));
+		for (const auto& town : plan.settlements) {
+			add(town.center.x);
+			add(town.center.y);
+			add(town.radius);
+			add(uint32_t(town.biome));
+			add(uint32_t(town.buildings.size()));
+			for (int index : town.buildings) {
+				add(index);
+			}
+		}
+		add(uint32_t(plan.drainage.size()));
+		for (int downstream : plan.drainage) {
+			add(uint32_t(downstream));
+		}
+		add(uint32_t(plan.flow.size()));
+		for (uint32_t flow : plan.flow) {
+			add(flow);
+		}
+		add(uint32_t(plan.layers.size()));
+		add(uint32_t(plan.links.size()));
 		add(plan.settings.width);
 		add(plan.settings.height);
 		add(plan.settings.seed);

@@ -822,7 +822,7 @@ namespace WorldEditor {
 
 	wxString Describe(const WorldGen::Plan& plan) {
 		const auto report = WorldGen::Validate(plan);
-		wxString text = wxString::Format("%d x %d | %u settlements | %u buildings | %u floors | %u planned vertical connections\nLand: %u tiles | Water: %u tiles | Roads/bridges: %u tiles\nYellow: travel portals; magenta: entrances; cyan: authored furniture anchors; dark gray: walls. Actual furniture placement is validated against client brushes.", plan.settings.width, plan.settings.height, unsigned(plan.settlements.size()), unsigned(plan.buildings.size()), unsigned(plan.layers.size()), unsigned(plan.links.size()), unsigned(report.landTiles), unsigned(report.waterTiles), unsigned(report.roadTiles));
+		wxString text = wxString::Format("Algorithm %u | Plan %llu\n%d x %d | %u settlements | %u buildings | %u floors | %u planned vertical connections\nLand: %u tiles | Water: %u tiles | Roads/bridges: %u tiles\nYellow: travel portals; magenta: entrances; cyan: authored furniture anchors; dark gray: walls. Actual furniture placement is validated against client brushes.", unsigned(WorldGen::AlgorithmVersion), static_cast<unsigned long long>(WorldGen::Fingerprint(plan)), plan.settings.width, plan.settings.height, unsigned(plan.settlements.size()), unsigned(plan.buildings.size()), unsigned(plan.layers.size()), unsigned(plan.links.size()), unsigned(report.landTiles), unsigned(report.waterTiles), unsigned(report.roadTiles));
 		for (const auto& warning : plan.warnings) {
 			text << "\n"
 				 << wxstr(warning);

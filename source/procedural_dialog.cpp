@@ -10,6 +10,9 @@
 #include "editor.h"
 #include "gui.h"
 #include "world_editor.h"
+#include "world_export.h"
+#include <wx/imagpng.h>
+#include <wx/wfstream.h>
 #include "procedural_mask.h"
 #include <wx/scrolwin.h>
 #include <wx/statbmp.h>
@@ -509,6 +512,16 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	grid->Add(settlementLayout, 1, wxEXPAND);
 	const auto& settings = worldSettings.settings;
 	auto* sea = spin("Sea level (2000-6500):", 2000, 6500, settings.seaLevel);
+	auto* roughness = spin("Coast roughness %:", 0, 100, settings.coastRoughness);
+	auto* temperature = spin("Temperature adjustment:", -5000, 5000, settings.temperatureBias);
+	auto* moisture = spin("Moisture adjustment:", -5000, 5000, settings.moistureBias);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Maximum river width:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* riverWidth = new wxChoice(content, wxID_ANY);
+	for (const char* width : { "1", "3", "5", "7" }) {
+		riverWidth->Append(width);
+	}
+	riverWidth->SetSelection((settings.riverWidth - 1) / 2);
+	grid->Add(riverWidth, 1, wxEXPAND);
 	auto* rivers = spin("River sources:", 0, 64, settings.riverCount);
 	auto* towns = spin("Settlements:", 0, 32, settings.settlementCount);
 	auto* buildings = spin("Buildings per settlement:", 0, 64, settings.buildingsPerSettlement);
@@ -564,6 +577,10 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.settlementLayout = settlementLayout->GetSelection() == 1 ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
 	candidate.settings.shape = shape->GetSelection() == 1 ? WorldGen::LandShape::Archipelago : WorldGen::LandShape::Continent;
 	candidate.settings.seaLevel = sea->GetValue();
+	candidate.settings.coastRoughness = roughness->GetValue();
+	candidate.settings.temperatureBias = temperature->GetValue();
+	candidate.settings.moistureBias = moisture->GetValue();
+	candidate.settings.riverWidth = 1 + 2 * riverWidth->GetSelection();
 	candidate.settings.riverCount = rivers->GetValue();
 	candidate.settings.settlementCount = towns->GetValue();
 	candidate.settings.buildingsPerSettlement = buildings->GetValue();
@@ -618,6 +635,8 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
 	auto* apply = new wxButton(&preview, wxID_OK, "Apply this world");
 	buttons->Add(apply, 0, wxRIGHT, 8);
+	auto* exportPlan = new wxButton(&preview, wxID_ANY, "Export plan diagnostics...");
+	buttons->Add(exportPlan, 0, wxRIGHT, 8);
 	buttons->Add(new wxButton(&preview, wxID_CANCEL, "Close"));
 	layout->Add(buttons, 0, wxALIGN_RIGHT | wxALL, 8);
 	preview.SetSizer(layout);
@@ -636,6 +655,34 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	preview.Bind(wxEVT_SIZE, [&](wxSizeEvent& event) {redraw();event.Skip(); });
 	floors->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	views->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
+	exportPlan->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+		wxFileDialog picker(&preview, "Export plan diagnostics", "", "world-plan.json", "JSON manifest (*.json)|*.json", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+		if (picker.ShowModal() != wxID_OK) {
+			return;
+		}
+		wxFileName prefix(picker.GetPath());
+		prefix.ClearExt();
+		std::string exportError;
+		wxBusyCursor busy;
+		if (!WorldGen::ExportDiagnostics(plan, nstr(prefix.GetFullPath()), exportError)) {
+			g_gui.PopupDialog(&preview, "Export failed", wxstr(exportError), wxOK | wxICON_ERROR);
+			return;
+		}
+		const char* names[] = { "terrain", "elevation", "moisture", "temperature" };
+		wxPNGHandler encoder;
+		for (const auto& layer : plan.layers) {
+			for (int view = 0; view < 4; ++view) {
+				const wxString filename = prefix.GetFullPath() + wxString::Format("_z%d_%s.png", layer.offsetZ, wxString::FromUTF8(names[view]));
+				wxImage image = WorldEditor::Render(plan, layer.offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
+				wxFileOutputStream stream(filename);
+				if (!stream.IsOk() || !encoder.SaveFile(&image, stream, false)) {
+					g_gui.PopupDialog(&preview, "Export failed", "Could not write " + filename, wxOK | wxICON_ERROR);
+					return;
+				}
+			}
+		}
+		g_gui.SetStatusText("World plan diagnostics exported to " + prefix.GetFullPath());
+	});
 	apply->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
 		bool applied = false;
 		{

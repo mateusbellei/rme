@@ -4,7 +4,7 @@ project(rme_procedural_tests LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_library(procedural_world STATIC ../source/world_plan.cpp ../source/world_catalog.cpp ../source/world_decoration.cpp)
+add_library(procedural_world STATIC ../source/world_plan.cpp ../source/world_catalog.cpp ../source/world_decoration.cpp ../source/world_export.cpp)
 target_include_directories(procedural_world PUBLIC ../source)
 add_executable(procedural_world_tests world_plan_tests.cpp)
 target_link_libraries(procedural_world_tests PRIVATE procedural_world)

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <queue>
 #include <set>
+#include <tuple>
 
 namespace WorldGen {
 	namespace {
@@ -100,8 +101,14 @@ namespace WorldGen {
 		}
 
 		std::vector<std::string> RotateRows(std::vector<std::string> rows, int turns) {
-			if (rows.empty() || rows.size()>32 || rows.front().size()>32) return {};
-			for (const auto& row:rows) if (row.size()!=rows.front().size()) return {};
+			if (rows.empty() || rows.size() > 32 || rows.front().size() > 32) {
+				return {};
+			}
+			for (const auto& row : rows) {
+				if (row.size() != rows.front().size()) {
+					return {};
+				}
+			}
 			while (turns-- > 0) {
 				const size_t h = rows.size(), w = rows.front().size();
 				std::vector<std::string> result(w, std::string(h, ' '));
@@ -151,6 +158,29 @@ namespace WorldGen {
 				}
 			}
 		}
+		if (b.objects.size() > 128) {
+			error = "Blueprint is limited to 128 furniture objects.";
+			return false;
+		}
+		std::set<std::tuple<int, int, int>> occupied;
+		for (const auto& object : b.objects) {
+			if (object.floor < 0 || object.floor >= b.maxLevels || object.x < 0 || object.y < 0 || object.x >= int(b.rows.front().size()) || object.y >= int(b.rows.size()) || (object.brushes.size() != 1 && object.brushes.size() != 4)) {
+				error = "Blueprint furniture coordinates, floor or orientation brushes are invalid.";
+				return false;
+			}
+			const auto& rows = object.floor > 0 && !b.upperRows.empty() ? b.upperRows : b.rows;
+			const char symbol = rows[object.y][object.x];
+			if (symbol != '.' || !occupied.emplace(object.floor, object.x, object.y).second) {
+				error = "Furniture anchors need distinct plain interior floor cells, away from entrances and landings.";
+				return false;
+			}
+			for (const auto& name : object.brushes) {
+				if (name.empty() || name.size() > 128 || name.find('\0') != std::string::npos) {
+					error = "Furniture brush names must contain 1..128 bytes.";
+					return false;
+				}
+			}
+		}
 		for (const auto& biome : b.biomes) {
 			if (biome != "grass" && biome != "forest" && biome != "desert" && biome != "snow" && biome != "beach") {
 				error = "Unknown allowed blueprint biome.";
@@ -181,6 +211,18 @@ namespace WorldGen {
 	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns) {
 		Blueprint result = blueprint;
 		const int turns = ((quarterTurns % 4) + 4) % 4;
+		for (auto& object : result.objects) {
+			int width = int(blueprint.rows.empty() ? 0 : blueprint.rows.front().size()), height = int(blueprint.rows.size());
+			for (int turn = 0; turn < turns; ++turn) {
+				const int x = height - object.y - 1, y = object.x;
+				object.x = x;
+				object.y = y;
+				std::swap(width, height);
+			}
+			if (object.brushes.size() == 4) {
+				std::rotate(object.brushes.begin(), object.brushes.begin() + turns, object.brushes.end());
+			}
+		}
 		if (!result.rows.empty()) {
 			result.rows = RotateRows(result.rows, turns);
 		}

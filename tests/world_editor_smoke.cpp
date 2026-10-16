@@ -90,6 +90,9 @@ namespace {
 		FixtureItem(300, ITEM_GROUP_NONE, true);
 		FixtureItem(301, ITEM_GROUP_NONE, false);
 		FixtureItem(302, ITEM_GROUP_NONE, true);
+		for (int id = 310; id < 314; ++id) {
+			FixtureItem(id, ITEM_GROUP_NONE, true);
+		}
 		WallBrush::init();
 		GroundBrush::init();
 		pugi::xml_document xml;
@@ -107,6 +110,58 @@ namespace {
 			Check(doodad->load(props.child("brush"), warnings), "Decoration fixture must load");
 			g_brushes.addBrush(doodad.release());
 		}
+		for (int direction = 0; direction < 4; ++direction) {
+			pugi::xml_document props;
+			const std::string xml = "<brush><item id=\"" + std::to_string(310 + direction) + "\" chance=\"1\"/></brush>";
+			Check(bool(props.load(xml.c_str())), "Furniture fixture XML");
+			auto brush = std::make_unique<DoodadBrush>();
+			brush->setName("fixture furniture " + std::to_string(direction));
+			Check(brush->load(props.child("brush"), warnings), "Furniture brush must load");
+			g_brushes.addBrush(brush.release());
+		}
+	}
+
+	void WriteFurnishedCatalog(const std::filesystem::path& path) {
+		std::ofstream out(path);
+		out << "{\"version\":1,\"templates\":[";
+		bool first = true;
+		for (const auto& b : WorldGen::DefaultBlueprints()) {
+			if (!first) {
+				out << ',';
+			}
+			first = false;
+			out << "{\"id\":\"" << b.id << "\",\"weight\":" << b.weight << ",\"maxLevels\":" << b.maxLevels << ",\"rows\":[";
+			for (size_t y = 0; y < b.rows.size(); ++y) {
+				if (y) {
+					out << ',';
+				}
+				out << '"' << b.rows[y] << '"';
+			}
+			out << ']';
+			if (!b.upperRows.empty()) {
+				out << ",\"upperRows\":[";
+				for (size_t y = 0; y < b.upperRows.size(); ++y) {
+					if (y) {
+						out << ',';
+					}
+					out << '"' << b.upperRows[y] << '"';
+				}
+				out << ']';
+			}
+			if (b.id == "house" || b.id == "inn") {
+				const int x = b.id == "house" ? 3 : 6, y = b.id == "house" ? 3 : 4;
+				out << ",\"objects\":[";
+				for (int floor = 0; floor < 2; ++floor) {
+					if (floor) {
+						out << ',';
+					}
+					out << "{\"x\":" << x << ",\"y\":" << y << ",\"floor\":" << floor << ",\"required\":true,\"brushes\":[\"fixture furniture 0\",\"fixture furniture 1\",\"fixture furniture 2\",\"fixture furniture 3\"]}";
+				}
+				out << ']';
+			}
+			out << '}';
+		}
+		out << "]}";
 	}
 
 	void WriteLegend(const std::filesystem::path& path, bool bad = false) {
@@ -158,15 +213,16 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		std::filesystem::create_directories(directory);
 		PrepareRegistry();
 		WriteLegend(directory / "world-legend.json");
+		WriteFurnishedCatalog(directory / "furnished-catalog.json");
 		WriteLegend(directory / "invalid-legend.json", true);
 		MapVersion version;
 		version.otbm = MAP_OTBM_2;
 		version.client = ClientVersionID(57);
 		CopyBuffer copyBuffer;
 		Editor editor(copyBuffer, version);
-		editor.map.setWidth(blocks?512:256);
-		editor.map.setHeight(blocks?512:256);
-		Tile* untouched = editor.map.createTile(blocks?480:240,blocks?480:240,7);
+		editor.map.setWidth(512);
+		editor.map.setHeight(512);
+		Tile* untouched = editor.map.createTile(480, 480, 7);
 		untouched->addItem(Item::Create(100));
 		untouched->update();
 		const uint64_t before = MapHash(editor.map);
@@ -176,14 +232,15 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		spec.seed = blocks ? 42u : 1337u;
 		spec.region.originX = 16;
 		spec.region.originY = 24;
-		spec.region.width = blocks?256:96;
-		spec.region.height = blocks?256:96;
+		spec.region.width = blocks ? 256 : 192;
+		spec.region.height = blocks ? 256 : 192;
 		spec.region.z = 7;
 		spec.world.settings.settlementCount = 2;
 		spec.world.settings.buildingsPerSettlement = 4;
 		spec.world.settings.caveDepth = 2;
 		spec.world.settings.buildingLevels = 3;
 		spec.world.connectionItemId = 103;
+		spec.world.catalogPath = wxString::FromUTF8((directory / "furnished-catalog.json").string());
 		spec.doodads.enabled = true;
 		spec.doodads.density = 45;
 		// World buildings must have physical walls even when the legacy toggle is off.
@@ -213,7 +270,7 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		Check(!plan.buildings.empty() && !plan.links.empty(), "Smoke fixture must exercise buildings and vertical travel");
 		mt_seed(717);
 		const auto randomBefore = mt_capture_state();
-		for (const char* stage : { "Checking target and materials", "Copying existing context", "Preparing grounds and walls", "Resolving borders and walls", "Decorating biomes", "Validating physical navigation", "Applying world as one undo operation" }) {
+		for (const char* stage : { "Checking target and materials", "Copying existing context", "Preparing grounds and walls", "Resolving borders and walls", "Decorating biomes", "Furnishing construction templates", "Validating physical navigation", "Applying world as one undo operation" }) {
 			bool visited = false;
 			Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, [&](const char* current, int) {if(std::string(current)==stage){visited=true;return false;}return true; }), "Cancellation must stop editor staging");
 			Check(visited && MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Cancellation at every stage must preserve the original map and undo history");
@@ -222,6 +279,7 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		}
 		WorldEditor::ApplicationStats stats;
 		Check(WorldEditor::ApplyPlan(editor, resolved, plan, error, &stats), "Apply staged world: " + nstr(error));
+		Check(stats.furniture > 0, "Construction catalogs must place their required furniture on multiple floors");
 		Check(stats.doodads > 0 && stats.changedTiles > 0, "Real brushes must place deterministic biome decorations");
 		std::set<int> decorationIds;
 		for (const auto& layer : plan.layers) {
@@ -242,6 +300,19 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			}
 		}
 		Check(decorationIds.count(300) && decorationIds.count(301) && decorationIds.count(302), "Fixture must exercise blocking, nonblocking and composite decorations");
+		for (const auto& building : plan.buildings) {
+			const auto blueprint = WorldGen::RotateBlueprint(plan.catalog[building.blueprint], building.rotation);
+			for (const auto& object : blueprint.objects) {
+				if (object.floor < building.levels) {
+					const Tile* tile = editor.map.getTile(resolved.region.originX + building.origin.x + object.x, resolved.region.originY + building.origin.y + object.y, resolved.region.z - object.floor);
+					bool found = false;
+					for (const Item* item : tile->items) {
+						found = found || item->getID() == 310 + building.rotation;
+					}
+					Check(found, "Furniture position and brush orientation must follow the rotated building on each floor");
+				}
+			}
+		}
 		const auto randomAfter = mt_capture_state();
 		Check(randomBefore.values == randomAfter.values && randomBefore.index == randomAfter.index, "Complete application must preserve global brush RNG");
 		const uint64_t applied = MapHash(editor.map);
@@ -254,6 +325,30 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		Check(MapHash(editor.map) == applied, "Redo must restore exact generated content");
 		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error) && MapHash(editor.map) == applied, "Collision rejection must leave existing world unchanged");
 		editor.actionQueue->undo();
+		auto missingFurniture = plan;
+		for (auto& b : missingFurniture.catalog) {
+			for (auto& object : b.objects) {
+				object.brushes = { "missing required furniture" };
+			}
+		}
+		Check(!WorldEditor::ApplyPlan(editor, resolved, missingFurniture, error) && MapHash(editor.map) == before, "Missing required furniture must reject the complete staged world without mutations");
+		auto blockedFurniture = plan;
+		for (auto& b : blockedFurniture.catalog) {
+			for (auto& object : b.objects) {
+				object.x = 2;
+				object.y = 1;
+			}
+		}
+		Check(!WorldEditor::ApplyPlan(editor, resolved, blockedFurniture, error) && MapHash(editor.map) == before, "Required furniture near travel landings must fail without editor mutations");
+		for (auto& b : missingFurniture.catalog) {
+			for (auto& object : b.objects) {
+				object.required = false;
+			}
+		}
+		WorldEditor::ApplicationStats optionalStats;
+		Check(WorldEditor::ApplyPlan(editor, resolved, missingFurniture, error, &optionalStats) && optionalStats.furniture == 0 && optionalStats.skippedFurniture > 0 && !optionalStats.warnings.empty(), "Optional missing furniture must be reported and skipped");
+		editor.actionQueue->undo();
+		Check(MapHash(editor.map) == before, "Optional furniture skips must remain one atomic undo operation");
 		GenerationSpec invalid = resolved;
 		invalid.imageMask.legendPath = wxString::FromUTF8((directory / "invalid-legend.json").string());
 		Check(!WorldEditor::ApplyPlan(editor, invalid, plan, error) && MapHash(editor.map) == before, "Invalid client materials must fail without any editor mutation");

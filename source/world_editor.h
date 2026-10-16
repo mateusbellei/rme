@@ -10,6 +10,7 @@ class Editor;
 namespace WorldEditor {
 	struct ApplicationStats {
 		size_t changedTiles = 0, doodads = 0, skippedDoodads = 0;
+		size_t furniture = 0, skippedFurniture = 0;
 		std::vector<wxString> warnings;
 	};
 	enum class PreviewLayer { Terrain,

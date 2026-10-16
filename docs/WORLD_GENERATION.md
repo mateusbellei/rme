@@ -186,7 +186,7 @@ passage or enclose a walkable pocket. A final validation checks actual blocking
 props against the complete multi-floor navigation graph before committing.
 Grounds, movement-changing items, containers, walls, quest attributes and
 multi-floor composites are excluded from the decoration pass. This is outdoor
-and cave dressing; furnished room templates are a separate feature.
+and cave dressing; template interiors use the separate authored furniture pass.
 
 The pure decoration suite checks bounds, footprints, route protection and
 adversarial enclosing layouts. The production editor regression exercises
@@ -264,4 +264,41 @@ build/planner/Release/rme_world_plan.exe build/city 1337 512 blocks 32
 
 `example_city_blocks.json` is an editor recipe. Counts are targets; constrained
 terrain may fit fewer lots. These layouts do not yet assign civic/commercial
-functions or furnish interiors.
+functions automatically. Interiors can be authored in the construction catalog.
+
+
+## Authored interiors
+
+A template may include `objects`, each anchored at an interior `.` cell:
+
+```json
+"objects": [
+  {"x":3,"y":3,"floor":0,"brush":"Exact single/composite doodad brush name"},
+  {"x":3,"y":3,"floor":1,"required":true,
+   "brushes":["Facing north","Facing east","Facing south","Facing west"]}
+]
+```
+
+Coordinates refer to the unrotated template. `floor:0` is the base, `floor:1`
+is one floor above, and so on. Use either one orientation-independent `brush`
+or four clockwise `brushes`. Positions and brush orientation rotate with the
+building. Cyan preview pixels mark authored anchors, not resolved client sprites. Optional
+placements may still be skipped when their client brushes do not fit.
+Names refer exactly to doodad brushes loaded in the active client;
+no generic item-ID rotation is guessed. Adjacent objects such as a bed or a
+furniture set should be authored as one composite brush.
+
+Furniture stays inside the building's walkable interior with one-tile clearance,
+avoids walls, doors, portals and arrival tiles, and uses the same bounded
+physical/visual footprint validation as outdoor props. Containers, quest items,
+and movement-changing items are not accepted in this decoration stage. Optional
+objects that cannot fit or whose brushes are missing are skipped with a warning.
+A `required:true` object rejects the complete staged application if it cannot be
+placed. Objects on floors above the chosen building height are omitted.
+
+Limits: 128 objects per template, distinct anchors, one or four brush names
+of up to 128 bytes each. The production regression loads a JSON catalog with
+required furniture on two floors and checks rotated server IDs, rollback for a
+missing required brush, RNG isolation, undo/redo and OTBM persistence for both
+village and city scenarios. The generic bundled catalog intentionally has no
+client-specific furniture names.

@@ -33,7 +33,7 @@ static void TestRecipes() {
 	original.world.settings.caveDepth = 2;
 	original.world.settings.caveFill = 40;
 	original.world.settings.roadWidth = 3;
-	original.world.settings.settlementLayout=WorldGen::SettlementLayout::Blocks;
+	original.world.settings.settlementLayout = WorldGen::SettlementLayout::Blocks;
 	original.world.connectionItemId = 1387;
 	original.world.wallBrushName = "Stone walls";
 	original.world.catalogPath = "custom-buildings.json";
@@ -50,7 +50,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.shape == original.world.settings.shape && loaded.world.settings.seaLevel == 4000 && loaded.world.settings.riverCount == 6, "World geography must round-trip");
 	Check(loaded.world.settings.settlementCount == 4 && loaded.world.settings.buildingsPerSettlement == 5 && loaded.world.settings.buildingLevels == 3, "World settlement settings must round-trip");
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
-	Check(loaded.world.settings.settlementLayout==WorldGen::SettlementLayout::Blocks,"City street layout must round-trip");
+	Check(loaded.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks, "City street layout must round-trip");
 	Check(loaded.world.connectionItemId == 1387 && loaded.world.wallBrushName == "Stone walls" && !loaded.world.protectExisting, "Client/protection settings must round-trip");
 	Check(loaded.world.catalogPath == original.world.catalogPath, "Construction catalog path must round-trip");
 	Check(loaded.world.heightmapPath == original.world.heightmapPath && loaded.world.biomeHintsPath == original.world.biomeHintsPath, "World raster paths must round-trip");
@@ -134,6 +134,18 @@ static void TestCatalogJson() {
 		file.close();
 		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed construction catalog must fail");
 		Check(catalog.size() == WorldGen::DefaultBlueprints().size(), "Failed catalog load must preserve the caller catalog");
+	}
+	for (const char* objects : { R"([{"x":2,"y":2,"brush":"table"}])", R"([{"x":2,"y":2,"floor":1,"required":true,"brushes":["n","e","s","w"]}])" }) {
+		std::ofstream file(path);
+		file << "{\"version\":1,\"templates\":[{\"id\":\"furnished\",\"maxLevels\":2,\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"objects\":" << objects << "}]}";
+		file.close();
+		Check(WorldGen::LoadBlueprintCatalog(path.string(), catalog, error) && catalog[0].objects.size() == 1, "Furniture JSON must load both singular and orientation brush forms");
+	}
+	for (const char* objects : { R"([{"x":2,"y":2}])", R"([{"x":2,"y":2,"brush":7}])", R"([{"x":4294967296,"y":2,"brush":"table"}])", R"([{"x":2,"y":2,"required":1,"brush":"table"}])", R"([{"x":2,"y":2,"brush":"table","brushes":["n","e","s","w"]}])", R"([{"x":2,"y":2,"brushes":["n","e"]}])" }) {
+		std::ofstream file(path);
+		file << "{\"version\":1,\"templates\":[{\"id\":\"furnished\",\"maxLevels\":2,\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"objects\":" << objects << "}]}";
+		file.close();
+		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed furniture data must fail atomically");
 	}
 	std::filesystem::remove(path);
 }

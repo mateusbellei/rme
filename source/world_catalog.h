@@ -10,6 +10,12 @@ namespace WorldGen {
 	// A reusable client-independent construction footprint. Symbols:
 	// # wall, . floor, + street entrance, a/b alternating vertical landings,
 	// , courtyard ground, space = void (no tile above/below is implied).
+	struct BlueprintProp {
+		int x = 0, y = 0, floor = 0;
+		// One orientation-independent brush or four clockwise orientation brushes.
+		std::vector<std::string> brushes;
+		bool required = false;
+	};
 	struct Blueprint {
 		std::string id;
 		int weight = 1;
@@ -18,6 +24,7 @@ namespace WorldGen {
 		std::vector<std::string> rows;
 		std::vector<std::string> upperRows;
 		std::vector<std::string> biomes;
+		std::vector<BlueprintProp> objects;
 	};
 
 	using BlueprintCatalog = std::vector<Blueprint>;

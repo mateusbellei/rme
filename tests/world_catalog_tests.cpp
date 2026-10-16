@@ -22,6 +22,29 @@ int main() {
 				Check(back.rows == blueprint.rows && back.upperRows == blueprint.upperRows, "Four rotations must restore every floor exactly");
 			}
 		}
+		auto furnished = catalog[1];
+		furnished.objects.push_back({ 3, 3, 0, { "north", "east", "south", "west" }, true });
+		Check(WorldGen::ValidateBlueprint(furnished, error), "Furniture anchors must validate on interior floor");
+		for (int rotation = 0; rotation < 4; ++rotation) {
+			const auto turned = WorldGen::RotateBlueprint(furnished, rotation);
+			Check(WorldGen::ValidateBlueprint(turned, error), "Furniture must rotate with its footprint");
+			Check(turned.objects[0].brushes.front() == furnished.objects[0].brushes[rotation], "Furniture orientation must follow the building rotation");
+			const auto back = WorldGen::RotateBlueprint(turned, 4 - rotation);
+			Check(back.objects[0].x == 3 && back.objects[0].y == 3 && back.objects[0].brushes == furnished.objects[0].brushes, "Furniture position and all orientation names must round-trip");
+		}
+		auto invalidFurniture = furnished;
+		invalidFurniture.objects[0].x = 1;
+		invalidFurniture.objects[0].y = 1;
+		Check(!WorldGen::ValidateBlueprint(invalidFurniture, error), "Furniture cannot anchor on a landing");
+		invalidFurniture = furnished;
+		invalidFurniture.objects[0].floor = 4;
+		Check(!WorldGen::ValidateBlueprint(invalidFurniture, error), "Furniture cannot occupy a nonexistent floor");
+		invalidFurniture = furnished;
+		invalidFurniture.objects[0].brushes = { "one", "two" };
+		Check(!WorldGen::ValidateBlueprint(invalidFurniture, error), "Furniture needs one or exactly four orientation brushes");
+		invalidFurniture = furnished;
+		invalidFurniture.objects.push_back(invalidFurniture.objects[0]);
+		Check(!WorldGen::ValidateBlueprint(invalidFurniture, error), "Stacked anchors must be authored as one composite brush");
 		auto invalid = catalog[0];
 		invalid.id = "../unsafe";
 		Check(!WorldGen::ValidateBlueprint(invalid, error), "Invalid template IDs must fail");

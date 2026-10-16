@@ -18,6 +18,9 @@
 #include "json.h"
 #include "prompt_generator.h"
 #include "mt_rand.h"
+#include "procedural_mask.h"
+#include "item.h"
+#include "items.h"
 
 #include <algorithm>
 #include <fstream>
@@ -26,37 +29,6 @@
 #include <cctype>
 
 namespace {
-	static bool ParseHexColor(const std::string& text, uint8_t& r, uint8_t& g, uint8_t& b) {
-		if (text.size() != 7 || text[0] != '#') {
-			return false;
-		}
-		auto hex = [](char c) -> int {
-			if (c >= '0' && c <= '9') {
-				return c - '0';
-			}
-			if (c >= 'a' && c <= 'f') {
-				return c - 'a' + 10;
-			}
-			if (c >= 'A' && c <= 'F') {
-				return c - 'A' + 10;
-			}
-			return -1;
-		};
-		int rh = hex(text[1]);
-		int rl = hex(text[2]);
-		int gh = hex(text[3]);
-		int gl = hex(text[4]);
-		int bh = hex(text[5]);
-		int bl = hex(text[6]);
-		if (rh < 0 || rl < 0 || gh < 0 || gl < 0 || bh < 0 || bl < 0) {
-			return false;
-		}
-		r = static_cast<uint8_t>((rh << 4) | rl);
-		g = static_cast<uint8_t>((gh << 4) | gl);
-		b = static_cast<uint8_t>((bh << 4) | bl);
-		return true;
-	}
-
 	static bool IsWallGround(GroundBrush* brush) {
 		if (!brush) {
 			return false;
@@ -300,6 +272,7 @@ bool ProceduralCommon::PaintGroundTile(Editor& editor, Action* action, int x, in
 }
 
 bool ProceduralCommon::LoadLegend(const wxString& path, LegendMapping& mapping, wxString& error) {
+	error.clear();
 	mapping = LegendMapping();
 	if (path.empty()) {
 		mapping.defaultBrushName = "grass";
@@ -318,49 +291,16 @@ bool ProceduralCommon::LoadLegend(const wxString& path, LegendMapping& mapping, 
 		return false;
 	}
 
-	const json::mObject& object = root.get_obj();
-	json::mObject::const_iterator defaultIt = object.find("default");
-	if (defaultIt != object.end() && defaultIt->second.type() == json::str_type) {
-		mapping.defaultBrushName = defaultIt->second.get_str();
-	} else {
-		mapping.defaultBrushName = "grass";
-	}
-
-	json::mObject::const_iterator entriesIt = object.find("entries");
-	if (entriesIt == object.end() || entriesIt->second.type() != json::array_type) {
-		error = "Legend JSON must contain an 'entries' array.";
+	std::string parseError;
+	if (!ProceduralLegend::Parse(root, mapping, parseError)) {
+		error = wxstr(parseError);
 		return false;
 	}
-
-	const json::mArray& entries = entriesIt->second.get_array();
-	for (json::mArray::const_iterator it = entries.begin(); it != entries.end(); ++it) {
-		if (it->type() != json::obj_type) {
-			continue;
-		}
-		const json::mObject& entry = it->get_obj();
-		json::mObject::const_iterator colorIt = entry.find("color");
-		json::mObject::const_iterator brushIt = entry.find("brush");
-		if (colorIt == entry.end() || brushIt == entry.end()) {
-			continue;
-		}
-		if (colorIt->second.type() != json::str_type || brushIt->second.type() != json::str_type) {
-			continue;
-		}
-
-		LegendEntry legendEntry;
-		if (!ParseHexColor(colorIt->second.get_str(), legendEntry.r, legendEntry.g, legendEntry.b)) {
-			continue;
-		}
-		legendEntry.brushName = brushIt->second.get_str();
-		legendEntry.brush = nullptr;
-		mapping.entries.push_back(legendEntry);
-	}
-
 	return true;
 }
 
 wxString ProceduralCommon::ResolveLegendBrushes(LegendMapping& mapping) {
-	mapping.defaultBrush = FindGroundBrush(as_lower_str(mapping.defaultBrushName));
+	mapping.defaultBrush = mapping.defaultBrushName.empty() ? nullptr : FindGroundBrush(as_lower_str(mapping.defaultBrushName));
 
 	wxString warnings;
 	if (!mapping.defaultBrushName.empty() && !mapping.defaultBrush) {
@@ -388,23 +328,9 @@ bool ProceduralCommon::LoadLegendForPreset(const wxString& path, GenerationPrese
 		return g_gui.GetProceduralDataDirectory() + wxString("default_legend.json");
 	};
 
-	wxString tryPath = path;
-	if (tryPath.empty()) {
-		tryPath = defaultPath();
-	}
-
-	if (LoadLegend(tryPath, mapping, error)) {
-		resolvedPath = tryPath;
-		return true;
-	}
-
-	const wxString fallback = defaultPath();
-	if (tryPath != fallback && LoadLegend(fallback, mapping, error)) {
-		resolvedPath = fallback;
-		return true;
-	}
-
-	return false;
+	error.clear();
+	resolvedPath = path.empty() ? defaultPath() : path;
+	return LoadLegend(resolvedPath, mapping, error);
 }
 
 bool ProceduralCommon::IsTransparentPixel(uint8_t r, uint8_t g, uint8_t b) {
@@ -412,25 +338,14 @@ bool ProceduralCommon::IsTransparentPixel(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 GroundBrush* ProceduralCommon::BrushForPixel(uint8_t r, uint8_t g, uint8_t b, const LegendMapping* legend, GroundBrush* landFallback, GroundBrush* waterFallback) {
-	if (IsTransparentPixel(r, g, b)) {
-		return nullptr;
+	const LegendEntry* entry = ProceduralLegend::Find(legend, r, g, b);
+	if (entry) {
+		if (entry->tileId >= 0 || entry->brushName.empty()) return nullptr;
+		if (entry->brush) return entry->brush;
 	}
-
-	if (legend && !legend->entries.empty()) {
-		for (const LegendEntry& entry : legend->entries) {
-			if (entry.r == r && entry.g == g && entry.b == b) {
-				if (entry.brush) {
-					return entry.brush;
-				}
-				if (entry.brushName.empty()) {
-					return nullptr;
-				}
-			}
-		}
-		if (legend->defaultBrush) {
-			return legend->defaultBrush;
-		}
-	}
+	if (legend && legend->exactIds) return nullptr;
+	if (IsTransparentPixel(r, g, b) && !entry) return nullptr;
+	if (legend && legend->defaultBrush) return legend->defaultBrush;
 
 	const int brightness = (int(r) + int(g) + int(b)) / 3;
 	const bool isWater = (b > r && b > g && b > 100) || (brightness < 35);
@@ -438,14 +353,23 @@ GroundBrush* ProceduralCommon::BrushForPixel(uint8_t r, uint8_t g, uint8_t b, co
 }
 
 bool ProceduralCommon::ApplyColorMask(Editor& editor, const GenerationSpec& spec, const wxImage& mask, const LegendMapping* legend, wxString& error) {
-	if (mask.GetWidth() != spec.region.width || mask.GetHeight() != spec.region.height) {
+	if (!mask.IsOk() || mask.GetWidth() != spec.region.width || mask.GetHeight() != spec.region.height) {
 		error = "Mask size does not match target region.";
 		return false;
 	}
 
+	// Validate the entire mapping before creating an undo action or changing tiles.
+	if (legend) {
+		for (const LegendEntry& entry : legend->entries) {
+			if (entry.tileId > 0 && (!g_items.typeExists(entry.tileId) || !g_items[entry.tileId].isGroundTile())) {
+				error = wxString::Format("Legend tileId %d is not a ground in the loaded client.", entry.tileId);
+				return false;
+			}
+		}
+	}
 	GroundBrush* landBrush = PickDefaultLandBrush();
 	GroundBrush* waterBrush = PickDefaultWaterBrush();
-	if (!landBrush) {
+	if (!landBrush && (!legend || !legend->exactIds)) {
 		error = "Could not find any ground brushes in current client; load a version first.";
 		return false;
 	}
@@ -461,13 +385,14 @@ bool ProceduralCommon::ApplyColorMask(Editor& editor, const GenerationSpec& spec
 		}
 		for (int x = 0; x < spec.region.width; ++x) {
 			++processed;
+			if (ProceduralMask::IsTransparent(mask, x, y)) continue;
 			const uint8_t r = mask.GetRed(x, y);
 			const uint8_t g = mask.GetGreen(x, y);
 			const uint8_t b = mask.GetBlue(x, y);
+			const LegendEntry* entry = ProceduralLegend::Find(legend, r, g, b);
+			const int tileId = entry ? entry->tileId : -1;
 			GroundBrush* target = BrushForPixel(r, g, b, legend, landBrush, waterBrush);
-			if (!target) {
-				continue;
-			}
+			if (tileId == 0 || (!target && tileId < 0)) continue;
 
 			Position pos(spec.region.originX + x, spec.region.originY + y, spec.region.z);
 			TileLocation* location = editor.map.createTileL(pos);
@@ -482,7 +407,11 @@ bool ProceduralCommon::ApplyColorMask(Editor& editor, const GenerationSpec& spec
 				delete newTile->ground;
 				newTile->ground = nullptr;
 			}
-			target->draw(&editor.map, newTile, nullptr);
+			if (tileId > 0) {
+				newTile->ground = Item::Create(static_cast<uint16_t>(tileId));
+			} else {
+				target->draw(&editor.map, newTile, nullptr);
+			}
 
 			if (g_settings.getInteger(Config::USE_AUTOMAGIC)) {
 				newTile->borderize(&editor.map);
@@ -723,27 +652,8 @@ bool ProceduralCommon::PostProcessFloors(Editor& editor, const GenerationSpec& s
 	return true;
 }
 
-wxImage ProceduralCommon::BlendMasks(const wxImage& reference, const wxImage& procedural, int proceduralWeight) {
-	const int weight = std::max(0, std::min(100, proceduralWeight));
-	if (weight <= 0) {
-		return reference;
-	}
-	if (weight >= 100) {
-		return procedural;
-	}
-
-	wxImage blended(reference.GetWidth(), reference.GetHeight());
-	const double procFactor = weight / 100.0;
-	const double refFactor = 1.0 - procFactor;
-	for (int y = 0; y < blended.GetHeight(); ++y) {
-		for (int x = 0; x < blended.GetWidth(); ++x) {
-			const uint8_t r = static_cast<uint8_t>(reference.GetRed(x, y) * refFactor + procedural.GetRed(x, y) * procFactor);
-			const uint8_t g = static_cast<uint8_t>(reference.GetGreen(x, y) * refFactor + procedural.GetGreen(x, y) * procFactor);
-			const uint8_t b = static_cast<uint8_t>(reference.GetBlue(x, y) * refFactor + procedural.GetBlue(x, y) * procFactor);
-			blended.SetRGB(x, y, r, g, b);
-		}
-	}
-	return blended;
+wxImage ProceduralCommon::BlendMasks(const wxImage& reference, const wxImage& procedural, int proceduralWeight, uint32_t seed) {
+	return ProceduralMask::Blend(reference, procedural, proceduralWeight, seed);
 }
 
 bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec& spec, GenerationPreset preset, const std::vector<int>* heights, wxString& error) {
@@ -837,6 +747,12 @@ bool ProceduralCommon::ApplyDeepCave(Editor& editor, const GenerationSpec& spec,
 	}
 	if (!LoadLegend(legendPath, legend, error)) {
 		return false;
+	}
+	for (const auto& entry : legend.entries) {
+		if (entry.tileId >= 0) {
+			error = "Deep cave generation requires a brush legend. Use exact tileId mappings with image or flat prompt masks.";
+			return false;
+		}
 	}
 	ResolveLegendBrushes(legend);
 

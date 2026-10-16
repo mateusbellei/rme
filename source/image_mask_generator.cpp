@@ -14,6 +14,7 @@
 #include "action.h"
 #include "editor.h"
 #include "gui.h"
+#include "procedural_mask.h"
 
 namespace {
 	static const std::vector<std::string> kIceDoodadKeywords = {
@@ -64,7 +65,7 @@ namespace {
 			return false;
 		}
 		if (out.GetWidth() != spec.region.width || out.GetHeight() != spec.region.height) {
-			out = out.Scale(spec.region.width, spec.region.height, wxIMAGE_QUALITY_HIGH);
+			out = ProceduralMask::Scale(out, spec.region.width, spec.region.height);
 		}
 		return true;
 	}
@@ -72,14 +73,14 @@ namespace {
 	static wxImage ResolvePromptMask(const GenerationSpec& spec, GenerationPreset preset, wxString& error) {
 		wxImage reference;
 		const bool hasReference = LoadScaledReference(spec, reference, error);
-		if (hasReference && !error.empty()) {
+		if (!error.empty()) {
 			return wxImage();
 		}
 
 		wxImage procedural = PromptGenerator::BuildMask(preset, spec.region.width, spec.region.height, spec.seed);
 		if (hasReference) {
 			if (spec.reference.blendWeight > 0) {
-				return ProceduralCommon::BlendMasks(reference, procedural, spec.reference.blendWeight);
+				return ProceduralCommon::BlendMasks(reference, procedural, spec.reference.blendWeight, spec.seed);
 			}
 			return reference;
 		}
@@ -135,12 +136,12 @@ namespace {
 		wxImage mask = PromptGenerator::BuildIceMask(resolved.region.width, resolved.region.height, 0, resolved.seed);
 		if (!resolved.imageMask.imagePath.empty()) {
 			wxImage reference;
-			wxString refError;
-			if (LoadScaledReference(resolved, reference, refError)) {
-				mask = resolved.reference.blendWeight > 0
-					? ProceduralCommon::BlendMasks(reference, mask, resolved.reference.blendWeight)
-					: reference;
+			if (!LoadScaledReference(resolved, reference, error)) {
+				return false;
 			}
+			mask = resolved.reference.blendWeight > 0
+				? ProceduralCommon::BlendMasks(reference, mask, resolved.reference.blendWeight, resolved.seed)
+				: reference;
 		}
 
 		LegendMapping legend;
@@ -262,7 +263,7 @@ bool ProceduralBackends::GenerateFromImage(Editor& editor, const GenerationSpec&
 
 	wxImage scaled = img;
 	if (img.GetWidth() != resolved.region.width || img.GetHeight() != resolved.region.height) {
-		scaled = img.Scale(resolved.region.width, resolved.region.height, wxIMAGE_QUALITY_HIGH);
+		scaled = ProceduralMask::Scale(img, resolved.region.width, resolved.region.height);
 	}
 
 	LegendMapping legend;

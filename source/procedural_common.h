@@ -7,25 +7,12 @@
 
 #include "main.h"
 #include "procedural_generator.h"
+#include "procedural_legend.h"
 
 class Editor;
 class GroundBrush;
 class WallBrush;
 class DoodadBrush;
-
-struct LegendEntry {
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;
-	std::string brushName;
-	GroundBrush* brush;
-};
-
-struct LegendMapping {
-	std::vector<LegendEntry> entries;
-	std::string defaultBrushName;
-	GroundBrush* defaultBrush;
-};
 
 namespace ProceduralCommon {
 	bool ResolveRegion(Editor& editor, GenerationSpec& spec, wxString& error);
@@ -52,7 +39,7 @@ namespace ProceduralCommon {
 	bool ScatterDoodads(Editor& editor, const GenerationSpec& spec, int surfaceFloor, const std::vector<int>* heights, const std::vector<std::string>& keywords, wxString& error);
 	bool ScatterPresetDoodads(Editor& editor, const GenerationSpec& spec, GenerationPreset preset, const std::vector<int>* heights, wxString& error);
 	bool ApplyDeepCave(Editor& editor, const GenerationSpec& spec, int depthLevels, uint32_t seed, wxString& error);
-	wxImage BlendMasks(const wxImage& reference, const wxImage& procedural, int proceduralWeight);
+	wxImage BlendMasks(const wxImage& reference, const wxImage& procedural, int proceduralWeight, uint32_t seed = 1337);
 	bool PostProcess(Editor& editor, const GenerationSpec& spec, wxString& error);
 	bool PostProcessFloors(Editor& editor, const GenerationSpec& spec, int minZ, int maxZ, wxString& error);
 }

@@ -55,7 +55,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	imageRow->Add(new wxButton(this, ID_BROWSE_IMAGE, "Browse..."), 0);
 	grid->Add(imageRow, 1, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Legend (JSON):"), 0, wxALIGN_CENTER_VERTICAL);
+	grid->Add(new wxStaticText(this, wxID_ANY, "Legend / color mappings (JSON):"), 0, wxALIGN_CENTER_VERTICAL);
 	wxBoxSizer* legendRow = new wxBoxSizer(wxHORIZONTAL);
 	txtLegendPath = new wxTextCtrl(this, wxID_ANY, g_gui.GetProceduralDataDirectory() + wxString("default_legend.json"));
 	legendRow->Add(txtLegendPath, 1, wxEXPAND | wxRIGHT, 4);
@@ -343,7 +343,7 @@ void ProceduralDialog::OnBrowseImage(wxCommandEvent& event) {
 }
 
 void ProceduralDialog::OnBrowseLegend(wxCommandEvent& event) {
-	wxFileDialog dlg(this, "Select legend JSON", "", "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+	wxFileDialog dlg(this, "Select legend or PNGtoOTBM color mappings", "", "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 	if (dlg.ShowModal() == wxID_OK) {
 		txtLegendPath->SetValue(dlg.GetPath());
 	}

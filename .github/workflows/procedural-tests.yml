@@ -24,7 +24,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libwxgtk3.2-dev libwxgtk-gl3.2-dev libboost-thread-dev freeglut3-dev libarchive-dev
+          sudo apt-get install -y cmake g++ libwxgtk3.2-dev libboost-thread-dev freeglut3-dev libarchive-dev
       - name: Configure
         run: cmake -S tests -B build/procedural-tests -DCMAKE_BUILD_TYPE=Release
       - name: Build tests and editor integration

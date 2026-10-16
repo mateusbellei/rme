@@ -150,6 +150,9 @@ namespace WorldBatch {
 		if (!ProceduralRecipe::Load(options.recipe, spec, error)) {
 			return false;
 		}
+		if (options.seed) {
+			spec.seed = *options.seed;
+		}
 		if (spec.source != GenerationSource::WorldPlan || spec.useSelection) {
 			error = "Batch recipes must use source world and an explicit region, without editor selection.";
 			return false;
@@ -394,6 +397,7 @@ namespace WorldBatch {
 		report["towns"] = townRecords;
 		report["townPrefix"] = nstr(options.townPrefix);
 		report["algorithmVersion"] = int(WorldGen::AlgorithmVersion);
+		report["seed"] = json::mValue(uint64_t(resolved.seed));
 		report["planFingerprint"] = std::to_string(prepared.fingerprint);
 		report["tiles"] = json::mValue(uint64_t(prepared.application.changedTiles));
 		report["doodads"] = json::mValue(uint64_t(prepared.application.doodads));
@@ -424,7 +428,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME] [--tile-budget MAX_TILES] [--verify]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME] [--tile-budget MAX_TILES] [--seed UINT32] [--verify]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -458,6 +462,14 @@ namespace WorldBatch {
 				options.clientDat = args[i + 1];
 			} else if (args[i] == "--town-prefix") {
 				options.townPrefix = args[i + 1];
+			} else if (args[i] == "--seed") {
+				const auto& value = args[i + 1];
+				unsigned long long seed = 0;
+				if (options.seed || value.empty() || value.find_first_not_of("0123456789") != wxString::npos || !value.ToULongLong(&seed) || seed > UINT32_MAX) {
+					std::cerr << "Seed must be one decimal unsigned 32-bit integer (0..4294967295). Specify --seed only once.\n";
+					return 2;
+				}
+				options.seed = uint32_t(seed);
 			} else if (args[i] == "--tile-budget") {
 				unsigned long long budget = 0;
 				if (!args[i + 1].ToULongLong(&budget) || !budget || budget > WorldEditor::MaximumTileBudget) {

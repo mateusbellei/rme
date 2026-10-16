@@ -398,6 +398,14 @@ brushes, runs the same planner and staged editor adapter, and writes:
 - `recipe.json` with references resolved relative to its new location;
 - `generation.json` with client registry version, actual placement counts and warnings.
 
+Use `--seed UINT32` to override the recipe seed without editing the input file.
+The value must be decimal, between 0 and 4294967295, and may be specified once.
+The exported `recipe.json`, `plan.json` and `generation.json` all record the
+effective seed. Regenerating from the exported recipe uses that seed without
+requiring the option again. With identical client data, materials, inputs and
+options, the generated OTBM is reproducible; the CLI regression checks byte
+equality after replaying the exported recipe, including the uint32 boundaries.
+
 Wall-name resolution prefers an exact match, then the shortest partial match,
 matching ground-brush behavior and avoiding an earlier decorative name.
 

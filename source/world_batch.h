@@ -1,6 +1,7 @@
 #ifndef RME_WORLD_BATCH_H_
 #define RME_WORLD_BATCH_H_
 #include "world_editor.h"
+#include <optional>
 namespace WorldBatch {
 	struct Options {
 		wxString recipe, itemsOtb, itemsXml, materials, outputDirectory;
@@ -8,6 +9,7 @@ namespace WorldBatch {
 		bool exportPreviews = true;
 		bool verifyOutput = false;
 		size_t tileBudget = WorldEditor::DefaultTileBudget;
+		std::optional<uint32_t> seed;
 	};
 	struct Result {
 		uint64_t fingerprint = 0;

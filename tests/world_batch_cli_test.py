@@ -41,6 +41,7 @@ def main():
         plan = json.loads((output / "plan.json").read_text(encoding="utf-8"))
         assert report["client"]["clientVersion"] == 57
         assert report["tileBudget"] == 1048576
+        assert report["seed"] == plan["settings"]["seed"]
         assert report["verifiedOTBM"] is True
         assert report["townPrefix"] == "Frontier" and len(report["towns"]) == 2
         assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
@@ -116,9 +117,50 @@ def main():
             assert residences and all(b["blueprint"] == biome + "_residence" for b in residences)
             assert regional["settlements"][0]["biome"] == biome
             assert placements["furniture"] > 0 and placements["skippedFurniture"] == 0
+        # Seed overrides must survive recipe export, including both uint32 boundaries.
+        seed_recipe = ridged_recipe.copy()
+        seed_recipe["world"] = dict(ridged_recipe["world"])
+        seed_recipe["world"].pop("biomeHints", None)
+        seed_recipe["world"].update(relief="smooth", buildings=4, caveEntrances=1)
+        seed_recipe["region"] = dict(width=128, height=128, originX=0, originY=0, z=7)
+        seed_path = Path(temporary) / "seed-recipe.json"
+        seed_path.write_text(json.dumps(seed_recipe), encoding="utf-8")
+        recipe_hash = hashlib.sha256(seed_path.read_bytes()).digest()
+        seed_command = ridged_command.copy()
+        seed_command[2] = str(seed_path)
+        fingerprints = []
+        for seed in (0, 4294967295):
+            seed_output = Path(temporary) / f"seed-{seed}"
+            seed_command[6] = str(seed_output)
+            generated = subprocess.run(seed_command + ["--seed", str(seed)], cwd=temporary,
+                                       capture_output=True, text=True, errors="replace", timeout=60)
+            assert generated.returncode == 0, generated.stdout + generated.stderr
+            seeded = json.loads((seed_output / "generation.json").read_text(encoding="utf-8"))
+            saved_recipe = json.loads((seed_output / "recipe.json").read_text(encoding="utf-8"))
+            seeded_plan = json.loads((seed_output / "plan.json").read_text(encoding="utf-8"))
+            assert seeded["seed"] == saved_recipe["seed"] == seeded_plan["settings"]["seed"] == seed
+            fingerprints.append(seeded["planFingerprint"])
+        assert fingerprints[0] != fingerprints[1]
+        assert hashlib.sha256(seed_path.read_bytes()).digest() == recipe_hash
+        replay = seed_command.copy()
+        replay[2] = str(seed_output / "recipe.json")
+        replay[6] = str(Path(temporary) / "seed-replay")
+        generated = subprocess.run(replay, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        assert (Path(replay[6]) / "world.otbm").read_bytes() == (seed_output / "world.otbm").read_bytes()
+        invalid_output = Path(temporary) / "invalid-seed"
+        seed_command[6] = str(invalid_output)
+        for arguments in (["--seed", "-1"], ["--seed", "4294967296"], ["--seed", "+1"],
+                          ["--seed", "1.5"], ["--seed", " 1"], ["--seed", ""],
+                          ["--seed", "1", "--seed", "2"], ["--seed"]):
+            failed = subprocess.run(seed_command + arguments, cwd=temporary, capture_output=True,
+                                    text=True, errors="replace", timeout=10)
+            assert failed.returncode == 2, (arguments, failed.stdout, failed.stderr)
+            assert not invalid_output.exists()
         print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
               f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite; "
-              "ridged cave entrances and desert/snow architecture")
+              "ridged cave entrances, desert/snow architecture and seeded OTBM replay")
 
 
 if __name__ == "__main__":

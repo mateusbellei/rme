@@ -403,3 +403,38 @@ receives the explicit client version, including modern item IDs; the maximum
 16-bit server ID no longer wraps the XML range loop. The full editor regression
 also exercises OTB/XML/material/relative-recipe loading, writes and reloads the
 batch bundle, validates travel destinations, and rejects existing output.
+
+
+## Furnished 10.98 example
+
+`data/procedural/recipes/example_furnished_city_1098.json` uses the public
+10.98 item registry and materials already included in this repository. Its
+relative catalog supplies residences, inns and workshops with beds, chairs and
+stone tables on three floors. The 10.98 materials load explicit clockwise
+furniture aliases from `procedural_furniture.xml`; this recipe is therefore
+usable both in the editor with that client loaded and through the batch command:
+
+```powershell
+rme --generate-world data/procedural/recipes/example_furnished_city_1098.json data/1098/items_original1098.otb data/1098/items_original1098.xml data/1098/materials.xml build/furnished-world --data-dir data
+```
+
+The default seed creates two settlements with 24 buildings and 216 required
+furniture composites, including rotated beds and 2×2 tables. Three building
+floors and two cave levels produce 792,548 non-void tiles, within the application
+limit. Furniture count means accepted composite placements, rather than item
+count. These IDs and orientations are specific to the bundled 10.98 data;
+other clients need their own bindings. No DAT/SPR assets are bundled with this
+profile, and its physical/serialization regression does not establish in-game
+or visual QA.
+
+The external CLI regression runs from another working directory, checks the
+relative recipe assets and populated output, and hashes every artifact before
+verifying that a repeated request refuses to replace it.
+
+
+Optional client metadata loading uses the explicit data directory's
+`clients.xml`, even if another copy exists beside the executable. DAT parsing
+rejects truncated records, missing flag terminators, zero/oversized sprite
+products and invalid animation settings before using those values. Its sprite
+ID loop handles the maximum 16-bit item ID without wrapping. Regression data
+is synthetic and contains dimensions only; it requires no game sprites.

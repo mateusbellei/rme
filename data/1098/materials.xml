@@ -19,5 +19,6 @@
 	<include file="grounds.xml"/>
 	<include file="walls.xml"/>
 	<include file="doodads.xml"/>
+	<include file="procedural_furniture.xml"/>
 	<include file="tilesets.xml"/>
 </materials>

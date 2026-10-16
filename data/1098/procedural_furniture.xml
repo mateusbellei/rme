@@ -1,0 +1,119 @@
+<!-- Optional procedural furniture profile for the bundled 10.98 registry. -->
+<materials>
+  <brush name="world chair south" type="doodad" server_lookid="1652" on_blocking="true" thickness="100/100">
+    <item id="1652" chance="1" />
+  </brush>
+  <brush name="world chair west" type="doodad" server_lookid="1653" on_blocking="true" thickness="100/100">
+    <item id="1653" chance="1" />
+  </brush>
+  <brush name="world chair north" type="doodad" server_lookid="1650" on_blocking="true" thickness="100/100">
+    <item id="1650" chance="1" />
+  </brush>
+  <brush name="world chair east" type="doodad" server_lookid="1651" on_blocking="true" thickness="100/100">
+    <item id="1651" chance="1" />
+  </brush>
+  <brush name="world table 0" type="doodad" server_lookid="7273" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="0" y="0">
+        <item id="7273" />
+      </tile>
+      <tile x="1" y="0">
+        <item id="7274" />
+      </tile>
+      <tile x="0" y="1">
+        <item id="7275" />
+      </tile>
+      <tile x="1" y="1">
+        <item id="7276" />
+      </tile>
+    </composite>
+  </brush>
+  <brush name="world table 1" type="doodad" server_lookid="7273" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="-1" y="0">
+        <item id="7273" />
+      </tile>
+      <tile x="0" y="0">
+        <item id="7274" />
+      </tile>
+      <tile x="-1" y="1">
+        <item id="7275" />
+      </tile>
+      <tile x="0" y="1">
+        <item id="7276" />
+      </tile>
+    </composite>
+  </brush>
+  <brush name="world table 2" type="doodad" server_lookid="7273" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="-1" y="-1">
+        <item id="7273" />
+      </tile>
+      <tile x="0" y="-1">
+        <item id="7274" />
+      </tile>
+      <tile x="-1" y="0">
+        <item id="7275" />
+      </tile>
+      <tile x="0" y="0">
+        <item id="7276" />
+      </tile>
+    </composite>
+  </brush>
+  <brush name="world table 3" type="doodad" server_lookid="7273" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="0" y="-1">
+        <item id="7273" />
+      </tile>
+      <tile x="1" y="-1">
+        <item id="7274" />
+      </tile>
+      <tile x="0" y="0">
+        <item id="7275" />
+      </tile>
+      <tile x="1" y="0">
+        <item id="7276" />
+      </tile>
+    </composite>
+  </brush>
+  <brush name="world bed 0" type="doodad" server_lookid="1754" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="0" y="0">
+        <item id="1754" />
+      </tile>
+      <tile x="0" y="1">
+        <item id="1755" />
+      </tile>
+    </composite>
+  </brush>
+  <brush name="world bed 1" type="doodad" server_lookid="1754" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="-1" y="0">
+        <item id="1760" />
+      </tile>
+      <tile x="0" y="0">
+        <item id="1761" />
+      </tile>
+    </composite>
+  </brush>
+  <brush name="world bed 2" type="doodad" server_lookid="1754" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="0" y="-1">
+        <item id="1754" />
+      </tile>
+      <tile x="0" y="0">
+        <item id="1755" />
+      </tile>
+    </composite>
+  </brush>
+  <brush name="world bed 3" type="doodad" server_lookid="1754" on_blocking="true" thickness="100/100">
+    <composite chance="1">
+      <tile x="0" y="0">
+        <item id="1760" />
+      </tile>
+      <tile x="1" y="0">
+        <item id="1761" />
+      </tile>
+    </composite>
+  </brush>
+</materials>

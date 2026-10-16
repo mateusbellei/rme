@@ -110,6 +110,7 @@ ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/world_decoration.h
 ${CMAKE_CURRENT_LIST_DIR}/world_inputs.h
 ${CMAKE_CURRENT_LIST_DIR}/world_export.h
+${CMAKE_CURRENT_LIST_DIR}/world_batch.h
 ${CMAKE_CURRENT_LIST_DIR}/world_catalog.h
 ${CMAKE_CURRENT_LIST_DIR}/world_plan.h
 ${CMAKE_CURRENT_LIST_DIR}/world_editor.h
@@ -266,6 +267,7 @@ ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_decoration.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_inputs.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_export.cpp
+${CMAKE_CURRENT_LIST_DIR}/world_batch.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_catalog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_catalog_json.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_plan.cpp

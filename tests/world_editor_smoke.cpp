@@ -2,6 +2,9 @@
 
 #include "world_editor.h"
 #include "procedural_recipe.h"
+#include "procedural_common.h"
+#include "world_batch.h"
+#include "json.h"
 #include <wx/imagpng.h>
 #include <wx/wfstream.h>
 #include "editor.h"
@@ -103,6 +106,17 @@ namespace {
 		wxArrayString warnings;
 		Check(wall->load(xml.child("brush"), warnings), "Wall fixture must load");
 		g_brushes.addBrush(wall.release());
+		for (int id = 204; id < 208; ++id) {
+			FixtureItem(id, ITEM_GROUP_NONE, true);
+		}
+		pugi::xml_document decoyXml;
+		Check(bool(decoyXml.load(R"(<brush><wall type="horizontal"><item id="204" chance="1"/></wall><wall type="vertical"><item id="205" chance="1"/></wall><wall type="corner"><item id="206" chance="1"/></wall><wall type="pole"><item id="207" chance="1"/></wall></brush>)")), "Decoy wall fixture XML");
+		auto decoy = std::make_unique<WallBrush>();
+		decoy->setName("a stone decoy");
+		Check(decoy->load(decoyXml.child("brush"), warnings), "Decoy wall fixture must load");
+		g_brushes.addBrush(decoy.release());
+		Check(ProceduralCommon::FindWallBrush("stone")->getName() == "stone", "An exact wall name must win over an alphabetically earlier partial match");
+
 		for (const auto& definition : { std::pair { "tree bush cactus snow crystal palm", R"(<brush><item id="300" chance="1"/><item id="301" chance="1"/></brush>)" }, std::pair { "tree rock", R"(<brush><composite chance="1"><tile x="0" y="0"><item id="302"/></tile><tile x="1" y="0"><item id="302"/></tile><tile x="0" y="1"><item id="302"/></tile><tile x="1" y="1"><item id="302"/></tile></composite></brush>)" } }) {
 			pugi::xml_document props;
 			Check(bool(props.load(definition.second)), "Decoration fixture XML");
@@ -179,6 +193,47 @@ namespace {
 			out << (bad ? 65530 : (barrier ? 101 : 100)) << '}';
 		}
 		out << "]}";
+	}
+
+	void WriteBatchRegistry(const std::filesystem::path& directory) {
+		MemoryNodeFileWriteHandle otb;
+		otb.addNode(0);
+		otb.addU32(0);
+		otb.addU8(ROOT_ATTR_VERSION);
+		otb.addU16(140);
+		otb.addU32(3);
+		otb.addU32(57);
+		otb.addU32(0);
+		const uint8_t reserved[128] = {};
+		otb.addRAW(reserved, 128);
+		for (int id : { 100, 101, 103, 200, 201, 202, 203, 300, 301, 302, 310, 311, 312, 313, 20001, 65535 }) {
+			const bool ground = id == 100 || id == 101;
+			otb.addNode(ground ? ITEM_GROUP_GROUND : ITEM_GROUP_NONE);
+			otb.addU32(id == 101 || (id >= 200 && id <= 313 && id != 301) ? FLAG_UNPASSABLE : 0);
+			otb.addU8(ITEM_ATTR_SERVERID);
+			otb.addU16(2);
+			otb.addU16(uint16_t(id));
+			otb.addU8(ITEM_ATTR_CLIENTID);
+			otb.addU16(2);
+			otb.addU16(uint16_t(id));
+			otb.endNode();
+		}
+		otb.endNode();
+		{
+			std::ofstream file(directory / "batch-items.otb", std::ios::binary);
+			file.write("OTBI", 4);
+			file.write(reinterpret_cast<const char*>(otb.getMemory()), std::streamsize(otb.getSize()));
+		}
+		{
+			std::ofstream file(directory / "batch-items.xml");
+			file << R"(<items><item id="103" name="portal"><attribute key="type" value="teleport"/></item><item id="20001" name="modern portal"><attribute key="type" value="teleport"/></item><item id="65535" name="maximum item"/></items>)";
+		}
+		std::ofstream file(directory / "batch-materials.xml");
+		file << R"(<materials><brush name="stone" type="wall"><wall type="horizontal"><item id="200" chance="1"/></wall><wall type="vertical"><item id="201" chance="1"/></wall><wall type="corner"><item id="202" chance="1"/></wall><wall type="pole"><item id="203" chance="1"/></wall></brush><brush name="tree bush cactus snow crystal palm" type="doodad"><item id="300" chance="1"/><item id="301" chance="1"/></brush><brush name="tree rock" type="doodad"><composite chance="1"><tile x="0" y="0"><item id="302"/></tile><tile x="1" y="0"><item id="302"/></tile><tile x="0" y="1"><item id="302"/></tile><tile x="1" y="1"><item id="302"/></tile></composite></brush>)";
+		for (int direction = 0; direction < 4; ++direction) {
+			file << "<brush name=\"fixture furniture " << direction << "\" type=\"doodad\"><item id=\"" << 310 + direction << "\" chance=\"1\"/></brush>";
+		}
+		file << "</materials>";
 	}
 
 	void CheckTravel(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan) {
@@ -387,10 +442,75 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 	}
 }
 
+static int RunBatchScenario(const wxString& outputDirectory) {
+	try {
+		const std::filesystem::path directory = nstr(outputDirectory);
+		WriteBatchRegistry(directory);
+		const auto data = directory / "batch-data";
+		std::filesystem::create_directories(data / "procedural");
+		std::ofstream(data / "procedural/default_legend.json") << "{}";
+		std::ofstream(data / "procedural/biome_doodads.json", std::ios::binary) << "\xef\xbb\xbf" << R"({"presets":{"forest":{"keywords":["tree"]}}})";
+		WorldBatch::Options options;
+		options.dataDirectory = wxString::FromUTF8(data.string());
+		options.recipe = outputDirectory + "/recipe.json";
+		options.itemsOtb = outputDirectory + "/batch-items.otb";
+		options.itemsXml = outputDirectory + "/batch-items.xml";
+		options.materials = outputDirectory + "/batch-materials.xml";
+		options.outputDirectory = outputDirectory + "/batch-" + std::to_string(wxGetProcessId());
+		WorldBatch::Result result;
+		wxString error;
+		Check(WorldBatch::Generate(options, result, error), "Batch registry/XML/recipe generation: " + nstr(error));
+		Check(std::none_of(result.warnings.begin(), result.warnings.end(), [](const wxString& warning) { return warning.Contains("Biome decoration settings could not be read"); }), "UTF-8 BOM biome settings must load without silently replacing configured keywords");
+		Check(g_items[20001].isTeleport(), "Explicit registry client version must preserve modern item XML IDs");
+		Check(g_items[65535].name == "maximum item", "Maximum server ID must load without a uint16 range-loop wrap");
+		Check(result.application.changedTiles > 0 && result.application.furniture > 0, "Batch generation must use the full production adapter, including furniture");
+		const auto output = std::filesystem::u8path(nstr(options.outputDirectory));
+		std::ifstream file(output / "world.otbm", std::ios::binary);
+		std::string bytes((std::istreambuf_iterator<char>(file)), {});
+		file.close();
+		Check(bytes.size() > 4 && bytes.substr(0, 4) == "OTBM", "Batch artifact must use the real OTBM magic header");
+		CopyBuffer copy;
+		MapVersion version(MAP_OTBM_2, 57);
+		Editor reopened(copy, version);
+		MapCodec codec(version);
+		MemoryNodeFileReadHandle memory(reinterpret_cast<const uint8_t*>(bytes.data() + 4), bytes.size() - 4);
+		Check(codec.Read(reopened.map, memory), "Batch OTBM must reload using the production reader");
+		Check(reopened.map.getSpawnFilename() == "world-spawns.xml" && reopened.map.getHouseFilename() == "world-houses.xml", "Batch OTBM must reference its emitted sidecars");
+		for (const char* filename : { "world-spawns.xml", "world-houses.xml" }) {
+			pugi::xml_document document;
+			Check(bool(document.load_file((output / filename).wstring().c_str())), "Batch XML sidecars must be valid");
+		}
+		GenerationSpec spec, resolved;
+		WorldGen::Plan plan;
+		Check(ProceduralRecipe::Load(options.recipe, spec, error), "Original batch recipe must reload");
+		Check(WorldEditor::BuildPlan(reopened, spec, resolved, plan, error), "Batch plan must be reproducible from original inputs");
+		Check(WorldGen::Fingerprint(plan) == result.fingerprint, "Batch result must record the exact semantic plan");
+		CheckTravel(reopened, resolved, plan);
+		std::ifstream reportFile(output / "generation.json");
+		json::mValue report;
+		Check(json::read(reportFile, report) && report.get_obj().at("planFingerprint").get_str() == std::to_string(result.fingerprint), "Batch report must record the exact plan identity");
+		Check(report.get_obj().at("furniture").get_int64() > 0 && !report.get_obj().at("warnings").get_array().empty(), "Batch report must retain placement counts and metadata-availability warnings");
+		const auto before = MapHash(reopened.map);
+		Check(!WorldBatch::Generate(options, result, error) && MapHash(reopened.map) == before, "Existing output must be rejected before touching the registry or map");
+		std::ifstream unchanged(output / "world.otbm", std::ios::binary);
+		const std::string after((std::istreambuf_iterator<char>(unchanged)), {});
+		Check(bytes == after, "Repeated batch requests must never replace existing output");
+		std::cout << "PASS: batch OTB/XML/material/relative-recipe loading, modern/max item IDs, OTBM/XML bundle and no-overwrite protection\n";
+		return 0;
+	} catch (const std::exception& exception) {
+		std::cerr << "FAIL: batch world: " << exception.what() << '\n';
+		return 1;
+	}
+}
+
 int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 	const int village = RunWorldScenario(outputDirectory, false);
 	if (village != 0) {
 		return village;
 	}
-	return RunWorldScenario(outputDirectory + "/city", true);
+	const int city = RunWorldScenario(outputDirectory + "/city", true);
+	if (city != 0) {
+		return city;
+	}
+	return RunBatchScenario(outputDirectory);
 }

@@ -360,3 +360,46 @@ folder layouts. Saves use a temporary file and only replace an existing recipe
 after the full JSON has been written. Inputs are capped at 4 MiB; malformed
 field types, oversized integers, invalid densities and embedded-NUL paths are
 rejected without changing the caller's configuration.
+
+
+## Batch OTBM generation
+
+The application accepts a batch command before loading the editor window, user
+preferences or single-instance state:
+
+```powershell
+rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY --data-dir path/to/rme/data
+```
+
+Use a `source:world` recipe with an explicit region and `useSelection:false`.
+The command loads the specified OTB item registry, item XML metadata and material
+brushes, runs the same planner and staged editor adapter, and writes:
+
+- `world.otbm`, `world-spawns.xml`, `world-houses.xml` using production serializers;
+- `plan.json` and per-floor PPM diagnostics;
+- `recipe.json` with references resolved relative to its new location;
+- `generation.json` with client registry version, actual placement counts and warnings.
+
+Wall-name resolution prefers an exact match, then the shortest partial match,
+matching ground-brush behavior and avoiding an earlier decorative name.
+
+The output directory must be new and its parent must exist. Existing output is
+rejected before client loading; repeated requests never replace a previous
+world. A nonzero exit means the bundle did not finish; an I/O failure after
+writing starts can leave partial artifacts in the newly created folder.
+Referenced PNGs/catalogs/client files are not copied into the output.
+
+`--data-dir` locates shared procedural defaults and `clients.xml`; conventional
+`data/<version>/materials.xml` layouts can infer that data root. Optional
+`--client-dat path/to/Tibia.dat` loads sprite dimensions after verifying its
+signature against the OTB version in `clients.xml`. Without DAT metadata the
+command checks physical blocking and composite coordinates and reports that
+visual sprite extents were unavailable. No sprite images are required to encode
+OTBM. This is not a game-server playtest.
+
+`rme --generate-world --help` prints usage. On Linux the wx application still
+needs a display, so use `xvfb-run -a rme ...` on a build server. Registry loading
+receives the explicit client version, including modern item IDs; the maximum
+16-bit server ID no longer wraps the XML range loop. The full editor regression
+also exercises OTB/XML/material/relative-recipe loading, writes and reloads the
+batch bundle, validates travel destinations, and rejects existing output.

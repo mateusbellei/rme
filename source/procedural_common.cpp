@@ -149,16 +149,23 @@ GroundBrush* ProceduralCommon::FindGroundBrush(const std::string& targetLower) {
 }
 
 WallBrush* ProceduralCommon::FindWallBrush(const std::string& targetLower) {
-	for (const auto& kv : g_brushes.getMap()) {
-		Brush* brush = kv.second;
-		if (brush && brush->isWall()) {
-			const std::string name = as_lower_str(brush->getName());
-			if (name.find(targetLower) != std::string::npos) {
-				return brush->asWall();
-			}
+	WallBrush* best = nullptr;
+	size_t bestLength = std::numeric_limits<size_t>::max();
+	for (const auto& entry : g_brushes.getMap()) {
+		Brush* brush = entry.second;
+		if (!brush || !brush->isWall()) {
+			continue;
+		}
+		const std::string name = as_lower_str(brush->getName());
+		if (name == targetLower) {
+			return brush->asWall();
+		}
+		if (name.find(targetLower) != std::string::npos && name.size() < bestLength) {
+			best = brush->asWall();
+			bestLength = name.size();
 		}
 	}
-	return nullptr;
+	return best;
 }
 
 GroundBrush* ProceduralCommon::PickDefaultLandBrush() {

@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include "application.h"
+#include "world_batch.h"
 #include "sprites.h"
 #include "editor.h"
 #include "common_windows.h"
@@ -94,6 +95,11 @@ Application::~Application() {
 }
 
 bool Application::OnInit() {
+	if (argc >= 2 && wxString(argv[1]) == "--generate-world") {
+		m_worldBatch = true;
+		delete wxLog::SetActiveTarget(new wxLogStderr());
+		return true;
+	}
 #ifdef RME_ENABLE_WORLD_SELF_TEST
 	if (argc >= 2 && wxString(argv[1]) == "--world-self-test") {
 		m_worldSelfTest = true;
@@ -340,8 +346,13 @@ void Application::Unload() {
 }
 
 int Application::OnExit() {
+	if (m_worldBatch) {
+		return 0;
+	}
 #ifdef RME_ENABLE_WORLD_SELF_TEST
-	if (m_worldSelfTest) return 0;
+	if (m_worldSelfTest) {
+		return 0;
+	}
 #endif
 #ifdef _USE_PROCESS_COM
 	wxDELETE(m_proc_server);
@@ -352,12 +363,22 @@ int Application::OnExit() {
 
 #ifdef RME_ENABLE_WORLD_SELF_TEST
 int RunWorldEditorSelfTest(const wxString& outputDirectory);
-
+#endif
 int Application::OnRun() {
-	if (m_worldSelfTest) return RunWorldEditorSelfTest(m_worldTestOutput);
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	if (m_worldSelfTest) {
+		return RunWorldEditorSelfTest(m_worldTestOutput);
+	}
+#endif
+	if (m_worldBatch) {
+		wxArrayString arguments;
+		for (int i = 2; i < argc; ++i) {
+			arguments.push_back(wxString(argv[i]));
+		}
+		return WorldBatch::CommandLine(arguments);
+	}
 	return wxApp::OnRun();
 }
-#endif
 
 void Application::OnFatalException() {
 	////

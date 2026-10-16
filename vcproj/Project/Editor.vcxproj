@@ -473,6 +473,8 @@
     <ClInclude Include="..\..\source\world_decoration.h" />
     <ClInclude Include="..\..\source\world_inputs.h" />
     <ClInclude Include="..\..\source\world_export.h" />
+    <ClInclude Include="..\..\source\world_batch.h" />
+    <ClCompile Include="..\..\source\world_batch.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
     <ClCompile Include="..\..\source\world_export.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
     <ClCompile Include="..\..\source\world_inputs.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
     <ClCompile Include="..\..\source\world_decoration.cpp">

@@ -91,13 +91,20 @@ namespace WorldEditor {
 			keywords[5] = { "palm", "shell", "coral", "beach" };
 			const char* names[] = { "", "forest", "desert", "ice", "cave", "coast" };
 			const wxString path = g_gui.GetProceduralDataDirectory() + "biome_doodads.json";
-			std::ifstream input(std::filesystem::u8path(nstr(path)));
+			std::ifstream input(std::filesystem::u8path(nstr(path)), std::ios::binary);
 			if (input) {
 				input.seekg(0, std::ios::end);
 				const auto size = input.tellg();
 				input.seekg(0, std::ios::beg);
+				std::string contents;
+				if (size >= 0 && size <= 1024 * 1024) {
+					contents.assign(std::istreambuf_iterator<char>(input), {});
+					if (contents.compare(0, 3, "\xef\xbb\xbf") == 0) {
+						contents.erase(0, 3);
+					}
+				}
 				json::mValue root;
-				if (size <= 1024 * 1024 && json::read(input, root) && root.type() == json::obj_type) {
+				if (!contents.empty() && json::read(contents, root) && root.type() == json::obj_type) {
 					const auto presets = root.get_obj().find("presets");
 					if (presets != root.get_obj().end() && presets->second.type() == json::obj_type) {
 						for (int habitat = 1; habitat <= 5; ++habitat) {

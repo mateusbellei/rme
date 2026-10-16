@@ -10,7 +10,9 @@ Tracking: https://github.com/mateusbellei/rme/issues/5
    `data/procedural/recipes/example_furnished_city_1098.json`. For terrain-first
    exploration with your own legend, try `example_ridged_continent.json`.
 3. Choose **Preview world…**. Inspect the floor/terrain/climate/role views, compare
-   seeds, and adjust **World settings…** from the main dialog as needed.
+   seeds, and adjust **World settings…** from the main dialog as needed. Use
+   **Fit**, **100%**, **200%** or **400%** and the scroll bars to inspect details.
+   Point at a tile to see its map coordinates, terrain and normalized climate.
 4. Choose **Apply displayed world**. One undo restores the previous map; save the
    result as OTBM normally. Existing tiles are protected by default.
 

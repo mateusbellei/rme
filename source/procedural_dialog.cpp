@@ -15,7 +15,8 @@
 #include <wx/wfstream.h>
 #include "procedural_mask.h"
 #include <wx/scrolwin.h>
-#include <wx/statbmp.h>
+#include <wx/dcclient.h>
+#include <cmath>
 #include <wx/progdlg.h>
 #include <wx/stopwatch.h>
 #include <wx/display.h>
@@ -639,7 +640,13 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	}
 	views->SetSelection(0);
 	controls->Add(floors, 1, wxRIGHT, 8);
-	controls->Add(views, 1);
+	controls->Add(views, 1, wxRIGHT, 8);
+	auto* zoom = new wxChoice(&preview, wxID_ANY);
+	for (const auto* label : { "Fit", "100%", "200%", "400%" }) {
+		zoom->Append(label);
+	}
+	zoom->SetSelection(0);
+	controls->Add(zoom, 0);
 	layout->Add(controls, 0, wxEXPAND | wxALL, 8);
 	auto* seedRow = new wxBoxSizer(wxHORIZONTAL);
 	seedRow->Add(new wxStaticText(&preview, wxID_ANY, "Try seed:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
@@ -653,9 +660,15 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	seedRow->Add(nextSeed, 0, wxRIGHT, 6);
 	seedRow->Add(rebuild, 0);
 	layout->Add(seedRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
-	auto* bitmap = new wxStaticBitmap(&preview, wxID_ANY, wxBitmap(1, 1));
-	bitmap->SetMinSize(wxSize(1, 1));
-	layout->Add(bitmap, 1, wxALIGN_CENTER | wxALL, 8);
+	auto* canvas = new wxScrolledWindow(&preview, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxHSCROLL | wxVSCROLL | wxFULL_REPAINT_ON_RESIZE);
+	canvas->SetMinSize(wxSize(120, 100));
+	canvas->SetScrollRate(16, 16);
+	canvas->SetBackgroundStyle(wxBG_STYLE_PAINT);
+	canvas->SetToolTip("Choose a zoom level to inspect buildings; use the scroll bars to explore the plan.");
+	layout->Add(canvas, 1, wxEXPAND | wxALL, 8);
+	auto* inspection = new wxStaticText(&preview, wxID_ANY, "Point at a tile to inspect its coordinates, terrain and climate.", wxDefaultPosition, wxDefaultSize, wxST_NO_AUTORESIZE | wxST_ELLIPSIZE_END);
+	inspection->SetToolTip("Elevation, moisture and temperature are normalized to 0..10000.");
+	layout->Add(inspection, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 	auto* description = new wxTextCtrl(&preview, wxID_ANY, WorldEditor::Describe(plan), wxDefaultPosition, wxSize(-1, 95), wxTE_MULTILINE | wxTE_READONLY);
 	layout->Add(description, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
 	wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
@@ -666,18 +679,50 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	buttons->Add(new wxButton(&preview, wxID_CANCEL, "Close"));
 	layout->Add(buttons, 0, wxALIGN_RIGHT | wxALL, 8);
 	preview.SetSizer(layout);
+	wxBitmap rendered;
+	int renderedFloor = -1, renderedView = -1;
+	double previewScale = 1.0;
 	auto redraw = [&]() {
 		const int index = floors->GetSelection();
 		if (index < 0) {
 			return;
 		}
-		wxImage image = WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(views->GetSelection()));
-		const wxSize area = preview.GetClientSize();
-		const double scale = std::min(std::max(120, area.x - 40) / double(image.GetWidth()), std::max(100, area.y - 260) / double(image.GetHeight()));
-		image = ProceduralMask::Scale(image, std::max(1, int(image.GetWidth() * scale)), std::max(1, int(image.GetHeight() * scale)));
-		bitmap->SetBitmap(wxBitmap(image));
-		preview.Layout();
+		const int view = views->GetSelection();
+		if (!rendered.IsOk() || renderedFloor != index || renderedView != view) {
+			rendered = wxBitmap(WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(view)));
+			renderedFloor = index;
+			renderedView = view;
+		}
+		const wxSize area = canvas->GetClientSize();
+		previewScale = zoom->GetSelection() == 0 ? std::min(std::max(1, area.x) / double(rendered.GetWidth()), std::max(1, area.y) / double(rendered.GetHeight())) : double(1 << (zoom->GetSelection() - 1));
+		canvas->SetVirtualSize(std::max(1, int(rendered.GetWidth() * previewScale)), std::max(1, int(rendered.GetHeight() * previewScale)));
+		if (zoom->GetSelection() == 0) {
+			canvas->Scroll(0, 0);
+		}
+		canvas->Refresh(false);
 	};
+	canvas->Bind(wxEVT_PAINT, [&](wxPaintEvent&) {
+		wxPaintDC dc(canvas);
+		dc.SetBackground(wxBrush(canvas->GetBackgroundColour()));
+		dc.Clear();
+		canvas->PrepareDC(dc);
+		// Scale at drawing time: even 4096-square plans avoid a 16384-square bitmap.
+		dc.SetUserScale(previewScale, previewScale);
+		if (rendered.IsOk()) {
+			dc.DrawBitmap(rendered, 0, 0, true);
+		}
+	});
+	canvas->Bind(wxEVT_MOTION, [&](wxMouseEvent& event) {
+		const wxPoint pixel = canvas->CalcUnscrolledPosition(event.GetPosition());
+		const WorldGen::Point point { int(std::floor(pixel.x / previewScale)), int(std::floor(pixel.y / previewScale)) };
+		const int index = floors->GetSelection();
+		if (index >= 0 && plan.Contains(point)) {
+			const auto& layer = plan.layers[index];
+			const auto& cell = layer.cells[plan.Index(point)];
+			inspection->SetLabel(wxString::Format("(%d, %d, %d)  %s  |  elevation %u  moisture %u  temperature %u", resolved.region.originX + point.x, resolved.region.originY + point.y, resolved.region.z + layer.offsetZ, wxString::FromUTF8(WorldGen::TerrainName(cell.terrain)), unsigned(cell.elevation), unsigned(cell.moisture), unsigned(cell.temperature)));
+		}
+		event.Skip();
+	});
 	auto regenerate = [&](uint32_t requestedSeed) {
 		GenerationSpec candidate = resolved, candidateResolved;
 		candidate.seed = requestedSeed;
@@ -698,6 +743,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		const int oldFloor = selected >= 0 ? plan.layers[selected].offsetZ : 0;
 		plan = std::move(candidatePlan);
 		resolved = std::move(candidateResolved);
+		rendered = wxNullBitmap;
 		floors->Clear();
 		int selectedFloor = 0;
 		for (const auto& layer : plan.layers) {
@@ -715,7 +761,8 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	previousSeed->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(plan.settings.seed - uint32_t(1)); });
 	nextSeed->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(plan.settings.seed + uint32_t(1)); });
 	rebuild->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(uint32_t(seed->GetValue())); });
-	preview.Bind(wxEVT_SIZE, [&](wxSizeEvent& event) {redraw();event.Skip(); });
+	canvas->Bind(wxEVT_SIZE, [&](wxSizeEvent& event) {redraw();event.Skip(); });
+	zoom->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	floors->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	views->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	exportPlan->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
@@ -763,6 +810,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		}
 		preview.EndModal(wxID_OK);
 	});
+	preview.Layout();
 	redraw();
 	preview.CentreOnParent();
 	preview.ShowModal();

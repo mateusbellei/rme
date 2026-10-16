@@ -184,7 +184,8 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		spec.world.connectionItemId = 103;
 		spec.doodads.enabled = true;
 		spec.doodads.density = 45;
-		spec.pipeline.placeWalls = true;
+		// World buildings must have physical walls even when the legacy toggle is off.
+		spec.pipeline.placeWalls = false;
 		spec.pipeline.borderizeAfter = true;
 		spec.pipeline.randomizeGround = true;
 		spec.imageMask.legendPath = wxString::FromUTF8((directory / "world-legend.json").string());
@@ -210,6 +211,13 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		Check(!plan.buildings.empty() && !plan.links.empty(), "Smoke fixture must exercise buildings and vertical travel");
 		mt_seed(717);
 		const auto randomBefore = mt_capture_state();
+		for (const char* stage : { "Checking target and materials", "Copying existing context", "Preparing grounds and walls", "Resolving borders and walls", "Decorating biomes", "Validating physical navigation", "Applying world as one undo operation" }) {
+			bool visited = false;
+			Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, [&](const char* current, int) {if(std::string(current)==stage){visited=true;return false;}return true; }), "Cancellation must stop editor staging");
+			Check(visited && MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Cancellation at every stage must preserve the original map and undo history");
+			const auto afterCancel = mt_capture_state();
+			Check(afterCancel.values == randomBefore.values && afterCancel.index == randomBefore.index, "Cancellation must preserve global brush RNG");
+		}
 		WorldEditor::ApplicationStats stats;
 		Check(WorldEditor::ApplyPlan(editor, resolved, plan, error, &stats), "Apply staged world: " + nstr(error));
 		Check(stats.doodads > 0 && stats.changedTiles > 0, "Real brushes must place deterministic biome decorations");
@@ -247,6 +255,9 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		GenerationSpec invalid = resolved;
 		invalid.imageMask.legendPath = wxString::FromUTF8((directory / "invalid-legend.json").string());
 		Check(!WorldEditor::ApplyPlan(editor, invalid, plan, error) && MapHash(editor.map) == before, "Invalid client materials must fail without any editor mutation");
+		g_items[100].floorChangeDown = true;
+		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error) && MapHash(editor.map) == before, "Movement-changing client grounds must fail before commit");
+		g_items[100].floorChangeDown = false;
 		Check(WorldEditor::ApplyPlan(editor, resolved, plan, error) && MapHash(editor.map) == applied, "Regeneration from the same plan must reproduce tile IDs and walls");
 		MapCodec codec(version);
 		MemoryNodeFileWriteHandle memory;

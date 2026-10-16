@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <functional>
 #include "world_catalog.h"
 
 // Client-independent planning. No map, brush registry, GUI or global RNG access.
@@ -133,7 +134,8 @@ namespace WorldGen {
 	const char* TerrainName(Terrain terrain);
 	uint32_t TerrainColor(Terrain terrain);
 	bool ValidateSettings(const Settings& settings, std::string& error);
-	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog = nullptr, const GeographyInput* input = nullptr);
+	using ProgressCallback = std::function<bool(const char* stage, int percent)>;
+	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog = nullptr, const GeographyInput* input = nullptr, const ProgressCallback& progress = {});
 	Report Validate(const Plan& plan);
 	uint64_t Fingerprint(const Plan& plan);
 

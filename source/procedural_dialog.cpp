@@ -13,6 +13,37 @@
 #include "procedural_mask.h"
 #include <wx/scrolwin.h>
 #include <wx/statbmp.h>
+#include <wx/progdlg.h>
+#include <wx/stopwatch.h>
+#include <wx/display.h>
+
+namespace {
+	wxSize DialogSize(wxWindow* parent, int width, int height) {
+		int monitor = wxDisplay::GetFromWindow(parent);
+		wxDisplay display(monitor == wxNOT_FOUND ? 0 : monitor);
+		const wxRect area = display.GetClientArea();
+		return wxSize(std::min(width, std::max(320, area.width - 40)), std::min(height, std::max(320, area.height - 60)));
+	}
+	WorldGen::ProgressCallback DialogProgress(wxProgressDialog& dialog) {
+		// Shared state makes copied std::function callbacks throttle the same dialog.
+		struct State {
+			wxStopWatch elapsed;
+			wxString last;
+			int percent = -1;
+		};
+		auto state = std::make_shared<State>();
+		return [&dialog, state](const char* stage, int percent) {
+			const wxString label = wxString::FromUTF8(stage);
+			if (label == state->last && percent == state->percent && state->elapsed.Time() < 40) {
+				return true;
+			}
+			state->last = label;
+			state->percent = percent;
+			state->elapsed.Start();
+			return dialog.Update(percent, label);
+		};
+	}
+}
 
 enum {
 	ID_BROWSE_IMAGE = wxID_HIGHEST + 3001,
@@ -169,7 +200,8 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	SetSizer(outer);
 	Layout();
 	Centre(wxBOTH);
-	SetMinSize(wxSize(520, 640));
+	SetMinSize(DialogSize(this, 520, 480));
+	SetSize(DialogSize(this, 560, 680));
 
 	rbImageMask->SetValue(true);
 	UpdateElevationLabel();
@@ -248,6 +280,8 @@ void ProceduralDialog::OnModeChanged(wxCommandEvent& event) {
 	spnReferenceWeight->Enable(!worldMode && promptImageMode);
 	spnElevation->Enable(!worldMode);
 	chkSidecar->Enable(!worldMode);
+	chkPlaceWalls->Enable(!worldMode);
+	chkPlaceWalls->SetLabel(worldMode ? "Building walls are required by the world planner" : "Place walls on cave/city edges");
 	btnWorldSettings->Enable(worldMode);
 	chkProtectExisting->Enable(worldMode);
 	btnGenerate->SetLabel(worldMode ? "Preview world..." : "Generate");
@@ -450,18 +484,20 @@ void ProceduralDialog::OnGenerate(wxCommandEvent& event) {
 
 void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	wxDialog dialog(this, wxID_ANY, "World settings", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+	auto* content = new wxScrolledWindow(&dialog, wxID_ANY);
+	content->SetScrollRate(0, 16);
 	wxBoxSizer* layout = new wxBoxSizer(wxVERTICAL);
 	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 8, 8);
 	grid->AddGrowableCol(1);
-	grid->Add(new wxStaticText(&dialog, wxID_ANY, "Land shape:"), 0, wxALIGN_CENTER_VERTICAL);
-	wxChoice* shape = new wxChoice(&dialog, wxID_ANY);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Land shape:"), 0, wxALIGN_CENTER_VERTICAL);
+	wxChoice* shape = new wxChoice(content, wxID_ANY);
 	shape->Append("Continent");
 	shape->Append("Archipelago");
 	shape->SetSelection(worldSettings.settings.shape == WorldGen::LandShape::Archipelago ? 1 : 0);
 	grid->Add(shape, 1, wxEXPAND);
 	auto spin = [&](const wxString& label, int low, int high, int initial) {
-		grid->Add(new wxStaticText(&dialog, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
-		auto* control = new wxSpinCtrl(&dialog, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, low, high, initial);
+		grid->Add(new wxStaticText(content, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
+		auto* control = new wxSpinCtrl(content, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, low, high, initial);
 		grid->Add(control, 1, wxEXPAND);
 		return control;
 	};
@@ -475,38 +511,45 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	auto* fill = spin("Cave initial rock density %:", 20, 65, settings.caveFill);
 	auto* road = spin("Road width:", 1, 4, settings.roadWidth);
 	auto* travel = spin("Travel teleport server ID (0 = auto):", 0, 65535, worldSettings.connectionItemId);
-	grid->Add(new wxStaticText(&dialog, wxID_ANY, "Building wall brush:"), 0, wxALIGN_CENTER_VERTICAL);
-	auto* wall = new wxTextCtrl(&dialog, wxID_ANY, worldSettings.wallBrushName);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Building wall brush:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* wall = new wxTextCtrl(content, wxID_ANY, worldSettings.wallBrushName);
 	grid->Add(wall, 1, wxEXPAND);
-	grid->Add(new wxStaticText(&dialog, wxID_ANY, "Construction catalog (blank = default):"), 0, wxALIGN_CENTER_VERTICAL);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Construction catalog (blank = default):"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* catalogRow = new wxBoxSizer(wxHORIZONTAL);
-	auto* catalog = new wxTextCtrl(&dialog, wxID_ANY, worldSettings.catalogPath);
-	auto* browseCatalog = new wxButton(&dialog, wxID_ANY, "Browse...");
+	auto* catalog = new wxTextCtrl(content, wxID_ANY, worldSettings.catalogPath);
+	auto* browseCatalog = new wxButton(content, wxID_ANY, "Browse...");
 	catalogRow->Add(catalog, 1, wxRIGHT, 4);
 	catalogRow->Add(browseCatalog, 0);
 	grid->Add(catalogRow, 1, wxEXPAND);
 	browseCatalog->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
-		wxFileDialog picker(&dialog, "Choose construction catalog", "", "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+		wxFileDialog picker(content, "Choose construction catalog", "", "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 		if (picker.ShowModal() == wxID_OK) {
 			catalog->SetValue(picker.GetPath());
 		}
 	});
-	auto pngPath = [&](const wxString& label,const wxString& initial) {
-		grid->Add(new wxStaticText(&dialog,wxID_ANY,label),0,wxALIGN_CENTER_VERTICAL);
-		auto* row=new wxBoxSizer(wxHORIZONTAL);
-		auto* path=new wxTextCtrl(&dialog,wxID_ANY,initial);
-		auto* browse=new wxButton(&dialog,wxID_ANY,"Browse...");
-		row->Add(path,1,wxRIGHT,4);row->Add(browse,0);grid->Add(row,1,wxEXPAND);
-		browse->Bind(wxEVT_BUTTON,[&,path,label](wxCommandEvent&){wxFileDialog picker(&dialog,label,"","","PNG (*.png)|*.png",wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK)path->SetValue(picker.GetPath());});
+	auto pngPath = [&](const wxString& label, const wxString& initial) {
+		grid->Add(new wxStaticText(content, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
+		auto* row = new wxBoxSizer(wxHORIZONTAL);
+		auto* path = new wxTextCtrl(content, wxID_ANY, initial);
+		auto* browse = new wxButton(content, wxID_ANY, "Browse...");
+		row->Add(path, 1, wxRIGHT, 4);
+		row->Add(browse, 0);
+		grid->Add(row, 1, wxEXPAND);
+		browse->Bind(wxEVT_BUTTON, [&, path, label](wxCommandEvent&) {wxFileDialog picker(content,label,"","","PNG (*.png)|*.png",wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK){path->SetValue(picker.GetPath());
+} });
 		return path;
 	};
-	auto* heightmap=pngPath("Heightmap PNG (optional grayscale):",worldSettings.heightmapPath);
-	auto* biomeHints=pngPath("Biome hints PNG (optional palette):",worldSettings.biomeHintsPath);
+	auto* heightmap = pngPath("Heightmap PNG (optional grayscale):", worldSettings.heightmapPath);
+	auto* biomeHints = pngPath("Biome hints PNG (optional palette):", worldSettings.biomeHintsPath);
 	layout->Add(grid, 1, wxEXPAND | wxALL, 12);
-	auto* note = new wxStaticText(&dialog, wxID_ANY, "Multi-floor travel uses paired teleports with safe arrival tiles.\nThe legend must match the grounds and brushes of your loaded client.");
+	auto* note = new wxStaticText(content, wxID_ANY, "Multi-floor travel uses paired teleports with safe arrival tiles.\nThe legend must match the grounds and brushes of your loaded client.");
 	layout->Add(note, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
-	layout->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxALL, 12);
-	dialog.SetSizerAndFit(layout);
+	content->SetSizer(layout);
+	auto* outer = new wxBoxSizer(wxVERTICAL);
+	outer->Add(content, 1, wxEXPAND);
+	outer->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxALL, 12);
+	dialog.SetSizer(outer);
+	dialog.SetSize(DialogSize(this, 720, 790));
 	dialog.CentreOnParent();
 	if (dialog.ShowModal() != wxID_OK) {
 		return;
@@ -534,13 +577,16 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	WorldGen::Plan plan;
 	wxString error;
 	{
-		wxBusyCursor busy;
-		if (!WorldEditor::BuildPlan(editor, BuildSpecFromDialog(), resolved, plan, error)) {
+		wxProgressDialog progress("Planning world", "Preparing geography", 100, this, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
+		if (!WorldEditor::BuildPlan(editor, BuildSpecFromDialog(), resolved, plan, error, DialogProgress(progress))) {
+			if (error == "World generation cancelled.") {
+				return;
+			}
 			g_gui.PopupDialog(this, "World preview failed", error, wxOK | wxICON_ERROR);
 			return;
 		}
 	}
-	wxDialog preview(this, wxID_ANY, "World preview", wxDefaultPosition, wxSize(760, 850), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+	wxDialog preview(this, wxID_ANY, "World preview", wxDefaultPosition, DialogSize(this, 760, 850), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
 	wxBoxSizer* layout = new wxBoxSizer(wxVERTICAL);
 	wxBoxSizer* controls = new wxBoxSizer(wxHORIZONTAL);
 	auto* floors = new wxChoice(&preview, wxID_ANY);
@@ -557,6 +603,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	controls->Add(views, 1);
 	layout->Add(controls, 0, wxEXPAND | wxALL, 8);
 	auto* bitmap = new wxStaticBitmap(&preview, wxID_ANY, wxBitmap(1, 1));
+	bitmap->SetMinSize(wxSize(1, 1));
 	layout->Add(bitmap, 1, wxALIGN_CENTER | wxALL, 8);
 	auto* description = new wxTextCtrl(&preview, wxID_ANY, WorldEditor::Describe(plan), wxDefaultPosition, wxSize(-1, 95), wxTE_MULTILINE | wxTE_READONLY);
 	layout->Add(description, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
@@ -572,19 +619,25 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 			return;
 		}
 		wxImage image = WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(views->GetSelection()));
-		const double scale = std::min(640.0 / image.GetWidth(), 600.0 / image.GetHeight());
+		const wxSize area = preview.GetClientSize();
+		const double scale = std::min(std::max(120, area.x - 40) / double(image.GetWidth()), std::max(100, area.y - 215) / double(image.GetHeight()));
 		image = ProceduralMask::Scale(image, std::max(1, int(image.GetWidth() * scale)), std::max(1, int(image.GetHeight() * scale)));
 		bitmap->SetBitmap(wxBitmap(image));
 		preview.Layout();
 	};
+	preview.Bind(wxEVT_SIZE, [&](wxSizeEvent& event) {redraw();event.Skip(); });
 	floors->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	views->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	apply->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
-		wxBusyCursor busy;
-		if (!WorldEditor::ApplyPlan(editor, resolved, plan, error)) {
+		wxProgressDialog progress("Applying world", "Checking target", 100, &preview, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
+		if (!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, DialogProgress(progress))) {
+			if (error == "World generation cancelled.") {
+				return;
+			}
 			g_gui.PopupDialog(&preview, "World application failed", error, wxOK | wxICON_ERROR);
 			return;
 		}
+		progress.Update(100, "World applied");
 		preview.EndModal(wxID_OK);
 	});
 	redraw();

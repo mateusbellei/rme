@@ -173,8 +173,28 @@ static void TestSettingsMatrix() {
 	}
 }
 
+static void TestCancellation() {
+	Settings settings;
+	settings.width = settings.height = 96;
+	settings.caveDepth = 2;
+	Plan expected;
+	std::string error;
+	Check(Build(settings, expected, error), "Cancellation fixture must build");
+	for (const char* stage : { "Shaping continents", "Computing drainage and rivers", "Classifying biomes", "Planning settlements and access roads", "Building upper floors and connected caves", "World planned" }) {
+		Plan cancelled;
+		bool visited = false;
+		Check(!Build(settings, cancelled, error, nullptr, nullptr, [&](const char* current, int percent) {Check(percent>=0 && percent<=100,"Progress must be normalized");if(std::string(current)==stage){visited=true;return false;}return true; }), "Cancellation must stop planning");
+		Check(visited && cancelled.layers.empty() && error == "World generation cancelled.", "Cancelled partial plans must be discarded with an explicit outcome");
+	}
+	int last = -1;
+	Plan observed;
+	Check(Build(settings, observed, error, nullptr, nullptr, [&](const char*, int percent) {Check(percent>=last,"Planning progress must be monotonic");last=percent;return true; }), "Progress observation must allow planning");
+	Check(last == 100 && Fingerprint(observed) == Fingerprint(expected), "Progress must not affect the generated plan");
+}
+
 int main() {
 	try {
+		TestCancellation();
 		TestCaves();
 		TestWorlds();
 		TestValidation();

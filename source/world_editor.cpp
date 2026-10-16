@@ -31,6 +31,14 @@ namespace WorldEditor {
 			int tileId = 0;
 		};
 
+		bool Update(const WorldGen::ProgressCallback& progress, const char* stage, int percent, wxString& error) {
+			if (progress && !progress(stage, percent)) {
+				error = "World generation cancelled.";
+				return false;
+			}
+			return true;
+		}
+
 		uint32_t CellSeed(uint32_t seed, int x, int y, int z, uint32_t stage) {
 			uint32_t value = seed ^ uint32_t(x) * 0x9e3779b9u ^ uint32_t(y) * 0x85ebca6bu ^ uint32_t(z) * 0xc2b2ae35u ^ stage;
 			value ^= value >> 16;
@@ -123,9 +131,9 @@ namespace WorldEditor {
 			return brushes;
 		}
 
-		void Decorate(const GenerationSpec& spec, const WorldGen::Plan& plan, BaseMap& scratch, std::set<Position>& blocking, ApplicationStats& stats) {
+		bool Decorate(const GenerationSpec& spec, const WorldGen::Plan& plan, BaseMap& scratch, std::set<Position>& blocking, ApplicationStats& stats, const WorldGen::ProgressCallback& progress, wxString& error) {
 			if (!spec.doodads.enabled || spec.doodads.density <= 0) {
-				return;
+				return true;
 			}
 			const auto brushes = DecorationBrushes(stats);
 			std::array<bool, 6> used {};
@@ -156,6 +164,9 @@ namespace WorldEditor {
 					}
 				}
 				for (int y = 1; y < grid.height - 1; ++y) {
+					if ((y & 15) == 0 && !Update(progress, "Decorating biomes", 65, error)) {
+						return false;
+					}
 					for (int x = 1; x < grid.width - 1; ++x) {
 						const size_t index = size_t(y) * grid.width + x;
 						const uint8_t habitat = grid.habitat[index];
@@ -264,6 +275,7 @@ namespace WorldEditor {
 					stats.warnings.push_back("No matching doodad brushes for " + wxString::FromUTF8(names[i]) + " in the active client.");
 				}
 			}
+			return true;
 		}
 
 		bool CheckRegion(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan* plan, wxString& error) {
@@ -351,10 +363,10 @@ namespace WorldEditor {
 				materials[i] = { entry->brush, std::max(0, entry->tileId) };
 			}
 			wall = nullptr;
-			if (needsWalls && spec.pipeline.placeWalls) {
+			if (needsWalls) {
 				wall = ProceduralCommon::FindWallBrush(as_lower_str(nstr(spec.world.wallBrushName)));
 				if (spec.world.wallBrushName.empty() || !wall) {
-					error = "No matching wall brush for world buildings. Set the wall brush in World settings, or disable wall placement for terrain-only output.";
+					error = "No matching wall brush for world buildings. Set the wall brush in World settings, or set buildings per settlement to zero for terrain-only output.";
 					return false;
 				}
 			}
@@ -376,12 +388,15 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats) {
+		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
 			// Copy context, including untouched void cells and the outer ring. Borders see
 			// final neighbors without ever exposing a partly generated map to the editor.
 			for (const auto& layer : plan.layers) {
 				const int z = spec.region.z + layer.offsetZ;
 				for (int y = -1; y <= spec.region.height; ++y) {
+					if ((y & 15) == 0 && !Update(progress, "Copying existing context", 5, error)) {
+						return false;
+					}
 					for (int x = -1; x <= spec.region.width; ++x) {
 						Position pos(spec.region.originX + x, spec.region.originY + y, z);
 						if (!pos.isValid()) {
@@ -399,6 +414,9 @@ namespace WorldEditor {
 			}
 			for (const auto& layer : plan.layers) {
 				for (int y = 0; y < spec.region.height; ++y) {
+					if ((y & 15) == 0 && !Update(progress, "Preparing grounds and walls", 15, error)) {
+						return false;
+					}
 					for (int x = 0; x < spec.region.width; ++x) {
 						const auto& cell = layer.cells[size_t(y) * spec.region.width + x];
 						if (cell.terrain == WorldGen::Terrain::Void) {
@@ -428,6 +446,9 @@ namespace WorldEditor {
 			}
 			for (const auto& layer : plan.layers) {
 				for (int y = 0; y < spec.region.height; ++y) {
+					if ((y & 15) == 0 && !Update(progress, "Resolving borders and walls", 45, error)) {
+						return false;
+					}
 					for (int x = 0; x < spec.region.width; ++x) {
 						const auto& cell = layer.cells[size_t(y) * spec.region.width + x];
 						if (cell.terrain == WorldGen::Terrain::Void) {
@@ -455,11 +476,16 @@ namespace WorldEditor {
 				scratch.getTile(lower)->addItem(up);
 			}
 			std::set<Position> decorativeBlocking;
-			Decorate(spec, plan, scratch, decorativeBlocking, stats);
+			if (!Decorate(spec, plan, scratch, decorativeBlocking, stats, progress, error)) {
+				return false;
+			}
 			// Final client-material pass: border rules must not block planned doors,
 			// streets, cave floors or arrivals, even if a client has unusual definitions.
 			for (const auto& layer : plan.layers) {
 				for (int y = 0; y < spec.region.height; ++y) {
+					if ((y & 15) == 0 && !Update(progress, "Validating physical navigation", 85, error)) {
+						return false;
+					}
 					for (int x = 0; x < spec.region.width; ++x) {
 						const auto& cell = layer.cells[size_t(y) * spec.region.width + x];
 						if (cell.terrain == WorldGen::Terrain::Void) {
@@ -468,10 +494,27 @@ namespace WorldEditor {
 						const auto pos = PositionFor(spec, { x, y }, layer.offsetZ);
 						Tile* tile = scratch.getTile(pos);
 						bool blocked = !tile || !tile->ground || g_items[tile->ground->getID()].unpassable;
+						if (tile && tile->ground && (g_items[tile->ground->getID()].isFloorChange() || g_items[tile->ground->getID()].isTeleport())) {
+							error = wxString::Format("Ground at %d,%d,%d changes floors outside the planned travel graph.", pos.x, pos.y, pos.z);
+							return false;
+						}
+						int portals = 0;
 						if (tile) {
 							for (Item* item : tile->items) {
 								blocked = blocked || g_items[item->getID()].unpassable;
+								const auto& type = g_items[item->getID()];
+								if (type.isFloorChange() || (type.isTeleport() && (!(cell.flags & WorldGen::Connection) || !dynamic_cast<Teleport*>(item)))) {
+									error = wxString::Format("Client items at %d,%d,%d add unplanned floor travel.", pos.x, pos.y, pos.z);
+									return false;
+								}
+								if (type.isTeleport()) {
+									++portals;
+								}
 							}
+						}
+						if (portals != ((cell.flags & WorldGen::Connection) ? 1 : 0)) {
+							error = "World travel endpoints must contain exactly their planned portal.";
+							return false;
 						}
 						if (WorldGen::IsWalkable(cell) && blocked && !decorativeBlocking.count(pos)) {
 							error = wxString::Format("Client borders or materials block the planned route at %d,%d,%d. Adjust the world legend or disable borders.", pos.x, pos.y, pos.z);
@@ -481,7 +524,7 @@ namespace WorldEditor {
 							error = wxString::Format("World barrier at %d,%d,%d is walkable in the active client. Choose a blocking ground for water, mountains or cave rock.", pos.x, pos.y, pos.z);
 							return false;
 						}
-						if ((cell.flags & WorldGen::Wall) && spec.pipeline.placeWalls && (!tile->hasWall() || !blocked)) {
+						if ((cell.flags & WorldGen::Wall) && (!tile->hasWall() || !blocked)) {
 							error = wxString::Format("The selected building wall brush does not produce a blocking wall at %d,%d,%d.", pos.x, pos.y, pos.z);
 							return false;
 						}
@@ -510,7 +553,7 @@ namespace WorldEditor {
 		}
 	}
 
-	bool BuildPlan(Editor& editor, const GenerationSpec& spec, GenerationSpec& resolved, WorldGen::Plan& plan, wxString& error) {
+	bool BuildPlan(Editor& editor, const GenerationSpec& spec, GenerationSpec& resolved, WorldGen::Plan& plan, wxString& error, const WorldGen::ProgressCallback& progress) {
 		error.clear();
 		resolved = spec;
 		// World floors have their own bounds; legacy elevation is unrelated.
@@ -558,7 +601,7 @@ namespace WorldEditor {
 				return false;
 			}
 		}
-		if (!WorldGen::Build(settings, plan, buildError, &catalog, &input)) {
+		if (!WorldGen::Build(settings, plan, buildError, &catalog, &input, progress)) {
 			error = wxstr(buildError);
 			return false;
 		}
@@ -574,8 +617,11 @@ namespace WorldEditor {
 		return true;
 	}
 
-	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats) {
+	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats, const WorldGen::ProgressCallback& progress) {
 		error.clear();
+		if (!Update(progress, "Checking target and materials", 0, error)) {
+			return false;
+		}
 		const auto report = WorldGen::Validate(plan);
 		if (!report.valid || resolved.region.width != plan.settings.width || resolved.region.height != plan.settings.height) {
 			error = "Cannot apply an invalid or mismatched world plan.";
@@ -595,7 +641,10 @@ namespace WorldEditor {
 		}
 		BaseMap scratch;
 		ApplicationStats result;
-		if (!BuildScratch(editor, resolved, plan, materials, wall, teleportId, scratch, error, result)) {
+		if (!BuildScratch(editor, resolved, plan, materials, wall, teleportId, scratch, error, result, progress)) {
+			return false;
+		}
+		if (!Update(progress, "Applying world as one undo operation", 95, error)) {
 			return false;
 		}
 		// No editor tile changed during preparation. One action owns each replacement

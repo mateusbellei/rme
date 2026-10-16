@@ -17,8 +17,8 @@ namespace WorldEditor {
 							  Moisture,
 							  Temperature };
 
-	bool BuildPlan(Editor& editor, const GenerationSpec& spec, GenerationSpec& resolved, WorldGen::Plan& plan, wxString& error);
-	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats = nullptr);
+	bool BuildPlan(Editor& editor, const GenerationSpec& spec, GenerationSpec& resolved, WorldGen::Plan& plan, wxString& error, const WorldGen::ProgressCallback& progress = {});
+	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats = nullptr, const WorldGen::ProgressCallback& progress = {});
 	bool Generate(Editor& editor, const GenerationSpec& spec, wxString& error);
 	wxImage Render(const WorldGen::Plan& plan, int floor, PreviewLayer view = PreviewLayer::Terrain);
 	wxString Describe(const WorldGen::Plan& plan);

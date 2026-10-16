@@ -12,6 +12,28 @@
 
 namespace WorldGen {
 	namespace {
+		struct Cancelled { };
+		struct Control {
+			const ProgressCallback& callback;
+			const char* stage = "Preparing world";
+			int start = 0, end = 0, percent = 0;
+			void Poll() const {
+				if (callback && !callback(stage, percent)) {
+					throw Cancelled {};
+				}
+			}
+			void Stage(const char* name, int from, int to) {
+				stage = name;
+				start = from;
+				end = to;
+				percent = from;
+				Poll();
+			}
+			void Row(int completed, int total) {
+				percent = std::max(percent, start + (end - start) * completed / std::max(1, total));
+				Poll();
+			}
+		};
 		constexpr int kMaxCells = 4 * 1024 * 1024;
 		constexpr std::array<Point, 4> kDirections = { { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } } };
 
@@ -76,7 +98,7 @@ namespace WorldGen {
 			return labels;
 		}
 
-		void BuildGeography(Plan& plan, const GeographyInput* input) {
+		void BuildGeography(Plan& plan, const GeographyInput* input, Control& control) {
 			const auto& s = plan.settings;
 			Layer surface;
 			surface.cells.resize(size_t(s.width) * s.height);
@@ -86,6 +108,9 @@ namespace WorldGen {
 				islandCenters[i] = { int(s.width * (20 + Hash(terrainSeed, i, 1) % 60) / 100), int(s.height * (20 + Hash(terrainSeed, i, 2) % 60) / 100) };
 			}
 			for (int y = 0; y < s.height; ++y) {
+				if ((y & 15) == 0) {
+					control.Row(y, s.height);
+				}
 				for (int x = 0; x < s.width; ++x) {
 					Cell& cell = surface.cells[size_t(y) * s.width + x];
 					const int broad = Noise(x, y, s.width, s.height, 3, terrainSeed);
@@ -121,7 +146,7 @@ namespace WorldGen {
 			plan.layers.push_back(std::move(surface));
 		}
 
-		void BuildDrainage(Plan& plan) {
+		void BuildDrainage(Plan& plan, Control& control) {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
 			using Node = std::pair<int, int>;
@@ -136,6 +161,9 @@ namespace WorldGen {
 				}
 			}
 			while (!frontier.empty()) {
+				if ((order.size() & 4095) == 0) {
+					control.Row(int(order.size()), int(cells.size()));
+				}
 				const auto [height, current] = frontier.top();
 				frontier.pop();
 				order.push_back(current);
@@ -211,7 +239,7 @@ namespace WorldGen {
 			}
 		}
 
-		void ClassifyBiomes(Plan& plan) {
+		void ClassifyBiomes(Plan& plan, Control& control) {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
 			std::vector<int> distance(cells.size(), -1), queue;
@@ -222,6 +250,9 @@ namespace WorldGen {
 				}
 			}
 			for (size_t q = 0; q < queue.size(); ++q) {
+				if ((q & 4095) == 0) {
+					control.Poll();
+				}
 				const int current = queue[q], x = current % s.width, y = current / s.width;
 				for (Point d : kDirections) {
 					const int nx = x + d.x, ny = y + d.y;
@@ -262,7 +293,7 @@ namespace WorldGen {
 		}
 
 		// Weighted shortest paths avoid mountains and water; rivers may be bridged.
-		bool Road(Plan& plan, Point from, Point to) {
+		bool Road(Plan& plan, Point from, Point to, Control& control) {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
 			const int start = int(plan.Index(from)), end = int(plan.Index(to));
@@ -271,7 +302,11 @@ namespace WorldGen {
 			std::priority_queue<Node, std::vector<Node>, std::greater<Node>> open;
 			cost[start] = 0;
 			open.push({ 0, start });
+			size_t expanded = 0;
 			while (!open.empty()) {
+				if ((expanded++ & 4095) == 0) {
+					control.Poll();
+				}
 				const auto [value, current] = open.top();
 				open.pop();
 				if (value != cost[current]) {
@@ -326,7 +361,7 @@ namespace WorldGen {
 			return true;
 		}
 
-		void BuildSettlements(Plan& plan) {
+		void BuildSettlements(Plan& plan, Control& control) {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
 			const int margin = std::max(8, std::min(s.width, s.height) / 14);
@@ -335,6 +370,7 @@ namespace WorldGen {
 			};
 			std::vector<Candidate> candidates;
 			for (int y = margin; y < s.height - margin; y += 3) {
+				control.Row(y, s.height);
 				for (int x = margin; x < s.width - margin; x += 3) {
 					const int index = y * s.width + x;
 					if (!DryBuildable(cells[index])) {
@@ -410,16 +446,18 @@ namespace WorldGen {
 				if (bestB < 0) {
 					break;
 				}
-				if (!Road(plan, plan.settlements[bestA].center, plan.settlements[bestB].center)) {
+				if (!Road(plan, plan.settlements[bestA].center, plan.settlements[bestB].center, control)) {
 					plan.warnings.push_back("Settlements on separate land components cannot be connected without a sea crossing.");
 				}
 				joined[bestB] = true;
 			}
 			for (int t = 0; t < int(plan.settlements.size()); ++t) {
+				control.Poll();
 				auto& town = plan.settlements[t];
 				// Lots grow around the central plaza, with setbacks and a path to each door.
 				for (int ring = 1; ring <= std::max(4, (s.buildingsPerSettlement + 3) / 4) && int(town.buildings.size()) < s.buildingsPerSettlement; ++ring) {
 					for (int side = 0; side < 8 && int(town.buildings.size()) < s.buildingsPerSettlement; ++side) {
+						control.Poll();
 						static const Point slots[] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
 
 						std::vector<int> eligible;
@@ -484,7 +522,7 @@ namespace WorldGen {
 								cells[size_t(y) * s.width + x].flags |= Wall;
 							}
 						}
-						const bool access = Road(plan, approach, town.center);
+						const bool access = Road(plan, approach, town.center, control);
 						for (int y = origin.y; y < origin.y + h; ++y) {
 							for (int x = origin.x; x < origin.x + w; ++x) {
 								cells[size_t(y) * s.width + x].flags &= uint8_t(~Wall);
@@ -533,11 +571,14 @@ namespace WorldGen {
 			}
 		}
 
-		Layer MakeCave(const Settings& s, int depth) {
+		Layer MakeCave(const Settings& s, int depth, Control& control) {
 			Layer layer;
 			layer.offsetZ = depth;
 			layer.cells.resize(size_t(s.width) * s.height);
 			for (int y = 0; y < s.height; ++y) {
+				if ((y & 15) == 0) {
+					control.Poll();
+				}
 				for (int x = 0; x < s.width; ++x) {
 					auto& c = layer.cells[size_t(y) * s.width + x];
 					c.terrain = Interior({ x, y }, s.width, s.height) && int(Hash(s.seed, x + depth * 7919, y) % 100) >= s.caveFill ? Terrain::CaveFloor : Terrain::CaveWall;
@@ -546,6 +587,9 @@ namespace WorldGen {
 			for (int iteration = 0; iteration < 5; ++iteration) {
 				auto next = layer.cells;
 				for (int y = 1; y < s.height - 1; ++y) {
+					if ((y & 15) == 0) {
+						control.Poll();
+					}
 					for (int x = 1; x < s.width - 1; ++x) {
 						int walls = 0;
 						for (int dy = -1; dy <= 1; ++dy) {
@@ -579,10 +623,11 @@ namespace WorldGen {
 			layer.cells[plan.Index(center)].flags |= Connection;
 		}
 
-		bool BuildVertical(Plan& plan, std::string& error) {
+		bool BuildVertical(Plan& plan, std::string& error, Control& control) {
 			const auto& s = plan.settings;
 			// Upper floors occupy only building footprints; the remaining layer is void.
 			for (int level = 1; level < s.buildingLevels; ++level) {
+				control.Poll();
 				Layer upper;
 				upper.offsetZ = -level;
 				upper.cells.resize(size_t(s.width) * s.height);
@@ -649,7 +694,8 @@ namespace WorldGen {
 				}
 				ClearLanding(plan, plan.layers[0], entrance, Terrain::Plaza);
 				for (int depth = 1; depth <= s.caveDepth; ++depth) {
-					Layer cave = MakeCave(s, depth);
+					control.Row(depth - 1, s.caveDepth);
+					Layer cave = MakeCave(s, depth, control);
 					const Point incoming { entrance.x + ((depth - 1) % 2) * 4, entrance.y };
 					ClearLanding(plan, cave, incoming, Terrain::CaveFloor);
 					if (depth < s.caveDepth) {
@@ -743,7 +789,7 @@ namespace WorldGen {
 		return true;
 	}
 
-	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog, const GeographyInput* input) {
+	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog, const GeographyInput* input, const ProgressCallback& progress) {
 		plan = Plan();
 		if (!ValidateSettings(settings, error)) {
 			return false;
@@ -772,19 +818,35 @@ namespace WorldGen {
 			return false;
 		}
 		plan.settings = settings;
-		BuildGeography(plan, input);
-		BuildDrainage(plan);
-		ClassifyBiomes(plan);
-		if (input && !input->biomes.empty()) {
-			auto& cells = plan.layers.front().cells;
-			for (size_t i = 0; i < cells.size(); ++i) {
-				if (input->biomes[i] != Terrain::Void && !IsWater(cells[i].terrain)) {
-					cells[i].terrain = input->biomes[i];
+		Control control { progress };
+		try {
+			control.Stage("Shaping continents", 0, 15);
+			BuildGeography(plan, input, control);
+			control.Stage("Computing drainage and rivers", 15, 35);
+			BuildDrainage(plan, control);
+			control.Stage("Classifying biomes", 35, 45);
+			ClassifyBiomes(plan, control);
+			if (input && !input->biomes.empty()) {
+				auto& cells = plan.layers.front().cells;
+				for (size_t i = 0; i < cells.size(); ++i) {
+					if (input->biomes[i] != Terrain::Void && !IsWater(cells[i].terrain)) {
+						cells[i].terrain = input->biomes[i];
+					}
 				}
 			}
+			control.Stage("Planning settlements and access roads", 45, 70);
+			BuildSettlements(plan, control);
+			control.Stage("Building upper floors and connected caves", 70, 99);
+			if (!BuildVertical(plan, error, control)) {
+				return false;
+			}
+			control.Stage("World planned", 100, 100);
+			return true;
+		} catch (const Cancelled&) {
+			plan = Plan();
+			error = "World generation cancelled.";
+			return false;
 		}
-		BuildSettlements(plan);
-		return BuildVertical(plan, error);
 	}
 
 	int ConnectCave(std::vector<Cell>& cells, int width, int height) {

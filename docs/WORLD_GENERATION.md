@@ -58,6 +58,11 @@ selection. The selection defines a bounding rectangle; irregular selection
 shapes are not a clipping mask. **Preview world** displays terrain, elevation,
 moisture and temperature, and allows inspecting each floor before applying.
 
+World buildings always require a blocking wall brush, independently of the
+legacy wall-placement toggle. Set buildings per settlement to zero to generate
+terrain without buildings. Unplanned floor-change items from material/border
+rules are rejected before application.
+
 The default `world_legend.json` maps every semantic category to generic brush
 names. These must exist in the loaded client; customize names or use explicit
 ground server IDs. Missing categories fail rather than guessing. Materials,
@@ -219,3 +224,15 @@ inputs are capped at 16 million source pixels and 64 MiB. Recipe fields are
 | Desert | `#E8C060` |
 | Snow | `#F0F8FF` |
 | Mountain | `#654321` |
+
+
+## Progress and cancellation
+
+Planning and editor preparation expose progress callbacks. The dialog shows
+modal stage progress with cancellation while shaping terrain, routing roads,
+creating caves, resolving client materials and placing props. Cancellation
+before the final commit discards the temporary result without changing map
+content, undo history or global brush RNG. The final transfer commits as one
+undo operation. Automated checks cancel every planning/editor stage, including
+the last checkpoint immediately before commit. Settings scroll and previews
+scale to the current monitor's usable area.

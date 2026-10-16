@@ -242,6 +242,28 @@ namespace WorldBatch {
 		if (!WorldEditor::ApplyPlan(editor, resolved, plan, error, &prepared.application, applying, options.tileBudget)) {
 			return false;
 		}
+		if (!options.clientDat.empty()) {
+			if (progress && !progress("Checking client sprite coverage", 85)) {
+				error = "World generation cancelled.";
+				return false;
+			}
+			for (auto it = editor.map.begin(); it != editor.map.end(); ++it) {
+				const Tile* tile = (*it)->get();
+				if (!tile) {
+					continue;
+				}
+				auto covered = [&](const Item* item) {
+					if (!item || g_items[item->getID()].sprite) {
+						return true;
+					}
+					error = wxString::Format("Client DAT has no sprite metadata for used server ID %u (client ID %u). Supply matching complete metadata or omit --client-dat for physical-only validation.", unsigned(item->getID()), unsigned(g_items[item->getID()].clientID));
+					return false;
+				};
+				if (!covered(tile->ground) || !std::all_of(tile->items.begin(), tile->items.end(), covered)) {
+					return false;
+				}
+			}
+		}
 		prepared.fingerprint = WorldGen::Fingerprint(plan);
 		json::mArray townRecords;
 		if (!RegisterTowns(editor.map, resolved, plan, options.townPrefix, townRecords, error)) {
@@ -316,13 +338,17 @@ namespace WorldBatch {
 			}
 			if (replay.getSize() != memory.getSize() || std::memcmp(replay.getMemory(), memory.getMemory(), memory.getSize()) != 0) {
 				size_t difference = 0;
-				while (difference < std::min(replay.getSize(), memory.getSize()) && replay.getMemory()[difference] == memory.getMemory()[difference]) ++difference;
+				while (difference < std::min(replay.getSize(), memory.getSize()) && replay.getMemory()[difference] == memory.getMemory()[difference]) {
+					++difference;
+				}
 				std::string diagnostic("OTBM", 4);
 				diagnostic.append(reinterpret_cast<const char*>(replay.getMemory()), replay.getSize());
 				wxString writeError;
 				const bool diagnosticSaved = Write(output + "verification-readback.otbm", diagnostic.data(), diagnostic.size(), writeError);
 				error = wxString::Format("OTBM verification mismatch: original %llu bytes, readback %llu bytes, first differing offset %llu.", static_cast<unsigned long long>(memory.getSize()), static_cast<unsigned long long>(replay.getSize()), static_cast<unsigned long long>(difference + 4));
-				if (!diagnosticSaved) error += " " + writeError;
+				if (!diagnosticSaved) {
+					error += " " + writeError;
+				}
 				return false;
 			}
 

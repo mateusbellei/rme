@@ -629,3 +629,11 @@ rme --generate-world data/procedural/recipes/example_large_continent_1098.json d
 Equivalent-ground objects are excluded from composite decorations/furniture,
 and material validation rejects additional ground items inside a tile's item
 stack before changing the editor map.
+
+
+When `--client-dat` is supplied, batch export also requires metadata for every
+item actually present in the generated map. A valid header with an incomplete
+sprite table fails before creating output; unused registry IDs do not need
+sprites. Without DAT, the existing explicit report warning and physical checks
+remain available. Editor-only meta items are rejected as grounds/materials or
+required furniture because the OTBM writer intentionally omits them.

@@ -87,6 +87,8 @@ namespace {
 		g_items.MajorVersion = 3;
 		g_items.MinorVersion = 57;
 		g_items.BuildNumber = 0;
+		FixtureItem(80, ITEM_GROUP_NONE);
+		g_items[80].is_metaitem = true;
 		FixtureItem(100, ITEM_GROUP_GROUND);
 		FixtureItem(101, ITEM_GROUP_GROUND, true);
 		FixtureItem(104, ITEM_GROUP_GROUND);
@@ -129,6 +131,12 @@ namespace {
 		replacement->setName("fixture ground-replacing composite");
 		Check(replacement->load(replacementXml.child("brush"), warnings), "Ground-replacing composite fixture must load");
 		g_brushes.addBrush(replacement.release());
+		pugi::xml_document metaXml;
+		Check(bool(metaXml.load(R"(<brush><item id="80" chance="1"/></brush>)")), "Editor-only doodad fixture XML");
+		auto meta = std::make_unique<DoodadBrush>();
+		meta->setName("fixture editor-only object");
+		Check(meta->load(metaXml.child("brush"), warnings), "Editor-only doodad fixture must load");
+		g_brushes.addBrush(meta.release());
 		Check(!g_items[106].isGroundTile() && g_items[106].ground_equivalent == 105 && g_items[105].has_equivalent, "Inline ground borders must bind their ground equivalent before serialization");
 		for (int id = 204; id < 208; ++id) {
 			FixtureItem(id, ITEM_GROUP_NONE, true);
@@ -487,6 +495,13 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		auto groundReplacingFurniture = plan;
 		for (auto& b : groundReplacingFurniture.catalog) for (auto& object : b.objects) object.brushes = { "fixture ground-replacing composite" };
 		Check(!WorldEditor::ApplyPlan(editor, resolved, groundReplacingFurniture, error) && MapHash(editor.map) == before, "Ground-equivalent composite furniture must reject preparation without replacing planned floors");
+		auto editorOnlyFurniture = plan;
+		for (auto& b : editorOnlyFurniture.catalog) for (auto& object : b.objects) object.brushes = { "fixture editor-only object" };
+		Check(!WorldEditor::ApplyPlan(editor, resolved, editorOnlyFurniture, error) && MapHash(editor.map) == before, "Required editor-only furniture must fail instead of being counted and silently omitted from OTBM");
+		g_items[100].is_metaitem = true;
+		const bool acceptedMetaGround = WorldEditor::ApplyPlan(editor, resolved, plan, error);
+		g_items[100].is_metaitem = false;
+		Check(!acceptedMetaGround && MapHash(editor.map) == before, "Editor-only ground variants must fail before changing the map");
 		auto missingFurniture = plan;
 		for (auto& b : missingFurniture.catalog) {
 			for (auto& object : b.objects) {
@@ -656,6 +671,14 @@ static int RunMetadataScenario(const wxString& outputDirectory) {
 		options.exportPreviews = false;
 		options.outputDirectory = outputDirectory + "/metadata-" + std::to_string(wxGetProcessId()) + "-" + std::to_string(wxGetUTCTimeMillis().GetValue());
 		WorldBatch::Result result;
+		const wxString shortDat = outputDirectory + "/short-client.dat";
+		const std::string shortBytes = MetadataFixture(103);
+		std::ofstream(std::filesystem::u8path(nstr(shortDat)), std::ios::binary).write(shortBytes.data(), std::streamsize(shortBytes.size()));
+		WorldBatch::Options incomplete = options;
+		incomplete.clientDat = shortDat;
+		incomplete.outputDirectory += "-incomplete";
+		const bool acceptedIncomplete = WorldBatch::Generate(incomplete, result, error);
+		Check(!acceptedIncomplete && error.Contains("sprite metadata") && !wxDirExists(incomplete.outputDirectory), "Valid DAT headers with missing used sprite IDs must fail before creating output");
 		const bool generatedMetadata = WorldBatch::Generate(options, result, error);
 		Check(generatedMetadata, "Batch generation with explicit metadata: " + nstr(error));
 		Check(!wxFileExists(options.outputDirectory + "/preview_z7_terrain.png"), "Disabling preview export must leave the OTBM bundle usable without PNG artifacts");

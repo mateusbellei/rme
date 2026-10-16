@@ -185,7 +185,7 @@ namespace WorldEditor {
 					return fail("invalid item or composite offset");
 				}
 				const auto& type = g_items[id];
-				if (type.isGroundTile() || type.ground_equivalent || type.isTeleport() || type.isDoor() || type.isDepot() || type.isContainer() || type.isFloorChange() || type.isWall || object.prototype->getUniqueID() || object.prototype->getActionID()) {
+				if (type.isMetaItem() || type.isGroundTile() || type.ground_equivalent || type.isTeleport() || type.isDoor() || type.isDepot() || type.isContainer() || type.isFloorChange() || type.isWall || object.prototype->getUniqueID() || object.prototype->getActionID()) {
 					return fail("object contains ground, travel, container, wall or quest attributes");
 				}
 				auto& blocked = points[{ object.offset.x, object.offset.y }];
@@ -624,6 +624,10 @@ namespace WorldEditor {
 						const auto pos = PositionFor(spec, { x, y }, layer.offsetZ);
 						Tile* tile = scratch.getTile(pos);
 						bool blocked = !tile || !tile->ground || g_items[tile->ground->getID()].unpassable;
+						if (tile && tile->ground && tile->ground->isMetaItem()) {
+							error = "World grounds cannot use editor-only items that are omitted from OTBM.";
+							return false;
+						}
 						if (tile && tile->ground && (g_items[tile->ground->getID()].isFloorChange() || g_items[tile->ground->getID()].isTeleport())) {
 							error = wxString::Format("Ground at %d,%d,%d changes floors outside the planned travel graph.", pos.x, pos.y, pos.z);
 							return false;
@@ -633,6 +637,10 @@ namespace WorldEditor {
 							for (Item* item : tile->items) {
 								blocked = blocked || g_items[item->getID()].unpassable;
 								const auto& type = g_items[item->getID()];
+								if (type.isMetaItem()) {
+									error = "World materials cannot add editor-only objects that are omitted from OTBM.";
+									return false;
+								}
 								if (type.isGroundTile()) {
 									error = wxString::Format("Client materials add a second ground at %d,%d,%d. Correct the border definitions before applying this world.", pos.x, pos.y, pos.z);
 									return false;

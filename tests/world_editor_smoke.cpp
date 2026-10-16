@@ -6,6 +6,7 @@
 #include "items.h"
 #include "brush.h"
 #include "wall_brush.h"
+#include "doodad_brush.h"
 #include "ground_brush.h"
 #include "iomap_otbm.h"
 #include "mt_rand.h"
@@ -84,6 +85,9 @@ namespace {
 		for (int id = 200; id < 204; ++id) {
 			FixtureItem(id, ITEM_GROUP_NONE, true);
 		}
+		FixtureItem(300, ITEM_GROUP_NONE, true);
+		FixtureItem(301, ITEM_GROUP_NONE, false);
+		FixtureItem(302, ITEM_GROUP_NONE, true);
 		WallBrush::init();
 		GroundBrush::init();
 		pugi::xml_document xml;
@@ -93,6 +97,14 @@ namespace {
 		wxArrayString warnings;
 		Check(wall->load(xml.child("brush"), warnings), "Wall fixture must load");
 		g_brushes.addBrush(wall.release());
+		for (const auto& definition : { std::pair { "tree bush cactus snow crystal palm", R"(<brush><item id="300" chance="1"/><item id="301" chance="1"/></brush>)" }, std::pair { "tree rock", R"(<brush><composite chance="1"><tile x="0" y="0"><item id="302"/></tile><tile x="1" y="0"><item id="302"/></tile><tile x="0" y="1"><item id="302"/></tile><tile x="1" y="1"><item id="302"/></tile></composite></brush>)" } }) {
+			pugi::xml_document props;
+			Check(bool(props.load(definition.second)), "Decoration fixture XML");
+			auto doodad = std::make_unique<DoodadBrush>();
+			doodad->setName(definition.first);
+			Check(doodad->load(props.child("brush"), warnings), "Decoration fixture must load");
+			g_brushes.addBrush(doodad.release());
+		}
 	}
 
 	void WriteLegend(const std::filesystem::path& path, bool bad = false) {
@@ -168,6 +180,8 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		spec.world.settings.caveDepth = 2;
 		spec.world.settings.buildingLevels = 3;
 		spec.world.connectionItemId = 103;
+		spec.doodads.enabled = true;
+		spec.doodads.density = 45;
 		spec.pipeline.placeWalls = true;
 		spec.pipeline.borderizeAfter = true;
 		spec.pipeline.randomizeGround = true;
@@ -179,7 +193,28 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		Check(!plan.buildings.empty() && !plan.links.empty(), "Smoke fixture must exercise buildings and vertical travel");
 		mt_seed(717);
 		const auto randomBefore = mt_capture_state();
-		Check(WorldEditor::ApplyPlan(editor, resolved, plan, error), "Apply staged world: " + nstr(error));
+		WorldEditor::ApplicationStats stats;
+		Check(WorldEditor::ApplyPlan(editor, resolved, plan, error, &stats), "Apply staged world: " + nstr(error));
+		Check(stats.doodads > 0 && stats.changedTiles > 0, "Real brushes must place deterministic biome decorations");
+		std::set<int> decorationIds;
+		for (const auto& layer : plan.layers) {
+			for (int y = 0; y < plan.settings.height; ++y) {
+				for (int x = 0; x < plan.settings.width; ++x) {
+					const auto& cell = layer.cells[size_t(y) * plan.settings.width + x];
+					const Tile* tile = editor.map.getTile(resolved.region.originX + x, resolved.region.originY + y, resolved.region.z + layer.offsetZ);
+					if (!tile) {
+						continue;
+					}
+					for (const Item* item : tile->items) {
+						if (item->getID() >= 300 && item->getID() <= 302) {
+							decorationIds.insert(item->getID());
+							Check(!(cell.flags & WorldGen::Reserved), "Decorations must avoid roads, doors and vertical travel reservations");
+						}
+					}
+				}
+			}
+		}
+		Check(decorationIds.count(300) && decorationIds.count(301) && decorationIds.count(302), "Fixture must exercise blocking, nonblocking and composite decorations");
 		const auto randomAfter = mt_capture_state();
 		Check(randomBefore.values == randomAfter.values && randomBefore.index == randomAfter.index, "Complete application must preserve global brush RNG");
 		const uint64_t applied = MapHash(editor.map);
@@ -210,8 +245,8 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		Check(MapHash(reopened.map) == applied, "OTBM round-trip must preserve terrain, walls and teleport destinations");
 		CheckTravel(reopened, resolved, plan);
 		std::ofstream result(directory / "result.txt");
-		result << "PASS: real editor application, material preflight, collision protection, deterministic walls, RNG isolation, single undo/redo and OTBM round-trip\n";
-		std::cout << "PASS: real editor application, material preflight, collision protection, deterministic walls, RNG isolation, single undo/redo and OTBM round-trip\n";
+		result << "PASS: real editor application, material preflight, collision protection, deterministic walls and biome decorations, RNG isolation, single undo/redo and OTBM round-trip\n";
+		std::cout << "PASS: real editor application, material preflight, collision protection, deterministic walls and biome decorations, RNG isolation, single undo/redo and OTBM round-trip\n";
 		return 0;
 	} catch (const std::exception& exception) {
 		std::cerr << "FAIL: world editor smoke: " << exception.what() << '\n';

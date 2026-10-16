@@ -86,8 +86,8 @@ Application is limited to 1,048,576 non-void tiles; larger semantic plans remain
 available through the standalone planner. Recipe version 4 saves world options,
 target origins and the complete uint32 seed; existing version-3 recipes remain
 loadable. `example_continent.json` and `example_world_layers.json` are generic
-starting points. The default world path currently does not scatter doodads;
-that is a following delivery with placement and route constraints.
+starting points. Enable **Doodads** to decorate terrain using brushes from the
+active client and keyword groups in `biome_doodads.json`.
 
 ## Delivery stages
 
@@ -165,3 +165,25 @@ of JSON. The catalog is a semantic footprint format; it does not yet import
 arbitrary OTBM chunks or rotate client item IDs. Client materials still come
 from the world legend and the chosen wall brush. Custom paths in recipes and
 JSON inputs support Unicode filenames.
+
+
+## Biome decoration
+
+World decoration uses deterministic patch densities and the active client's
+single/composite doodad brushes. Forests are denser than grassland; desert,
+snow, beach and caves use separate keyword groups. Missing brush groups are
+reported in the generation status instead of silently substituting items.
+
+Every placement checks all composite tiles and sprite dimensions, plus a
+one-tile clearance. Decorations stay within one habitat, avoid existing props,
+roads, building setbacks, doors and travel landings, and cannot block a narrow
+passage or enclose a walkable pocket. A final validation checks actual blocking
+props against the complete multi-floor navigation graph before committing.
+Grounds, movement-changing items, containers, walls, quest attributes and
+multi-floor composites are excluded from the decoration pass. This is outdoor
+and cave dressing; furnished room templates are a separate feature.
+
+The pure decoration suite checks bounds, footprints, route protection and
+adversarial enclosing layouts. The production editor regression exercises
+blocking/nonblocking single brushes and multi-tile composites, including
+repeatability, one undo/redo and OTBM round-trip.

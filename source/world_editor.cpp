@@ -12,10 +12,13 @@
 #include "complexitem.h"
 #include "mt_rand.h"
 #include "gui.h"
+#include "world_decoration.h"
+#include "doodad_brush.h"
 
 #include <array>
 #include <memory>
 #include <set>
+#include <filesystem>
 
 namespace WorldEditor {
 	namespace {
@@ -38,6 +41,228 @@ namespace WorldEditor {
 
 		Position PositionFor(const GenerationSpec& spec, WorldGen::Point p, int floor) {
 			return { spec.region.originX + p.x, spec.region.originY + p.y, spec.region.z + floor };
+		}
+
+		uint8_t Habitat(WorldGen::Terrain terrain) {
+			switch (terrain) {
+				case WorldGen::Terrain::Grass:
+				case WorldGen::Terrain::Forest:
+					return 1;
+				case WorldGen::Terrain::Desert:
+					return 2;
+				case WorldGen::Terrain::Snow:
+					return 3;
+				case WorldGen::Terrain::CaveFloor:
+					return 4;
+				case WorldGen::Terrain::Beach:
+					return 5;
+				default:
+					return 0;
+			}
+		}
+
+		bool TileWalkable(const Tile* tile) {
+			if (!tile || !tile->ground || g_items[tile->ground->getID()].unpassable) {
+				return false;
+			}
+			for (const Item* item : tile->items) {
+				if (g_items[item->getID()].unpassable) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		std::array<std::vector<DoodadBrush*>, 6> DecorationBrushes(ApplicationStats& stats) {
+			std::array<std::vector<std::string>, 6> keywords;
+			keywords[1] = { "tree", "bush", "fern", "mushroom", "log" };
+			keywords[2] = { "cactus", "desert", "dead", "palm", "rock" };
+			keywords[3] = { "snow", "ice", "frost", "pine", "fir" };
+			keywords[4] = { "stalagmite", "crystal", "rock" };
+			keywords[5] = { "palm", "shell", "coral", "beach" };
+			const char* names[] = { "", "forest", "desert", "ice", "cave", "coast" };
+			const wxString path = g_gui.GetProceduralDataDirectory() + "biome_doodads.json";
+			std::ifstream input(std::filesystem::u8path(nstr(path)));
+			if (input) {
+				input.seekg(0, std::ios::end);
+				const auto size = input.tellg();
+				input.seekg(0, std::ios::beg);
+				json::mValue root;
+				if (size <= 1024 * 1024 && json::read(input, root) && root.type() == json::obj_type) {
+					const auto presets = root.get_obj().find("presets");
+					if (presets != root.get_obj().end() && presets->second.type() == json::obj_type) {
+						for (int habitat = 1; habitat <= 5; ++habitat) {
+							const auto preset = presets->second.get_obj().find(names[habitat]);
+							if (preset == presets->second.get_obj().end() || preset->second.type() != json::obj_type) {
+								continue;
+							}
+							const auto list = preset->second.get_obj().find("keywords");
+							if (list == preset->second.get_obj().end() || list->second.type() != json::array_type || list->second.get_array().size() > 64) {
+								continue;
+							}
+							std::vector<std::string> parsed;
+							for (const auto& value : list->second.get_array()) {
+								if (value.type() == json::str_type && !value.get_str().empty() && value.get_str().size() <= 128) {
+									parsed.push_back(as_lower_str(value.get_str()));
+								}
+							}
+							keywords[habitat] = std::move(parsed);
+						}
+					}
+				} else {
+					stats.warnings.push_back("Biome decoration settings could not be read; built-in keyword groups were used.");
+				}
+			}
+			std::array<std::vector<DoodadBrush*>, 6> brushes;
+			for (int i = 1; i <= 5; ++i) {
+				if (!keywords[i].empty()) {
+					brushes[i] = ProceduralCommon::FindDoodadBrushes(keywords[i]);
+				}
+			}
+			return brushes;
+		}
+
+		void Decorate(const GenerationSpec& spec, const WorldGen::Plan& plan, BaseMap& scratch, std::set<Position>& blocking, ApplicationStats& stats) {
+			if (!spec.doodads.enabled || spec.doodads.density <= 0) {
+				return;
+			}
+			const auto brushes = DecorationBrushes(stats);
+			std::array<bool, 6> used {};
+			struct Object {
+				Position offset;
+				const Item* prototype;
+			};
+			for (const auto& layer : plan.layers) {
+				WorldGen::DecorationGrid grid;
+				grid.width = plan.settings.width;
+				grid.height = plan.settings.height;
+				const size_t count = layer.cells.size();
+				grid.walkable.resize(count);
+				grid.reserved.resize(count);
+				grid.occupied.assign(count, 0);
+				grid.habitat.resize(count);
+				for (int y = 0; y < grid.height; ++y) {
+					for (int x = 0; x < grid.width; ++x) {
+						const size_t index = size_t(y) * grid.width + x;
+						const auto& cell = layer.cells[index];
+						const uint8_t habitat = Habitat(cell.terrain);
+						grid.habitat[index] = habitat;
+						grid.reserved[index] = !habitat || (cell.flags & WorldGen::Reserved);
+						grid.walkable[index] = WorldGen::IsWalkable(cell) && TileWalkable(scratch.getTile(PositionFor(spec, { x, y }, layer.offsetZ)));
+						if (habitat && !grid.reserved[index]) {
+							used[habitat] = true;
+						}
+					}
+				}
+				for (int y = 1; y < grid.height - 1; ++y) {
+					for (int x = 1; x < grid.width - 1; ++x) {
+						const size_t index = size_t(y) * grid.width + x;
+						const uint8_t habitat = grid.habitat[index];
+						if (!habitat || grid.reserved[index] || !grid.walkable[index] || grid.occupied[index] || brushes[habitat].empty()) {
+							continue;
+						}
+						const uint32_t choice = CellSeed(spec.seed, x, y, layer.offsetZ, 11);
+						const auto terrain = layer.cells[index].terrain;
+						const int factor = terrain == WorldGen::Terrain::Forest ? 180 : (terrain == WorldGen::Terrain::Grass ? 40 : (habitat == 4 ? 60 : 80));
+						const int patch = 60 + int(CellSeed(spec.seed, x / 12, y / 12, layer.offsetZ, 12) % 81);
+						const int density = std::min(80, std::clamp(spec.doodads.density, 0, 100) * factor * patch / 10000);
+						if (choice % 100 >= uint32_t(density)) {
+							continue;
+						}
+						DoodadBrush* brush = brushes[habitat][CellSeed(spec.seed, x, y, layer.offsetZ, 13) % brushes[habitat].size()];
+						const int variants = brush->getMaxVariation();
+						if (variants <= 0) {
+							++stats.skippedDoodads;
+							continue;
+						}
+						int variation = int(CellSeed(spec.seed, x, y, layer.offsetZ, 14) % uint32_t(variants));
+						const int total = brush->getTotalChance(variation), composite = brush->getCompositeChance(variation);
+						if (total <= 0) {
+							++stats.skippedDoodads;
+							continue;
+						}
+						std::vector<Object> objects;
+						std::unique_ptr<Tile> sample;
+						{
+							ScopedMTRandom random(CellSeed(spec.seed, x, y, layer.offsetZ, 15));
+							if (composite > 0 && int(CellSeed(spec.seed, x, y, layer.offsetZ, 16) % uint32_t(total)) < composite) {
+								for (const auto& entry : brush->getComposite(variation)) {
+									for (const Item* item : entry.second) {
+										objects.push_back({ entry.first, item });
+									}
+								}
+							} else {
+								sample.reset(scratch.allocator(scratch.getTile(PositionFor(spec, { x, y }, layer.offsetZ))->getLocation()));
+								brush->draw(&scratch, sample.get(), &variation);
+								if (!sample->ground) {
+									for (const Item* item : sample->items) {
+										objects.push_back({ Position(0, 0, 0), item });
+									}
+								}
+							}
+						}
+						if (objects.empty() || objects.size() > 256) {
+							++stats.skippedDoodads;
+							continue;
+						}
+						bool allowed = true;
+						std::map<std::pair<int, int>, bool> footprintPoints;
+						for (const auto& object : objects) {
+							const int id = object.prototype->getID();
+							if (object.offset.z != 0 || object.offset.x < -32 || object.offset.x > 32 || object.offset.y < -32 || object.offset.y > 32 || !g_items.typeExists(id)) {
+								allowed = false;
+								break;
+							}
+							const auto& type = g_items[id];
+							if (type.isGroundTile() || type.isTeleport() || type.isDoor() || type.isDepot() || type.isContainer() || type.isFloorChange() || type.isWall || object.prototype->getUniqueID() || object.prototype->getActionID()) {
+								allowed = false;
+								break;
+							}
+							auto& blocked = footprintPoints[{ object.offset.x, object.offset.y }];
+							blocked = blocked || type.unpassable;
+							if (type.sprite) {
+								if (type.sprite->width > 32 || type.sprite->height > 32) {
+									allowed = false;
+									break;
+								}
+								for (int dy = 0; dy < type.sprite->height; ++dy) {
+									for (int dx = 0; dx < type.sprite->width; ++dx) {
+										footprintPoints.try_emplace({ object.offset.x - dx, object.offset.y - dy }, false);
+									}
+								}
+							}
+							if (footprintPoints.size() > 256) {
+								allowed = false;
+								break;
+							}
+						}
+						std::vector<WorldGen::DecorationCell> footprint;
+						footprint.reserve(footprintPoints.size());
+						for (const auto& [point, blocked] : footprintPoints) {
+							footprint.push_back({ { point.first, point.second }, blocked });
+						}
+						if (!allowed || !WorldGen::CanPlaceDecoration(grid, { x, y }, footprint)) {
+							++stats.skippedDoodads;
+							continue;
+						}
+						for (const auto& object : objects) {
+							const auto pos = PositionFor(spec, { x + object.offset.x, y + object.offset.y }, layer.offsetZ);
+							scratch.getTile(pos)->addItem(object.prototype->deepCopy());
+							if (g_items[object.prototype->getID()].unpassable) {
+								blocking.insert(pos);
+							}
+						}
+						WorldGen::MarkDecoration(grid, { x, y }, footprint);
+						++stats.doodads;
+					}
+				}
+			}
+			const char* names[] = { "", "forest/grass", "desert", "snow", "cave", "beach" };
+			for (int i = 1; i <= 5; ++i) {
+				if (used[i] && brushes[i].empty()) {
+					stats.warnings.push_back("No matching doodad brushes for " + wxString::FromUTF8(names[i]) + " in the active client.");
+				}
+			}
 		}
 
 		bool CheckRegion(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan* plan, wxString& error) {
@@ -150,7 +375,7 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error) {
+		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats) {
 			// Copy context, including untouched void cells and the outer ring. Borders see
 			// final neighbors without ever exposing a partly generated map to the editor.
 			for (const auto& layer : plan.layers) {
@@ -228,6 +453,8 @@ namespace WorldEditor {
 				up->setDestination(upperArrival);
 				scratch.getTile(lower)->addItem(up);
 			}
+			std::set<Position> decorativeBlocking;
+			Decorate(spec, plan, scratch, decorativeBlocking, stats);
 			// Final client-material pass: border rules must not block planned doors,
 			// streets, cave floors or arrivals, even if a client has unusual definitions.
 			for (const auto& layer : plan.layers) {
@@ -245,7 +472,7 @@ namespace WorldEditor {
 								blocked = blocked || g_items[item->getID()].unpassable;
 							}
 						}
-						if (WorldGen::IsWalkable(cell) && blocked) {
+						if (WorldGen::IsWalkable(cell) && blocked && !decorativeBlocking.count(pos)) {
 							error = wxString::Format("Client borders or materials block the planned route at %d,%d,%d. Adjust the world legend or disable borders.", pos.x, pos.y, pos.z);
 							return false;
 						}
@@ -260,6 +487,24 @@ namespace WorldEditor {
 					}
 				}
 			}
+			if (!decorativeBlocking.empty()) {
+				auto physical = plan;
+				for (const auto& pos : decorativeBlocking) {
+					const int floor = pos.z - spec.region.z;
+					const WorldGen::Point local { pos.x - spec.region.originX, pos.y - spec.region.originY };
+					physical.FindLayer(floor)->cells[physical.Index(local)].terrain = floor > 0 ? WorldGen::Terrain::CaveWall : WorldGen::Terrain::Mountain;
+				}
+				const auto connectivity = WorldGen::Validate(physical);
+				if (!connectivity.valid) {
+					error = "Decoration would break world connectivity.";
+					for (const auto& issue : connectivity.errors) {
+						error << "\n"
+							  << wxstr(issue);
+					}
+					return false;
+				}
+			}
+
 			return true;
 		}
 	}
@@ -314,7 +559,7 @@ namespace WorldEditor {
 		return true;
 	}
 
-	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error) {
+	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats) {
 		error.clear();
 		const auto report = WorldGen::Validate(plan);
 		if (!report.valid || resolved.region.width != plan.settings.width || resolved.region.height != plan.settings.height) {
@@ -334,7 +579,8 @@ namespace WorldEditor {
 			return false;
 		}
 		BaseMap scratch;
-		if (!BuildScratch(editor, resolved, plan, materials, wall, teleportId, scratch, error)) {
+		ApplicationStats result;
+		if (!BuildScratch(editor, resolved, plan, materials, wall, teleportId, scratch, error, result)) {
 			return false;
 		}
 		// No editor tile changed during preparation. One action owns each replacement
@@ -351,6 +597,7 @@ namespace WorldEditor {
 					Tile* tile = scratch.swapTile(pos, nullptr);
 					tile->setLocation(editor.map.createTileL(pos));
 					action->addChange(newd Change(tile));
+					++result.changedTiles;
 				}
 			}
 		}
@@ -358,7 +605,18 @@ namespace WorldEditor {
 		editor.actionQueue->resetTimer();
 		editor.addBatch(batch.release(), 0);
 		editor.actionQueue->resetTimer();
+		if (stats) {
+			*stats = result;
+		}
+		if (g_gui.GetCurrentEditor() == &editor) {
+			g_gui.SetScreenCenterPosition(PositionFor(resolved, { resolved.region.width / 2, resolved.region.height / 2 }, 0));
+		}
 		g_gui.RefreshView();
+		wxString status = wxString::Format("World generated: %u tiles, %u doodads (%u skipped).", unsigned(result.changedTiles), unsigned(result.doodads), unsigned(result.skippedDoodads));
+		if (!result.warnings.empty()) {
+			status << " " << result.warnings.front();
+		}
+		g_gui.SetStatusText(status);
 		return true;
 	}
 

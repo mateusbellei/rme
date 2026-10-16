@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "world_editor.h"
+#include "procedural_recipe.h"
 #include <wx/imagpng.h>
 #include <wx/wfstream.h>
 #include "editor.h"
@@ -268,6 +269,9 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			wxFileOutputStream stream(spec.world.heightmapPath);
 			Check(encoder.SaveFile(&heightmap, stream, false), "Heightmap fixture must save as real PNG");
 		}
+		const auto recipePath = wxString::FromUTF8((directory / "recipe.json").string());
+		Check(ProceduralRecipe::Save(recipePath, spec, error, ProceduralRecipe::PathMode::RelativeToRecipe), "Production scenario must save a relative recipe");
+		Check(ProceduralRecipe::Load(recipePath, spec, error), "Production scenario must reload its PNG/catalog paths from the recipe directory");
 		Check(WorldEditor::BuildPlan(editor, spec, resolved, plan, error), "Real PNG must feed the production world planner: " + nstr(error));
 		Check(!plan.buildings.empty() && !plan.links.empty(), "Smoke fixture must exercise buildings and vertical travel");
 		mt_seed(717);

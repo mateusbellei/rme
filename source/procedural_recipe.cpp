@@ -9,6 +9,9 @@
 
 #include <fstream>
 #include <filesystem>
+#include <sstream>
+#include <wx/file.h>
+#include <wx/filename.h>
 
 namespace {
 	static std::string PresetToString(GenerationPreset preset) {
@@ -90,19 +93,53 @@ namespace {
 	}
 }
 
-bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wxString& error) {
+bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wxString& error, PathMode paths) {
+	error.clear();
+	if (path.find(wxUniChar(0)) != wxString::npos) {
+		error = "Recipe filename contains an embedded NUL.";
+		return false;
+	}
+	wxFileName recipe(path);
+	if (!recipe.MakeAbsolute()) {
+		error = "Could not resolve the recipe output path.";
+		return false;
+	}
+	bool validPaths = true;
+	auto filename = [&](const wxString& value) {
+		if (value.empty()) {
+			return std::string();
+		}
+		const auto utf8 = nstr(value);
+		if (value.find(wxUniChar(0)) != wxString::npos || utf8.size() > 32768 || utf8.find('\0') != std::string::npos) {
+			validPaths = false;
+			return std::string();
+		}
+		if (paths == PathMode::Preserve) {
+			return utf8;
+		}
+		wxFileName file(value);
+		if (!file.MakeAbsolute()) {
+			validPaths = false;
+			return std::string();
+		}
+		file.MakeRelativeTo(recipe.GetPath()); // Different volumes retain their absolute path.
+		return nstr(file.GetFullPath(wxPATH_UNIX));
+	};
 	json::mObject root = MakeObject();
 	root["version"] = json::mValue(4);
+	if (paths == PathMode::RelativeToRecipe) {
+		root["pathBase"] = json::mValue("recipe");
+	}
 	root["source"] = json::mValue(SourceToString(spec.source));
 	root["prompt"] = json::mValue(nstr(spec.textPrompt.prompt));
-	root["referenceImage"] = json::mValue(nstr(spec.imageMask.imagePath));
+	root["referenceImage"] = json::mValue(filename(spec.imageMask.imagePath));
 	root["referenceWeight"] = json::mValue(spec.reference.blendWeight);
 	root["preset"] = json::mValue(PresetToString(spec.preset));
 	root["seed"] = json::mValue(static_cast<int64_t>(spec.seed));
 	root["useSelection"] = json::mValue(spec.useSelection);
 	root["useSidecar"] = json::mValue(spec.useSidecar);
 	root["elevation"] = json::mValue(spec.elevation.maxLevels);
-	root["legend"] = json::mValue(nstr(spec.imageMask.legendPath));
+	root["legend"] = json::mValue(filename(spec.imageMask.legendPath));
 
 	json::mObject region = MakeObject();
 	region["originX"] = json::mValue(spec.region.originX);
@@ -124,7 +161,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	root["pipeline"] = pipeline;
 
 	json::mObject world;
-	world["algorithmVersion"]=json::mValue(int(WorldGen::AlgorithmVersion));
+	world["algorithmVersion"] = json::mValue(int(WorldGen::AlgorithmVersion));
 	world["shape"] = json::mValue(spec.world.settings.shape == WorldGen::LandShape::Archipelago ? "archipelago" : "continent");
 	world["seaLevel"] = json::mValue(spec.world.settings.seaLevel);
 	world["coastRoughness"] = json::mValue(spec.world.settings.coastRoughness);
@@ -138,33 +175,51 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["caveDepth"] = json::mValue(spec.world.settings.caveDepth);
 	world["caveFill"] = json::mValue(spec.world.settings.caveFill);
 	world["roadWidth"] = json::mValue(spec.world.settings.roadWidth);
-	world["layout"] = json::mValue(spec.world.settings.settlementLayout==WorldGen::SettlementLayout::Blocks?"blocks":"organic");
+	world["layout"] = json::mValue(spec.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks ? "blocks" : "organic");
 	world["protectExisting"] = json::mValue(spec.world.protectExisting);
 	world["connectionItemId"] = json::mValue(spec.world.connectionItemId);
 	world["wallBrush"] = json::mValue(nstr(spec.world.wallBrushName));
-	world["catalog"] = json::mValue(nstr(spec.world.catalogPath));
-	world["heightmap"] = json::mValue(nstr(spec.world.heightmapPath));
-	world["biomeHints"] = json::mValue(nstr(spec.world.biomeHintsPath));
+	world["catalog"] = json::mValue(filename(spec.world.catalogPath));
+	world["heightmap"] = json::mValue(filename(spec.world.heightmapPath));
+	world["biomeHints"] = json::mValue(filename(spec.world.biomeHintsPath));
 	root["world"] = world;
 
-	std::ofstream output(std::filesystem::u8path(nstr(path)));
-	if (!output.good()) {
-		error = "Could not write recipe: " + path;
+	if (!validPaths) {
+		error = "Recipe paths must be valid strings of at most 32768 bytes.";
 		return false;
 	}
-	json::write(json::mValue(root), output);
-	output.flush();
-	if (!output.good()) {
-		error = "Failed to finish writing recipe: " + path;
+	std::ostringstream serialized;
+	json::write(json::mValue(root), serialized);
+	const std::string contents = serialized.str();
+	if (contents.size() > 4 * 1024 * 1024) {
+		error = "Recipe exceeds the 4 MiB input limit.";
+		return false;
+	}
+	// wxTempFile preserves an existing recipe until the complete replacement is written.
+	wxTempFile output(path);
+	if (!output.IsOpened() || !output.Write(contents.data(), contents.size()) || !output.Commit()) {
+		error = "Could not finish writing recipe: " + path;
 		return false;
 	}
 	return true;
 }
 
 bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxString& error) {
+	if (path.find(wxUniChar(0)) != wxString::npos) {
+		error = "Recipe filename contains an embedded NUL.";
+		return false;
+	}
 	std::ifstream input(std::filesystem::u8path(nstr(path)));
 	if (!input.good()) {
 		error = "Could not open recipe: " + path;
+		return false;
+	}
+
+	input.seekg(0, std::ios::end);
+	const auto bytes = input.tellg();
+	input.seekg(0, std::ios::beg);
+	if (bytes < 0 || bytes > 4 * 1024 * 1024) {
+		error = "Recipe exceeds the 4 MiB input limit.";
 		return false;
 	}
 
@@ -178,16 +233,31 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 	GenerationSpec spec;
 	error.clear();
 	bool validNumbers = true;
+	for (const char* key : { "region", "doodads", "pipeline", "world" }) {
+		const auto value = object.find(key);
+		if (value != object.end() && value->second.type() != json::obj_type) {
+			error = "Recipe field '" + wxString::FromUTF8(key) + "' must be an object.";
+			return false;
+		}
+	}
 
 	auto readString = [&](const char* key, wxString& out) {
 		json::mObject::const_iterator it = object.find(key);
+		if (it != object.end() && it->second.type() != json::str_type) {
+			validNumbers = false;
+			return;
+		}
 		if (it != object.end() && it->second.type() == json::str_type) {
-			out = wxstr(it->second.get_str());
+			out = wxString::FromUTF8(it->second.get_str());
 		}
 	};
 
 	auto readInt = [&](const char* key, int& out) {
 		json::mObject::const_iterator it = object.find(key);
+		if (it != object.end() && it->second.type() != json::int_type) {
+			validNumbers = false;
+			return;
+		}
 		if (it != object.end() && it->second.type() == json::int_type) {
 			const auto value = it->second.get_int64();
 			if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
@@ -200,6 +270,10 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 
 	auto readBool = [&](const char* key, bool& out) {
 		json::mObject::const_iterator it = object.find(key);
+		if (it != object.end() && it->second.type() != json::bool_type) {
+			validNumbers = false;
+			return;
+		}
 		if (it != object.end() && it->second.type() == json::bool_type) {
 			out = it->second.get_bool();
 		}
@@ -233,6 +307,10 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 	readInt("elevation", spec.elevation.maxLevels);
 
 	json::mObject::const_iterator sourceIt = object.find("source");
+	if (sourceIt != object.end() && sourceIt->second.type() != json::str_type) {
+		error = "Recipe source must be a string.";
+		return false;
+	}
 	if (sourceIt != object.end() && sourceIt->second.type() == json::str_type) {
 		const auto& source = sourceIt->second.get_str();
 		if (source != "world" && source != "image" && source != "image_mask" && source != "prompt" && source != "text_prompt" && source != "prompt_with_image" && source != "combined") {
@@ -243,7 +321,16 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 	}
 
 	json::mObject::const_iterator presetIt = object.find("preset");
+	if (presetIt != object.end() && presetIt->second.type() != json::str_type) {
+		error = "Recipe preset must be a string.";
+		return false;
+	}
 	if (presetIt != object.end() && presetIt->second.type() == json::str_type) {
+		const std::string value = as_lower_str(presetIt->second.get_str());
+		if (value != "auto" && value != "forest" && value != "desert" && value != "cave" && value != "city" && value != "coast" && value != "mountain" && value != "ice") {
+			error = "Unknown recipe preset.";
+			return false;
+		}
 		spec.preset = PresetFromString(presetIt->second.get_str());
 	}
 
@@ -274,17 +361,33 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		const json::mObject& doodads = doodadsIt->second.get_obj();
 		json::mObject::const_iterator enIt = doodads.find("enabled");
 		json::mObject::const_iterator denIt = doodads.find("density");
+		if (enIt != doodads.end() && enIt->second.type() != json::bool_type) {
+			error = "Doodads enabled must be a boolean.";
+			return false;
+		}
 		if (enIt != doodads.end() && enIt->second.type() == json::bool_type) {
 			spec.doodads.enabled = enIt->second.get_bool();
 		}
+		if (denIt != doodads.end() && (denIt->second.type() != json::int_type || denIt->second.get_int64() < 0 || denIt->second.get_int64() > 100)) {
+			error = "Doodad density must be an integer between 0 and 100.";
+			return false;
+		}
 		if (denIt != doodads.end() && denIt->second.type() == json::int_type) {
-			spec.doodads.density = denIt->second.get_int();
+			spec.doodads.density = int(denIt->second.get_int64());
 		}
 	}
 
 	json::mObject::const_iterator pipelineIt = object.find("pipeline");
 	if (pipelineIt != object.end() && pipelineIt->second.type() == json::obj_type) {
 		const json::mObject& pipeline = pipelineIt->second.get_obj();
+		for (const char* key : { "borderize", "randomize", "walls" }) {
+			const auto value = pipeline.find(key);
+			if (value != pipeline.end() && value->second.type() != json::bool_type) {
+				error = "Recipe pipeline switches must be booleans.";
+				return false;
+			}
+		}
+
 		json::mObject::const_iterator bIt = pipeline.find("borderize");
 		json::mObject::const_iterator rIt = pipeline.find("randomize");
 		json::mObject::const_iterator wIt = pipeline.find("walls");
@@ -311,8 +414,11 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			return false;
 		}
 		const auto& world = worldIt->second.get_obj();
-		const auto algorithm=world.find("algorithmVersion");
-		if(algorithm!=world.end() && (algorithm->second.type()!=json::int_type || algorithm->second.get_int64()!=WorldGen::AlgorithmVersion)){error="Unsupported world generation algorithm version.";return false;}
+		const auto algorithm = world.find("algorithmVersion");
+		if (algorithm != world.end() && (algorithm->second.type() != json::int_type || algorithm->second.get_int64() != WorldGen::AlgorithmVersion)) {
+			error = "Unsupported world generation algorithm version.";
+			return false;
+		}
 
 		auto integer = [&](const char* key, int& target) {
 			const auto it = world.find(key);
@@ -326,10 +432,10 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			target = static_cast<int>(it->second.get_int64());
 		};
 		integer("seaLevel", spec.world.settings.seaLevel);
-		integer("coastRoughness",spec.world.settings.coastRoughness);
-		integer("temperatureBias",spec.world.settings.temperatureBias);
-		integer("moistureBias",spec.world.settings.moistureBias);
-		integer("riverWidth",spec.world.settings.riverWidth);
+		integer("coastRoughness", spec.world.settings.coastRoughness);
+		integer("temperatureBias", spec.world.settings.temperatureBias);
+		integer("moistureBias", spec.world.settings.moistureBias);
+		integer("riverWidth", spec.world.settings.riverWidth);
 		integer("rivers", spec.world.settings.riverCount);
 		integer("settlements", spec.world.settings.settlementCount);
 		integer("buildings", spec.world.settings.buildingsPerSettlement);
@@ -338,10 +444,13 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		integer("caveFill", spec.world.settings.caveFill);
 		integer("roadWidth", spec.world.settings.roadWidth);
 		integer("connectionItemId", spec.world.connectionItemId);
-		const auto layout=world.find("layout");
-		if(layout!=world.end()) {
-			if(layout->second.type()!=json::str_type || (layout->second.get_str()!="organic" && layout->second.get_str()!="blocks")){error="World layout must be organic or blocks.";return false;}
-			spec.world.settings.settlementLayout=layout->second.get_str()=="blocks"?WorldGen::SettlementLayout::Blocks:WorldGen::SettlementLayout::Organic;
+		const auto layout = world.find("layout");
+		if (layout != world.end()) {
+			if (layout->second.type() != json::str_type || (layout->second.get_str() != "organic" && layout->second.get_str() != "blocks")) {
+				error = "World layout must be organic or blocks.";
+				return false;
+			}
+			spec.world.settings.settlementLayout = layout->second.get_str() == "blocks" ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
 		}
 		const auto shape = world.find("shape");
 		if (shape != world.end()) {
@@ -365,13 +474,18 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 				error = "World catalog must be a path string.";
 				return false;
 			}
-			spec.world.catalogPath = wxstr(catalog->second.get_str());
+			spec.world.catalogPath = wxString::FromUTF8(catalog->second.get_str());
 		}
-		for (const auto& field : {std::pair{"heightmap", &spec.world.heightmapPath}, std::pair{"biomeHints", &spec.world.biomeHintsPath}}) {
-			const auto value=world.find(field.first);
-			if(value==world.end())continue;
-			if(value->second.type()!=json::str_type){error="World PNG paths must be strings.";return false;}
-			*field.second=wxstr(value->second.get_str());
+		for (const auto& field : { std::pair { "heightmap", &spec.world.heightmapPath }, std::pair { "biomeHints", &spec.world.biomeHintsPath } }) {
+			const auto value = world.find(field.first);
+			if (value == world.end()) {
+				continue;
+			}
+			if (value->second.type() != json::str_type) {
+				error = "World PNG paths must be strings.";
+				return false;
+			}
+			*field.second = wxString::FromUTF8(value->second.get_str());
 		}
 		const auto wall = world.find("wallBrush");
 		if (wall != world.end()) {
@@ -382,8 +496,8 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			spec.world.wallBrushName = wxstr(wall->second.get_str());
 		}
 	}
-	if (!validNumbers || spec.world.connectionItemId<0 || spec.world.connectionItemId>65535 || spec.region.width <= 0 || spec.region.height <= 0 || spec.region.z < 0 || spec.region.z > MAP_MAX_LAYER || spec.region.originX < 0 || spec.region.originY < 0) {
-		error = "Recipe contains invalid region or numeric settings.";
+	if (!validNumbers || spec.reference.blendWeight < 0 || spec.reference.blendWeight > 100 || spec.elevation.maxLevels < 0 || spec.elevation.maxLevels > MAP_MAX_LAYER || spec.world.connectionItemId < 0 || spec.world.connectionItemId > 65535 || spec.region.width <= 0 || spec.region.height <= 0 || spec.region.z < 0 || spec.region.z > MAP_MAX_LAYER || spec.region.originX < 0 || spec.region.originY < 0) {
+		error = "Recipe contains invalid field types, region or numeric settings.";
 		return false;
 	}
 	if (spec.source == GenerationSource::WorldPlan) {
@@ -394,6 +508,35 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		if (!WorldGen::ValidateSettings(settings, problem)) {
 			error = wxstr(problem);
 			return false;
+		}
+	}
+	const auto pathBase = object.find("pathBase");
+	bool relative = false;
+	if (pathBase != object.end()) {
+		if (pathBase->second.type() != json::str_type || (pathBase->second.get_str() != "recipe" && pathBase->second.get_str() != "workingDirectory")) {
+			error = "Recipe pathBase must be recipe or workingDirectory.";
+			return false;
+		}
+		relative = pathBase->second.get_str() == "recipe";
+	}
+	wxFileName recipe(path);
+	if (!recipe.MakeAbsolute()) {
+		error = "Could not resolve recipe directory.";
+		return false;
+	}
+	for (wxString* value : { &spec.imageMask.imagePath, &spec.imageMask.legendPath, &spec.world.catalogPath, &spec.world.heightmapPath, &spec.world.biomeHintsPath }) {
+		const std::string bytes = nstr((*value));
+		if (value->find(wxUniChar(0)) != wxString::npos || bytes.size() > 32768 || bytes.find('\0') != std::string::npos) {
+			error = "Recipe paths must be valid strings of at most 32768 bytes.";
+			return false;
+		}
+		if (relative && !value->empty()) {
+			wxFileName file(*value);
+			if (!file.MakeAbsolute(recipe.GetPath())) {
+				error = "Could not resolve recipe asset path.";
+				return false;
+			}
+			*value = file.GetFullPath();
 		}
 	}
 	result = spec;

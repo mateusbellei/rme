@@ -9,7 +9,9 @@
 #include "procedural_generator.h"
 
 namespace ProceduralRecipe {
-	bool Save(const wxString& path, const GenerationSpec& spec, wxString& error);
+	enum class PathMode { Preserve,
+						  RelativeToRecipe };
+	bool Save(const wxString& path, const GenerationSpec& spec, wxString& error, PathMode paths = PathMode::Preserve);
 	bool Load(const wxString& path, GenerationSpec& spec, wxString& error);
 }
 

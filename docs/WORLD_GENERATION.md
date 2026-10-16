@@ -342,3 +342,21 @@ being developed in this PR; changes during development can alter worlds. Future
 released algorithm changes must bump the version. New recipes identify the
 algorithm and unsupported versions are rejected. Legacy recipes without that
 field remain supported.
+
+
+## Recipe asset paths
+
+The dialog saves recipes with `"pathBase":"recipe"`. Image, legend, heightmap,
+biome-hint and catalog paths are written relative to the recipe directory when
+possible and resolved from that directory on load. A folder containing a recipe
+and neighboring assets can be moved together. Assets are referenced, not copied;
+keep external relative paths valid when moving a larger folder tree. References
+to another Windows volume remain absolute.
+
+Recipes without `pathBase` retain their historical working-directory behavior;
+`"pathBase":"workingDirectory"` can state it explicitly. The C++ save API keeps
+that behavior by default and offers `PathMode::RelativeToRecipe` for portable
+folder layouts. Saves use a temporary file and only replace an existing recipe
+after the full JSON has been written. Inputs are capped at 4 MiB; malformed
+field types, oversized integers, invalid densities and embedded-NUL paths are
+rejected without changing the caller's configuration.

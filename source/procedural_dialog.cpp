@@ -452,7 +452,7 @@ void ProceduralDialog::OnSaveRecipe(wxCommandEvent& event) {
 		return;
 	}
 	wxString error;
-	if (!ProceduralRecipe::Save(dlg.GetPath(), BuildSpecFromDialog(), error)) {
+	if (!ProceduralRecipe::Save(dlg.GetPath(), BuildSpecFromDialog(), error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 		g_gui.PopupDialog(this, "Save failed", error, wxOK | wxICON_ERROR);
 	}
 }

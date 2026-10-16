@@ -67,7 +67,7 @@ static void TestRecipes() {
 	Check(ProceduralRecipe::Save(unicodeFile, original, error) && ProceduralRecipe::Load(unicodeFile, loaded, error), "Recipe paths must support Unicode on Windows and Linux");
 	std::filesystem::remove(unicodePath);
 	for (const char* malformed : {
-			 R"({"version":99})", R"({"seed":4294967296})", R"({"seed":1.5})",
+			 R"({"version":99})", R"({"pathBase":"unknown"})", R"({"legend":"bad\u0000path"})", R"({"world":{"heightmap":"bad\u0000path"}})", R"({"source":false})", R"({"preset":"typo"})", R"({"region":[]})", R"({"seed":1,"useSelection":0})", R"({"referenceWeight":101})", R"({"doodads":{"density":4294967296}})", R"({"doodads":{"enabled":1}})", R"({"pipeline":{"borderize":"yes"}})", R"({"seed":4294967296})", R"({"seed":1.5})",
 			 R"({"source":"world","world":{"caveDepth":9}})",
 			 R"({"source":"world","world":{"seaLevel":4294967296}})",
 			 R"({"source":"world","world":{"shape":"typo"}})",
@@ -95,6 +95,50 @@ static void TestRecipes() {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error) && loaded.source == GenerationSource::WorldPlan, "Bundled world recipes must load");
 	}
 	std::filesystem::remove(path);
+}
+
+static void TestRelativeRecipes() {
+	const auto root = std::filesystem::temp_directory_path() / ("rme-recipe-paths-" + std::to_string(wxGetProcessId()));
+	const auto source = root / "source", moved = root / "moved";
+	std::filesystem::create_directories(source / "assets");
+	std::filesystem::create_directories(moved / "assets");
+	auto wxPath = [](const std::filesystem::path& path) {const auto text=path.u8string();return wxString::FromUTF8(std::string(text.begin(),text.end())); };
+	GenerationSpec spec;
+	spec.source = GenerationSource::WorldPlan;
+	spec.world.heightmapPath = wxPath(source / "assets" / "height.png");
+	spec.world.biomeHintsPath = wxPath(source / "assets" / "biomes.png");
+	spec.world.catalogPath = wxPath(source / "assets" / "buildings.json");
+	spec.imageMask.legendPath = wxPath(source / "assets" / "legend.json");
+	spec.imageMask.imagePath = wxPath(source / "assets" / "reference.png");
+	wxString error;
+	const auto recipe = source / "recipe.json";
+	Check(ProceduralRecipe::Save(wxPath(recipe), spec, error, ProceduralRecipe::PathMode::RelativeToRecipe), "Recipe-relative save must succeed");
+	{
+		std::ifstream file(recipe);
+		json::mValue root;
+		Check(json::read(file, root), "Saved relative recipe must be valid JSON");
+		Check(root.get_obj().at("pathBase").get_str() == "recipe" && root.get_obj().at("world").get_obj().at("heightmap").get_str() == "assets/height.png", "Relative saves must mark their base and avoid machine-specific absolute paths for neighboring assets");
+	}
+	std::filesystem::copy_file(recipe, moved / "recipe.json", std::filesystem::copy_options::overwrite_existing);
+	GenerationSpec loaded;
+	Check(ProceduralRecipe::Load(wxPath(moved / "recipe.json"), loaded, error), "Moved recipe must load independently of process working directory");
+	Check(loaded.world.heightmapPath == wxPath(moved / "assets" / "height.png") && loaded.world.biomeHintsPath == wxPath(moved / "assets" / "biomes.png") && loaded.world.catalogPath == wxPath(moved / "assets" / "buildings.json") && loaded.imageMask.legendPath == wxPath(moved / "assets" / "legend.json") && loaded.imageMask.imagePath == wxPath(moved / "assets" / "reference.png"), "Every asset path must resolve against the moved recipe directory");
+	std::ifstream beforeFile(recipe);
+	const std::string before((std::istreambuf_iterator<char>(beforeFile)), {});
+	beforeFile.close();
+	spec.world.heightmapPath = wxString::FromUTF8(std::string("bad\0path", 8));
+	Check(!ProceduralRecipe::Save(wxPath(recipe), spec, error, ProceduralRecipe::PathMode::RelativeToRecipe), "Embedded NUL paths must fail before replacing an existing recipe");
+	std::ifstream afterFile(recipe);
+	const std::string after((std::istreambuf_iterator<char>(afterFile)), {});
+	afterFile.close();
+	Check(before == after, "Failed recipe validation must preserve the original file");
+	std::filesystem::remove(recipe);
+	std::filesystem::remove(moved / "recipe.json");
+	std::filesystem::remove(source / "assets");
+	std::filesystem::remove(moved / "assets");
+	std::filesystem::remove(source);
+	std::filesystem::remove(moved);
+	std::filesystem::remove(root);
 }
 
 static void TestScopedRandom() {
@@ -248,6 +292,7 @@ int main() {
 	try {
 		TestDiagnostics();
 		TestWorldInputs();
+		TestRelativeRecipes();
 		TestRecipes();
 		TestScopedRandom();
 		TestCatalogJson();

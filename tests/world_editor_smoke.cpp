@@ -76,8 +76,8 @@ namespace {
 
 	void PrepareRegistry() {
 		// Synthetic client definitions keep this regression public and asset-free.
-		g_items.clear();
 		g_brushes.clear();
+		g_items.clear();
 		g_items.MajorVersion = 3;
 		g_items.MinorVersion = 57;
 		g_items.BuildNumber = 0;
@@ -152,7 +152,7 @@ namespace {
 	}
 }
 
-int RunWorldEditorSelfTest(const wxString& outputDirectory) {
+static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 	try {
 		const std::filesystem::path directory = nstr(outputDirectory);
 		std::filesystem::create_directories(directory);
@@ -164,18 +164,20 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		version.client = ClientVersionID(57);
 		CopyBuffer copyBuffer;
 		Editor editor(copyBuffer, version);
-		editor.map.setWidth(256);
-		editor.map.setHeight(256);
-		Tile* untouched = editor.map.createTile(240, 240, 7);
+		editor.map.setWidth(blocks?512:256);
+		editor.map.setHeight(blocks?512:256);
+		Tile* untouched = editor.map.createTile(blocks?480:240,blocks?480:240,7);
 		untouched->addItem(Item::Create(100));
 		untouched->update();
 		const uint64_t before = MapHash(editor.map);
 		GenerationSpec spec;
 		spec.source = GenerationSource::WorldPlan;
+		spec.world.settings.settlementLayout = blocks ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
+		spec.seed = blocks ? 42u : 1337u;
 		spec.region.originX = 16;
 		spec.region.originY = 24;
-		spec.region.width = 96;
-		spec.region.height = 96;
+		spec.region.width = blocks?256:96;
+		spec.region.height = blocks?256:96;
 		spec.region.z = 7;
 		spec.world.settings.settlementCount = 2;
 		spec.world.settings.buildingsPerSettlement = 4;
@@ -282,4 +284,12 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		result << "FAIL: " << exception.what() << '\n';
 		return 1;
 	}
+}
+
+int RunWorldEditorSelfTest(const wxString& outputDirectory) {
+	const int village = RunWorldScenario(outputDirectory, false);
+	if (village != 0) {
+		return village;
+	}
+	return RunWorldScenario(outputDirectory + "/city", true);
 }

@@ -236,3 +236,32 @@ content, undo history or global brush RNG. The final transfer commits as one
 undo operation. Automated checks cancel every planning/editor stage, including
 the last checkpoint immediately before commit. Settings scroll and previews
 scale to the current monitor's usable area.
+
+
+## Villages and city blocks
+
+World settings offers **Organic village lots** (radial growth and access paths)
+and **City street blocks** (compact lots with frontage and streets toward the
+central plaza). Block pitch adapts to the largest eligible template and road
+width, preserving building setbacks. Lots belong to the nearest settlement, so
+neighboring cities do not consume each other's territory. Terrain constraints
+remain active: blocked or steep lots are skipped with a warning instead of
+flattening water and mountains.
+
+Template orientation is selected from the actual source entrance, including
+custom templates whose original door faces north/east/west. Paths target the
+real rotated door. Road routing uses deterministic A* and reuses stamped search
+buffers across lots, avoiding a full-world buffer clear for every building.
+
+The independent regression creates a city with at least 24 buildings on a dry
+plain, validates every entrance and upper-floor connection, checks setbacks,
+and repeats it with north-facing source templates. The diagnostic CLI also
+accepts optional layout and building count:
+
+```powershell
+build/planner/Release/rme_world_plan.exe build/city 1337 512 blocks 32
+```
+
+`example_city_blocks.json` is an editor recipe. Counts are targets; constrained
+terrain may fit fewer lots. These layouts do not yet assign civic/commercial
+functions or furnish interiors.

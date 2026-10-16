@@ -83,6 +83,8 @@ namespace WorldGen {
 	enum class LandShape { Continent,
 						   Archipelago };
 
+	enum class SettlementLayout { Organic,
+								  Blocks };
 	struct Settings {
 		int width = 256, height = 256;
 		uint32_t seed = 1337;
@@ -95,6 +97,7 @@ namespace WorldGen {
 		int caveDepth = 0;
 		int caveFill = 45;
 		int roadWidth = 2;
+		SettlementLayout settlementLayout = SettlementLayout::Organic;
 	};
 
 	// Optional raster-derived inputs, already resampled to the target dimensions.

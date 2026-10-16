@@ -133,6 +133,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["caveDepth"] = json::mValue(spec.world.settings.caveDepth);
 	world["caveFill"] = json::mValue(spec.world.settings.caveFill);
 	world["roadWidth"] = json::mValue(spec.world.settings.roadWidth);
+	world["layout"] = json::mValue(spec.world.settings.settlementLayout==WorldGen::SettlementLayout::Blocks?"blocks":"organic");
 	world["protectExisting"] = json::mValue(spec.world.protectExisting);
 	world["connectionItemId"] = json::mValue(spec.world.connectionItemId);
 	world["wallBrush"] = json::mValue(nstr(spec.world.wallBrushName));
@@ -325,6 +326,11 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		integer("caveFill", spec.world.settings.caveFill);
 		integer("roadWidth", spec.world.settings.roadWidth);
 		integer("connectionItemId", spec.world.connectionItemId);
+		const auto layout=world.find("layout");
+		if(layout!=world.end()) {
+			if(layout->second.type()!=json::str_type || (layout->second.get_str()!="organic" && layout->second.get_str()!="blocks")){error="World layout must be organic or blocks.";return false;}
+			spec.world.settings.settlementLayout=layout->second.get_str()=="blocks"?WorldGen::SettlementLayout::Blocks:WorldGen::SettlementLayout::Organic;
+		}
 		const auto shape = world.find("shape");
 		if (shape != world.end()) {
 			if (shape->second.type() != json::str_type || (shape->second.get_str() != "continent" && shape->second.get_str() != "archipelago")) {

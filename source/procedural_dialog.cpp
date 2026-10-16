@@ -501,6 +501,12 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 		grid->Add(control, 1, wxEXPAND);
 		return control;
 	};
+	grid->Add(new wxStaticText(content, wxID_ANY, "Settlement layout:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* settlementLayout = new wxChoice(content, wxID_ANY);
+	settlementLayout->Append("Organic village lots");
+	settlementLayout->Append("City street blocks");
+	settlementLayout->SetSelection(worldSettings.settings.settlementLayout == WorldGen::SettlementLayout::Blocks ? 1 : 0);
+	grid->Add(settlementLayout, 1, wxEXPAND);
 	const auto& settings = worldSettings.settings;
 	auto* sea = spin("Sea level (2000-6500):", 2000, 6500, settings.seaLevel);
 	auto* rivers = spin("River sources:", 0, 64, settings.riverCount);
@@ -555,6 +561,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 		return;
 	}
 	GenerationWorld candidate = worldSettings;
+	candidate.settings.settlementLayout = settlementLayout->GetSelection() == 1 ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
 	candidate.settings.shape = shape->GetSelection() == 1 ? WorldGen::LandShape::Archipelago : WorldGen::LandShape::Continent;
 	candidate.settings.seaLevel = sea->GetValue();
 	candidate.settings.riverCount = rivers->GetValue();
@@ -576,15 +583,16 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	GenerationSpec resolved;
 	WorldGen::Plan plan;
 	wxString error;
+	bool planned = false;
 	{
 		wxProgressDialog progress("Planning world", "Preparing geography", 100, this, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
-		if (!WorldEditor::BuildPlan(editor, BuildSpecFromDialog(), resolved, plan, error, DialogProgress(progress))) {
-			if (error == "World generation cancelled.") {
-				return;
-			}
+		planned = WorldEditor::BuildPlan(editor, BuildSpecFromDialog(), resolved, plan, error, DialogProgress(progress));
+	}
+	if (!planned) {
+		if (error != "World generation cancelled.") {
 			g_gui.PopupDialog(this, "World preview failed", error, wxOK | wxICON_ERROR);
-			return;
 		}
+		return;
 	}
 	wxDialog preview(this, wxID_ANY, "World preview", wxDefaultPosition, DialogSize(this, 760, 850), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
 	wxBoxSizer* layout = new wxBoxSizer(wxVERTICAL);
@@ -629,15 +637,20 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	floors->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	views->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
 	apply->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
-		wxProgressDialog progress("Applying world", "Checking target", 100, &preview, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
-		if (!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, DialogProgress(progress))) {
-			if (error == "World generation cancelled.") {
-				return;
+		bool applied = false;
+		{
+			wxProgressDialog progress("Applying world", "Checking target", 100, &preview, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
+			applied = WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, DialogProgress(progress));
+			if (applied) {
+				progress.Update(100, "World applied");
 			}
-			g_gui.PopupDialog(&preview, "World application failed", error, wxOK | wxICON_ERROR);
+		}
+		if (!applied) {
+			if (error != "World generation cancelled.") {
+				g_gui.PopupDialog(&preview, "World application failed", error, wxOK | wxICON_ERROR);
+			}
 			return;
 		}
-		progress.Update(100, "World applied");
 		preview.EndModal(wxID_OK);
 	});
 	redraw();

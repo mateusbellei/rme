@@ -17,6 +17,9 @@ namespace WorldGen {
 			const ProgressCallback& callback;
 			const char* stage = "Preparing world";
 			int start = 0, end = 0, percent = 0;
+			std::vector<int> roadCost, roadParent;
+			std::vector<uint32_t> roadVisited;
+			uint32_t roadSearch = 0;
 			void Poll() const {
 				if (callback && !callback(stage, percent)) {
 					throw Cancelled {};
@@ -297,17 +300,32 @@ namespace WorldGen {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
 			const int start = int(plan.Index(from)), end = int(plan.Index(to));
-			std::vector<int> cost(cells.size(), std::numeric_limits<int>::max()), parent(cells.size(), -1);
-			using Node = std::pair<int, int>;
+			if (control.roadCost.size() != cells.size()) {
+				control.roadCost.resize(cells.size());
+				control.roadParent.resize(cells.size());
+				control.roadVisited.assign(cells.size(), 0);
+			}
+			if (++control.roadSearch == 0) {
+				std::fill(control.roadVisited.begin(), control.roadVisited.end(), 0);
+				++control.roadSearch;
+			}
+			auto& cost = control.roadCost;
+			auto& parent = control.roadParent;
+			auto& visited = control.roadVisited;
+			const uint32_t search = control.roadSearch;
+			auto heuristic = [&](int index) { return (std::abs(index % s.width - to.x) + std::abs(index / s.width - to.y)) * 2; };
+			using Node = std::tuple<int, int, int>;
 			std::priority_queue<Node, std::vector<Node>, std::greater<Node>> open;
 			cost[start] = 0;
-			open.push({ 0, start });
+			parent[start] = -1;
+			visited[start] = search;
+			open.push({ heuristic(start), 0, start });
 			size_t expanded = 0;
 			while (!open.empty()) {
 				if ((expanded++ & 4095) == 0) {
 					control.Poll();
 				}
-				const auto [value, current] = open.top();
+				const auto [priority, value, current] = open.top();
 				open.pop();
 				if (value != cost[current]) {
 					continue;
@@ -328,14 +346,15 @@ namespace WorldGen {
 					}
 					const int step = c.terrain == Terrain::River ? 50 : (c.terrain == Terrain::Road || c.terrain == Terrain::Plaza ? 2 : 10);
 					const int candidate = value + step + std::abs(int(c.elevation) - int(cells[current].elevation)) / 100;
-					if (candidate < cost[next]) {
+					if (visited[next] != search || candidate < cost[next]) {
+						visited[next] = search;
 						cost[next] = candidate;
 						parent[next] = current;
-						open.push({ candidate, next });
+						open.push({ candidate + heuristic(next), candidate, next });
 					}
 				}
 			}
-			if (cost[end] == std::numeric_limits<int>::max()) {
+			if (visited[end] != search) {
 				return false;
 			}
 			for (int current = end; current >= 0; current = parent[current]) {
@@ -359,6 +378,47 @@ namespace WorldGen {
 				}
 			}
 			return true;
+		}
+
+		struct LotSlot {
+			Point center, frontage, junction;
+			uint32_t serial = 0;
+		};
+
+		std::vector<LotSlot> SettlementLots(const Plan& plan, const Settlement& town) {
+			std::vector<LotSlot> lots;
+			const auto& s = plan.settings;
+			if (s.settlementLayout == SettlementLayout::Organic) {
+				static const Point directions[] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
+				for (int ring = 1; ring <= std::max(4, (s.buildingsPerSettlement + 3) / 4); ++ring) {
+					for (int side = 0; side < 8; ++side) {
+						lots.push_back({ { town.center.x + directions[side].x * ring * 10, town.center.y + directions[side].y * ring * 10 }, town.center, town.center, uint32_t(ring * 8 + side) });
+					}
+				}
+				return lots;
+			}
+			int largest = 5;
+			for (const auto& b : plan.catalog) {
+				if (b.biomes.empty() || std::find(b.biomes.begin(), b.biomes.end(), TerrainName(town.biome)) != b.biomes.end()) {
+					largest = std::max(largest, std::max(int(b.rows.size()), int(b.rows.front().size())));
+				}
+			}
+			const int pitch = largest + s.roadWidth + 4;
+			int reach = 2;
+			while ((reach * 2) * (reach * 2) < s.buildingsPerSettlement * 3) {
+				++reach;
+			}
+			for (int gy = -reach; gy < reach; ++gy) {
+				for (int gx = -reach; gx < reach; ++gx) {
+					const Point center { town.center.x + gx * pitch + pitch / 2, town.center.y + gy * pitch + pitch / 2 };
+					const int streetX = town.center.x + (gx >= 0 ? gx : gx + 1) * pitch;
+					const int streetY = town.center.y + (gy >= 0 ? gy : gy + 1) * pitch;
+					const bool vertical = std::abs(center.x - town.center.x) >= std::abs(center.y - town.center.y);
+					lots.push_back({ center, vertical ? Point { streetX, center.y } : Point { center.x, streetY }, vertical ? Point { streetX, town.center.y } : Point { town.center.x, streetY }, uint32_t((gy + reach) * reach * 2 + gx + reach + 1000) });
+				}
+			}
+			std::sort(lots.begin(), lots.end(), [&](const LotSlot& a, const LotSlot& b) {const int da=std::abs(a.center.x-town.center.x)+std::abs(a.center.y-town.center.y),db=std::abs(b.center.x-town.center.x)+std::abs(b.center.y-town.center.y);return da!=db?da<db:a.serial<b.serial; });
+			return lots;
 		}
 
 		void BuildSettlements(Plan& plan, Control& control) {
@@ -454,111 +514,141 @@ namespace WorldGen {
 			for (int t = 0; t < int(plan.settlements.size()); ++t) {
 				control.Poll();
 				auto& town = plan.settlements[t];
-				// Lots grow around the central plaza, with setbacks and a path to each door.
-				for (int ring = 1; ring <= std::max(4, (s.buildingsPerSettlement + 3) / 4) && int(town.buildings.size()) < s.buildingsPerSettlement; ++ring) {
-					for (int side = 0; side < 8 && int(town.buildings.size()) < s.buildingsPerSettlement; ++side) {
-						control.Poll();
-						static const Point slots[] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
-
-						std::vector<int> eligible;
-						int totalWeight = 0;
-						for (int i = 0; i < int(plan.catalog.size()); ++i) {
-							const auto& candidate = plan.catalog[i];
-							if (candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end()) {
-								eligible.push_back(i);
-								totalWeight += candidate.weight;
-							}
-						}
-						if (eligible.empty()) {
-							continue;
-						}
-						int roll = int(Hash(s.seed, t * 97 + ring * 8 + side, 31) % uint32_t(totalWeight));
-						int templateIndex = eligible.back();
-						for (int i : eligible) {
-							if (roll < plan.catalog[i].weight) {
-								templateIndex = i;
-								break;
-							}
-							roll -= plan.catalog[i].weight;
-						}
-						int rotation = slots[side].x != 0 ? (slots[side].x > 0 ? 1 : 3) : (slots[side].y > 0 ? 2 : 0);
-						if (!plan.catalog[templateIndex].allowRotation) {
-							rotation = 0;
-						}
-						const auto blueprint = RotateBlueprint(plan.catalog[templateIndex], rotation);
-						const int w = int(blueprint.rows.front().size()), h = int(blueprint.rows.size());
-						const Point origin { town.center.x + slots[side].x * ring * 10 - w / 2, town.center.y + slots[side].y * ring * 10 - h / 2 };
-						if (origin.x < 2 || origin.y < 2 || origin.x + w >= s.width - 2 || origin.y + h >= s.height - 2) {
-							continue;
-						}
-						bool clear = true;
-						int low = 10000, high = 0;
-						for (int y = origin.y - 1; y <= origin.y + h; ++y) {
-							for (int x = origin.x - 1; x <= origin.x + w; ++x) {
-								const Cell& c = cells[size_t(y) * s.width + x];
-								clear = clear && DryBuildable(c);
-								low = std::min(low, int(c.elevation));
-								high = std::max(high, int(c.elevation));
-							}
-						}
-						if (!clear || high - low > 1300) {
-							continue;
-						}
-						const auto [doorX, doorY] = FindBlueprintSymbol(blueprint.rows, '+');
-						const Point entrance { origin.x + doorX, origin.y + doorY };
-						Point approach = entrance;
-						if (doorX == 0) {
-							--approach.x;
-						} else if (doorX == w - 1) {
-							++approach.x;
-						} else if (doorY == 0) {
-							--approach.y;
-						} else {
-							++approach.y;
-						}
-						// Reserve the footprint temporarily so the access road routes outside it.
-						for (int y = origin.y; y < origin.y + h; ++y) {
-							for (int x = origin.x; x < origin.x + w; ++x) {
-								cells[size_t(y) * s.width + x].flags |= Wall;
-							}
-						}
-						const bool access = Road(plan, approach, town.center, control);
-						for (int y = origin.y; y < origin.y + h; ++y) {
-							for (int x = origin.x; x < origin.x + w; ++x) {
-								cells[size_t(y) * s.width + x].flags &= uint8_t(~Wall);
-							}
-						}
-						if (!access) {
-							continue;
-						}
-						Building building;
-						building.origin = origin;
-						building.width = w;
-						building.height = h;
-						building.levels = std::min(s.buildingLevels, blueprint.maxLevels);
-						building.blueprint = templateIndex;
-						building.rotation = rotation;
-						building.entrance = entrance;
-						building.settlement = t;
-						const int index = int(plan.buildings.size());
-						plan.buildings.push_back(building);
-						town.buildings.push_back(index);
-						for (int y = origin.y - 1; y <= origin.y + h; ++y) {
-							for (int x = origin.x - 1; x <= origin.x + w; ++x) {
-								cells[size_t(y) * s.width + x].flags |= Reserved;
-							}
-						}
-
-						for (int y = 0; y < h; ++y) {
-							for (int x = 0; x < w; ++x) {
-								const char symbol = blueprint.rows[y][x];
-								if (symbol == ' ') {
-									continue;
+				// Organic radial lots or compact street blocks, always connected to the plaza.
+				for (const auto& slot : SettlementLots(plan, town)) {
+					if (int(town.buildings.size()) >= s.buildingsPerSettlement) {
+						break;
+					}
+					control.Poll();
+					if (s.settlementLayout == SettlementLayout::Blocks) {
+						bool belongs = true;
+						const int own = std::abs(slot.center.x - town.center.x) + std::abs(slot.center.y - town.center.y);
+						for (int other = 0; other < int(plan.settlements.size()); ++other) {
+							if (other != t) {
+								const auto p = plan.settlements[other].center;
+								const int distance = std::abs(slot.center.x - p.x) + std::abs(slot.center.y - p.y);
+								if (distance < own || (distance == own && other < t)) {
+									belongs = false;
 								}
-								Cell& c = cells[size_t(origin.y + y) * s.width + origin.x + x];
-								c.terrain = symbol == ',' ? Terrain::Grass : Terrain::BuildingFloor;
-								c.flags = uint8_t(Reserved | (symbol == '#' ? Wall : 0) | (symbol == '+' ? Entrance : 0));
 							}
+						}
+						if (!belongs) {
+							continue;
+						}
+					}
+
+					std::vector<int> eligible;
+					int totalWeight = 0;
+					for (int i = 0; i < int(plan.catalog.size()); ++i) {
+						const auto& candidate = plan.catalog[i];
+						if (candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end()) {
+							eligible.push_back(i);
+							totalWeight += candidate.weight;
+						}
+					}
+					if (eligible.empty()) {
+						continue;
+					}
+					int roll = int(Hash(s.seed, uint32_t(t) * 997u + slot.serial, 31) % uint32_t(totalWeight));
+					int templateIndex = eligible.back();
+					for (int i : eligible) {
+						if (roll < plan.catalog[i].weight) {
+							templateIndex = i;
+							break;
+						}
+						roll -= plan.catalog[i].weight;
+					}
+					int rotation = 0, bestDistance = std::numeric_limits<int>::max();
+					// Determine orientation from the actual template entrance, including custom north/east doors.
+					for (int turn = 0; turn < (plan.catalog[templateIndex].allowRotation ? 4 : 1); ++turn) {
+						const auto candidate = RotateBlueprint(plan.catalog[templateIndex], turn);
+						const auto [doorX, doorY] = FindBlueprintSymbol(candidate.rows, '+');
+						const int w = int(candidate.rows.front().size()), h = int(candidate.rows.size());
+						const int x = slot.center.x - w / 2 + doorX, y = slot.center.y - h / 2 + doorY;
+						const int distance = std::abs(x - slot.frontage.x) + std::abs(y - slot.frontage.y);
+						if (distance < bestDistance) {
+							bestDistance = distance;
+							rotation = turn;
+						}
+					}
+					const auto blueprint = RotateBlueprint(plan.catalog[templateIndex], rotation);
+					const int w = int(blueprint.rows.front().size()), h = int(blueprint.rows.size());
+					const Point origin { slot.center.x - w / 2, slot.center.y - h / 2 };
+					if (origin.x < 2 || origin.y < 2 || origin.x + w >= s.width - 2 || origin.y + h >= s.height - 2) {
+						continue;
+					}
+					bool clear = true;
+					int low = 10000, high = 0;
+					for (int y = origin.y - 1; y <= origin.y + h; ++y) {
+						for (int x = origin.x - 1; x <= origin.x + w; ++x) {
+							const Cell& c = cells[size_t(y) * s.width + x];
+							clear = clear && DryBuildable(c);
+							low = std::min(low, int(c.elevation));
+							high = std::max(high, int(c.elevation));
+						}
+					}
+					if (!clear || high - low > 1300) {
+						continue;
+					}
+					const auto [doorX, doorY] = FindBlueprintSymbol(blueprint.rows, '+');
+					const Point entrance { origin.x + doorX, origin.y + doorY };
+					Point approach = entrance;
+					if (doorX == 0) {
+						--approach.x;
+					} else if (doorX == w - 1) {
+						++approach.x;
+					} else if (doorY == 0) {
+						--approach.y;
+					} else {
+						++approach.y;
+					}
+					// Reserve the footprint temporarily so the access road routes outside it.
+					for (int y = origin.y; y < origin.y + h; ++y) {
+						for (int x = origin.x; x < origin.x + w; ++x) {
+							cells[size_t(y) * s.width + x].flags |= Wall;
+						}
+					}
+					bool access = false;
+					if (s.settlementLayout == SettlementLayout::Blocks && plan.Contains(slot.frontage) && plan.Contains(slot.junction)) {
+						access = Road(plan, slot.junction, town.center, control) && Road(plan, slot.frontage, slot.junction, control) && Road(plan, approach, slot.frontage, control);
+					} else if (s.settlementLayout == SettlementLayout::Organic) {
+						access = Road(plan, approach, town.center, control);
+					}
+					for (int y = origin.y; y < origin.y + h; ++y) {
+						for (int x = origin.x; x < origin.x + w; ++x) {
+							cells[size_t(y) * s.width + x].flags &= uint8_t(~Wall);
+						}
+					}
+					if (!access) {
+						continue;
+					}
+					Building building;
+					building.origin = origin;
+					building.width = w;
+					building.height = h;
+					building.levels = std::min(s.buildingLevels, blueprint.maxLevels);
+					building.blueprint = templateIndex;
+					building.rotation = rotation;
+					building.entrance = entrance;
+					building.settlement = t;
+					const int index = int(plan.buildings.size());
+					plan.buildings.push_back(building);
+					town.buildings.push_back(index);
+					for (int y = origin.y - 1; y <= origin.y + h; ++y) {
+						for (int x = origin.x - 1; x <= origin.x + w; ++x) {
+							cells[size_t(y) * s.width + x].flags |= Reserved;
+						}
+					}
+
+					for (int y = 0; y < h; ++y) {
+						for (int x = 0; x < w; ++x) {
+							const char symbol = blueprint.rows[y][x];
+							if (symbol == ' ') {
+								continue;
+							}
+							Cell& c = cells[size_t(origin.y + y) * s.width + origin.x + x];
+							c.terrain = symbol == ',' ? Terrain::Grass : Terrain::BuildingFloor;
+							c.flags = uint8_t(Reserved | (symbol == '#' ? Wall : 0) | (symbol == '+' ? Entrance : 0));
 						}
 					}
 				}
@@ -778,7 +868,7 @@ namespace WorldGen {
 			error = "World dimensions must be 32..4096 with at most 4,194,304 surface cells.";
 			return false;
 		}
-		if (s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
+		if ((s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
 			error = "World settings are outside supported ranges.";
 			return false;
 		}

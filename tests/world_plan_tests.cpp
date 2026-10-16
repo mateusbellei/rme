@@ -156,6 +156,7 @@ static void TestSettingsMatrix() {
 		s.buildingsPerSettlement = int(seed % 10);
 		s.caveFill = 20 + int(seed % 46);
 		s.roadWidth = 1 + int(seed % 4);
+		s.settlementLayout = seed % 3 ? SettlementLayout::Organic : SettlementLayout::Blocks;
 		Plan plan;
 		std::string error;
 		if (!Build(s, plan, error)) {
@@ -171,6 +172,39 @@ static void TestSettingsMatrix() {
 			throw std::runtime_error(message);
 		}
 	}
+}
+
+static void TestCityBlocks() {
+	Settings settings;
+	settings.width = settings.height = 256;
+	settings.riverCount = 0;
+	settings.settlementCount = 1;
+	settings.buildingsPerSettlement = 32;
+	settings.buildingLevels = 3;
+	settings.settlementLayout = SettlementLayout::Blocks;
+	GeographyInput input;
+	input.elevation.assign(256 * 256, 6000);
+	input.biomes.assign(256 * 256, Terrain::Grass);
+	Plan plan;
+	std::string error;
+	Check(Build(settings, plan, error, nullptr, &input), "City blocks on a dry plain must build");
+	Check(Validate(plan).valid, "City blocks must preserve building/plaza and vertical connectivity");
+	Check(plan.buildings.size() >= 24, "Street blocks must support a substantial city beyond the eight village directions");
+	for (size_t a = 0; a < plan.buildings.size(); ++a) {
+		for (size_t b = a + 1; b < plan.buildings.size(); ++b) {
+			const auto& p = plan.buildings[a];
+			const auto& q = plan.buildings[b];
+			Check(p.origin.x + p.width < q.origin.x || q.origin.x + q.width < p.origin.x || p.origin.y + p.height < q.origin.y || q.origin.y + q.height < p.origin.y, "City lots must preserve setbacks");
+		}
+	}
+	Plan repeat;
+	Check(Build(settings, repeat, error, nullptr, &input) && Fingerprint(repeat) == Fingerprint(plan), "City street blocks must be deterministic");
+	// Custom templates may put their original entrance on any exterior side.
+	auto catalog = DefaultBlueprints();
+	for (auto& b : catalog) {
+		b = RotateBlueprint(b, 2);
+	}
+	Check(Build(settings, plan, error, &catalog, &input) && Validate(plan).valid, "North-facing source doors must rotate toward their actual street access");
 }
 
 static void TestCancellation() {
@@ -194,6 +228,7 @@ static void TestCancellation() {
 
 int main() {
 	try {
+		TestCityBlocks();
 		TestCancellation();
 		TestCaves();
 		TestWorlds();

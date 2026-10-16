@@ -13,6 +13,16 @@ int main(int argc, char** argv) {
 		WorldGen::Settings settings;
 		settings.seed = argc > 2 ? uint32_t(std::stoul(argv[2])) : 1337;
 		settings.width = settings.height = argc > 3 ? std::stoi(argv[3]) : 256;
+		if (argc > 4) {
+			const std::string layout = argv[4];
+			if (layout != "organic" && layout != "blocks") {
+				throw std::runtime_error("Layout must be organic or blocks");
+			}
+			settings.settlementLayout = layout == "blocks" ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
+		}
+		if (argc > 5) {
+			settings.buildingsPerSettlement = std::stoi(argv[5]);
+		}
 		settings.caveDepth = 2;
 		settings.buildingLevels = 2;
 		WorldGen::Plan plan;

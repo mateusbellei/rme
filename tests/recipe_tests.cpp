@@ -33,6 +33,7 @@ static void TestRecipes() {
 	original.world.settings.caveDepth = 2;
 	original.world.settings.caveFill = 40;
 	original.world.settings.roadWidth = 3;
+	original.world.settings.settlementLayout=WorldGen::SettlementLayout::Blocks;
 	original.world.connectionItemId = 1387;
 	original.world.wallBrushName = "Stone walls";
 	original.world.catalogPath = "custom-buildings.json";
@@ -49,6 +50,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.shape == original.world.settings.shape && loaded.world.settings.seaLevel == 4000 && loaded.world.settings.riverCount == 6, "World geography must round-trip");
 	Check(loaded.world.settings.settlementCount == 4 && loaded.world.settings.buildingsPerSettlement == 5 && loaded.world.settings.buildingLevels == 3, "World settlement settings must round-trip");
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
+	Check(loaded.world.settings.settlementLayout==WorldGen::SettlementLayout::Blocks,"City street layout must round-trip");
 	Check(loaded.world.connectionItemId == 1387 && loaded.world.wallBrushName == "Stone walls" && !loaded.world.protectExisting, "Client/protection settings must round-trip");
 	Check(loaded.world.catalogPath == original.world.catalogPath, "Construction catalog path must round-trip");
 	Check(loaded.world.heightmapPath == original.world.heightmapPath && loaded.world.biomeHintsPath == original.world.biomeHintsPath, "World raster paths must round-trip");
@@ -82,7 +84,7 @@ static void TestRecipes() {
 	for (const char* example : { "example_forest.json", "example_village_forest.json", "example_desert_village.json", "example_training_ground.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error), "Existing v3 recipes must remain loadable");
 	}
-	for (const char* example : { "example_continent.json", "example_world_layers.json" }) {
+	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error) && loaded.source == GenerationSource::WorldPlan, "Bundled world recipes must load");
 	}
 	std::filesystem::remove(path);

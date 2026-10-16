@@ -500,6 +500,26 @@ choice among templates that have not reached their caps. Limits reset per town.
 If all eligible templates are exhausted or terrain does not fit, the planner
 reports fewer buildings instead of breaking a cap.
 
+`minPerSettlement` (default 0, range 0..64) reserves a required construction mix.
+For example, `"minPerSettlement":1,"maxPerSettlement":1` requests exactly one
+inn per generated settlement in that template's allowed biomes. Templates with
+unmet minimums receive the first lots; weighted optional selection resumes once
+all minimums are met. Minimums may not exceed a nonzero maximum. Their sum must
+fit the recipe's per-settlement building budget.
+
+These are hard requirements for each settlement actually generated: if terrain
+or access roads prevent a minimum from fitting, planning fails with the template
+ID and achieved/required counts. No partial plan is applied or exported. This
+does not promise that every requested settlement site will fit. The independent
+validator checks minimums again, and `plan.json` records each settlement's
+`constructionMix` with actual counts, minimums and maximums (0 means unlimited).
+Catalogs without minimums retain the existing placement and fingerprints.
+
+Try `example_balanced_city.json` with `civic_buildings.json`: each settlement
+requires four houses, one inn and one courtyard hall before filling the remaining
+lots. It uses the normal world legend/client materials; it does not create NPCs,
+house ownership or server-side functions for those roles.
+
 The furnished 10.98 catalog permits at most one inn and two workshops per town,
 leaving the remaining lots for residences. The **Construction roles** preview
 colors interiors by role, retains wall/entrance/travel markers, and lists role

@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "hut",
+      "weight": 4,
+      "maxLevels": 2,
+      "rotate": true,
+      "rows": [
+        "#####",
+        "#a.b#",
+        "#...#",
+        "#...#",
+        "##+##"
+      ],
+      "role": "residential"
+    },
+    {
+      "id": "house",
+      "weight": 4,
+      "maxLevels": 4,
+      "rotate": true,
+      "rows": [
+        "#######",
+        "#a...b#",
+        "#.....#",
+        "#.....#",
+        "#.....#",
+        "###+###"
+      ],
+      "role": "residential",
+      "minPerSettlement": 4
+    },
+    {
+      "id": "inn",
+      "weight": 1,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#########",
+        "#a.....b#",
+        "#.......#",
+        "#...#...#",
+        "#.......#",
+        "#.......#",
+        "####+####"
+      ],
+      "role": "commercial",
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1
+    },
+    {
+      "id": "courtyard_hall",
+      "weight": 1,
+      "maxLevels": 2,
+      "rotate": true,
+      "rows": [
+        "#########",
+        "#a.....b#",
+        "#.......#",
+        "#..,,,..#",
+        "#..,,,..#",
+        "#..,,,..#",
+        "#.......#",
+        "#.......#",
+        "####+####"
+      ],
+      "upperRows": [
+        "#########",
+        "#a.....b#",
+        "#..###..#",
+        "#..# #..#",
+        "#..# #..#",
+        "#..###..#",
+        "#.......#",
+        "#.......#",
+        "#########"
+      ],
+      "role": "civic",
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1
+    }
+  ]
+}

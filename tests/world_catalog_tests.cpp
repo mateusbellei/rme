@@ -32,6 +32,15 @@ int main() {
 		limited.maxPerSettlement = 65;
 		Check(!WorldGen::ValidateBlueprint(limited, error), "Caps beyond the maximum town population must fail");
 		limited.maxPerSettlement = 1;
+		limited.minPerSettlement = 2;
+		Check(!WorldGen::ValidateBlueprint(limited, error), "Minimums cannot exceed a nonzero cap");
+		limited.maxPerSettlement = 0;
+		Check(WorldGen::ValidateBlueprint(limited, error), "Minimums can coexist with an unlimited maximum");
+		limited.minPerSettlement = -1;
+		Check(!WorldGen::ValidateBlueprint(limited, error), "Negative construction minimums must fail");
+		limited.minPerSettlement = 65;
+		Check(!WorldGen::ValidateBlueprint(limited, error), "Construction minimums must fit the per-town bound");
+		limited.minPerSettlement = 0;
 		limited.role = "bad role";
 		Check(!WorldGen::ValidateBlueprint(limited, error), "Roles must be bounded identifiers");
 		auto styled = catalog[1];

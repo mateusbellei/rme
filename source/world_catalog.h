@@ -30,6 +30,7 @@ namespace WorldGen {
 		std::string floorBrush, wallBrush;
 		std::string role;
 		int maxPerSettlement = 0; // Zero means unlimited.
+		int minPerSettlement = 0; // Required in each generated settlement of an allowed biome.
 	};
 
 	using BlueprintCatalog = std::vector<Blueprint>;

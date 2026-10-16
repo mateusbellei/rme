@@ -42,8 +42,8 @@ namespace WorldGen {
 			auto integer = [&](const char* key, int& target) {const auto it=entry.find(key);if(it==entry.end()){return true;
 }if(it->second.type()!=json::int_type||it->second.get_int64()<0||it->second.get_int64()>1000){return false;
 }target=int(it->second.get_int64());return true; };
-			if (!integer("weight", blueprint.weight) || !integer("maxLevels", blueprint.maxLevels) || !integer("maxPerSettlement", blueprint.maxPerSettlement)) {
-				error = "Invalid construction template weight or levels.";
+			if (!integer("weight", blueprint.weight) || !integer("maxLevels", blueprint.maxLevels) || !integer("maxPerSettlement", blueprint.maxPerSettlement) || !integer("minPerSettlement", blueprint.minPerSettlement)) {
+				error = "Invalid construction template weight, levels or per-settlement limits.";
 				return false;
 			}
 			const auto role = entry.find("role");

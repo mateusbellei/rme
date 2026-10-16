@@ -1,4 +1,5 @@
 #include "world_export.h"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -80,7 +81,8 @@ namespace WorldGen {
 			}
 			out << "],\n  \"settlements\": [";
 			first = true;
-			for (const auto& town : plan.settlements) {
+			for (size_t townIndex = 0; townIndex < plan.settlements.size(); ++townIndex) {
+				const auto& town = plan.settlements[townIndex];
 				if (!first) {
 					out << ',';
 				}
@@ -95,6 +97,22 @@ namespace WorldGen {
 						out << ',';
 					}
 					out << town.buildings[i];
+				}
+				out << "],\"constructionMix\":[";
+				bool firstTemplate = true;
+				for (size_t i = 0; i < plan.catalog.size(); ++i) {
+					const auto& blueprint = plan.catalog[i];
+					if (!blueprint.biomes.empty() && std::find(blueprint.biomes.begin(), blueprint.biomes.end(), TerrainName(town.biome)) == blueprint.biomes.end()) {
+						continue;
+					}
+					if (!firstTemplate) out << ',';
+					firstTemplate = false;
+					const auto count = std::count_if(plan.buildings.begin(), plan.buildings.end(), [&](const Building& building) { return building.settlement == int(townIndex) && building.blueprint == int(i); });
+					out << "{\"blueprint\":";
+					String(out, blueprint.id);
+					out << ",\"role\":";
+					String(out, BlueprintRole(blueprint));
+					out << ",\"count\":" << count << ",\"min\":" << blueprint.minPerSettlement << ",\"max\":" << blueprint.maxPerSettlement << '}';
 				}
 				out << "]}";
 			}

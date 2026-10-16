@@ -98,6 +98,36 @@ def main():
         assert sum(link["upper"][2] == 0 and link["lower"][2] == 1 for link in ridged_plan["verticalLinks"]) == 4
         assert not list(ridged_output.glob("preview_*.png"))
 
+        balanced_output = Path(temporary) / "balanced-city"
+        balanced_command = command.copy()
+        balanced_command[2] = str(source / "data/procedural/recipes/example_balanced_city.json")
+        balanced_command[6] = str(balanced_output)
+        balanced_command.append("--no-previews")
+        generated = subprocess.run(balanced_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        balanced = json.loads((balanced_output / "plan.json").read_text(encoding="utf-8"))
+        assert len(balanced["settlements"]) == 2
+        for town in balanced["settlements"]:
+            mix = {entry["blueprint"]: entry for entry in town["constructionMix"]}
+            assert mix["house"]["count"] >= mix["house"]["min"] == 4
+            assert mix["inn"]["count"] == mix["inn"]["min"] == mix["inn"]["max"] == 1
+            assert mix["courtyard_hall"]["count"] == 1
+            assert sum(entry["count"] for entry in mix.values()) == len(town["buildings"])
+        impossible_recipe = json.loads((balanced_output / "recipe.json").read_text(encoding="utf-8"))
+        # Move the recipe while keeping its inputs explicit, then oversubscribe its lots.
+        impossible_recipe["legend"] = str(source / "data/procedural/world_legend.json")
+        impossible_recipe["world"]["catalog"] = str(source / "data/procedural/civic_buildings.json")
+        impossible_recipe["world"]["buildings"] = 1
+        impossible_path = Path(temporary) / "impossible-city.json"
+        impossible_path.write_text(json.dumps(impossible_recipe), encoding="utf-8")
+        balanced_command[2] = str(impossible_path)
+        balanced_command[6] = str(Path(temporary) / "impossible-city")
+        failed = subprocess.run(balanced_command, cwd=temporary, capture_output=True,
+                                text=True, errors="replace", timeout=60)
+        assert failed.returncode == 1 and "minimums exceed" in failed.stderr
+        assert not Path(balanced_command[6]).exists()
+
         for biome, rgb in [("desert", (232, 192, 96)), ("snow", (240, 248, 255))]:
             hint = Path(temporary) / (biome + ".png")
             flat_biome_png(hint, rgb)
@@ -160,7 +190,7 @@ def main():
             assert not invalid_output.exists()
         print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
               f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite; "
-              "ridged cave entrances, desert/snow architecture and seeded OTBM replay")
+              "ridged cave entrances, desert/snow architecture, construction minimums and seeded OTBM replay")
 
 
 if __name__ == "__main__":

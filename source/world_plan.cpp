@@ -506,7 +506,7 @@ namespace WorldGen {
 			return lots;
 		}
 
-		void BuildSettlements(Plan& plan, Control& control) {
+		bool BuildSettlements(Plan& plan, Control& control, std::string& error) {
 			const auto& s = plan.settings;
 			auto& cells = plan.layers[0].cells;
 			const int margin = std::max(8, std::min(s.width, s.height) / 14);
@@ -631,6 +631,19 @@ namespace WorldGen {
 				control.Poll();
 				auto& town = plan.settlements[t];
 				std::vector<int> templateCounts(plan.catalog.size(), 0);
+				auto allowed = [&](const Blueprint& candidate) {
+					return candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end();
+				};
+				int required = 0;
+				for (const auto& candidate : plan.catalog) {
+					if (allowed(candidate)) {
+						required += candidate.minPerSettlement;
+					}
+				}
+				if (required > s.buildingsPerSettlement) {
+					error = "Construction minimums exceed the building budget for settlement " + std::to_string(t + 1) + " (" + TerrainName(town.biome) + ").";
+					return false;
+				}
 				// Organic radial lots or compact street blocks, always connected to the plaza.
 				for (const auto& slot : SettlementLots(plan, town)) {
 					if (int(town.buildings.size()) >= s.buildingsPerSettlement) {
@@ -656,9 +669,13 @@ namespace WorldGen {
 
 					std::vector<int> eligible;
 					int totalWeight = 0;
+					bool unmetMinimum = false;
+					for (size_t i = 0; i < plan.catalog.size(); ++i) {
+						unmetMinimum = unmetMinimum || (allowed(plan.catalog[i]) && templateCounts[i] < plan.catalog[i].minPerSettlement);
+					}
 					for (int i = 0; i < int(plan.catalog.size()); ++i) {
 						const auto& candidate = plan.catalog[i];
-						if ((!candidate.maxPerSettlement || templateCounts[i] < candidate.maxPerSettlement) && (candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end())) {
+						if ((!candidate.maxPerSettlement || templateCounts[i] < candidate.maxPerSettlement) && allowed(candidate) && (!unmetMinimum || templateCounts[i] < candidate.minPerSettlement)) {
 							eligible.push_back(i);
 							totalWeight += candidate.weight;
 						}
@@ -773,10 +790,17 @@ namespace WorldGen {
 				if (int(town.buildings.size()) < s.buildingsPerSettlement) {
 					plan.warnings.push_back("A settlement has fewer valid building lots than requested.");
 				}
+				for (size_t i = 0; i < plan.catalog.size(); ++i) {
+					if (allowed(plan.catalog[i]) && templateCounts[i] < plan.catalog[i].minPerSettlement) {
+						error = "Settlement " + std::to_string(t + 1) + " cannot fit the required " + plan.catalog[i].id + " construction minimum (" + std::to_string(templateCounts[i]) + "/" + std::to_string(plan.catalog[i].minPerSettlement) + "). Try another seed, more space or a smaller requirement.";
+						return false;
+					}
+				}
 			}
 			if (int(plan.settlements.size()) < s.settlementCount) {
 				plan.warnings.push_back("Fewer dry, sufficiently flat settlement sites fit than requested.");
 			}
+			return true;
 		}
 
 		Layer MakeCave(const Settings& s, int depth, Control& control) {
@@ -1107,7 +1131,10 @@ namespace WorldGen {
 				}
 			}
 			control.Stage("Planning settlements and access roads", 45, 70);
-			BuildSettlements(plan, control);
+			if (!BuildSettlements(plan, control, error)) {
+				plan = Plan();
+				return false;
+			}
 			control.Stage("Building upper floors and connected caves", 70, 99);
 			if (!BuildVertical(plan, error, control)) {
 				return false;
@@ -1325,12 +1352,22 @@ namespace WorldGen {
 				continue;
 			}
 			const auto& blueprint = plan.catalog[building.blueprint];
-			if (blueprint.maxPerSettlement && ++templateCounts[building.settlement][building.blueprint] > blueprint.maxPerSettlement) {
+			++templateCounts[building.settlement][building.blueprint];
+			if (blueprint.maxPerSettlement && templateCounts[building.settlement][building.blueprint] > blueprint.maxPerSettlement) {
 				fail("A settlement exceeds its construction template limit.");
 			}
 			const auto center = plan.settlements[building.settlement].center;
 			if (component(0, building.entrance) < 0 || component(0, building.entrance) != component(0, center)) {
 				fail("Building entrance is disconnected from its settlement plaza.");
+			}
+		}
+		for (size_t t = 0; t < plan.settlements.size(); ++t) {
+			for (size_t i = 0; i < plan.catalog.size(); ++i) {
+				const auto& blueprint = plan.catalog[i];
+				const auto& biomes = blueprint.biomes;
+				if ((biomes.empty() || std::find(biomes.begin(), biomes.end(), TerrainName(plan.settlements[t].biome)) != biomes.end()) && templateCounts[t][i] < blueprint.minPerSettlement) {
+					fail("A settlement is missing its required construction minimum: " + blueprint.id + ".");
+				}
 			}
 		}
 		return report;
@@ -1367,6 +1404,10 @@ namespace WorldGen {
 		add(uint32_t(plan.catalog.size()));
 		for (const auto& blueprint : plan.catalog) {
 			string(blueprint.id);
+			if (blueprint.minPerSettlement) {
+				string("construction-minimum");
+				add(uint32_t(blueprint.minPerSettlement));
+			}
 			add(blueprint.weight);
 			add(blueprint.maxLevels);
 			add(blueprint.allowRotation);

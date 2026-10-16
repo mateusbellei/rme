@@ -333,6 +333,58 @@ static void TestCityBlocks() {
 	Check(Build(settings, plan, error, &catalog, &input) && plan.buildings.size() == 1 && !plan.warnings.empty(), "An exhausted catalog must report an underfilled settlement without exceeding caps");
 }
 
+static void TestConstructionMinimums() {
+	Settings settings;
+	settings.width = settings.height = 256;
+	settings.settlementCount = 2;
+	settings.buildingsPerSettlement = 8;
+	settings.riverCount = 0;
+	settings.settlementLayout = SettlementLayout::Blocks;
+	GeographyInput input;
+	input.elevation.assign(256 * 256, 6000);
+	input.biomes.assign(256 * 256, Terrain::Grass);
+	auto catalog = DefaultBlueprints();
+	catalog.resize(3);
+	for (auto& blueprint : catalog) blueprint.weight = 1000;
+	catalog[1].weight = 1;
+	catalog[1].minPerSettlement = catalog[1].maxPerSettlement = 1;
+	catalog[2].weight = 1;
+	catalog[2].minPerSettlement = catalog[2].maxPerSettlement = 2;
+	Plan plan;
+	std::string error;
+	for (uint32_t seed : { 0u, 1337u, 0xffffffffu }) {
+		settings.seed = seed;
+		Check(Build(settings, plan, error, &catalog, &input) && Validate(plan).valid, "Required low-weight templates must precede optional construction");
+		Check(plan.settlements.size() == 2, "Minimum fixture must contain two towns");
+		for (int t = 0; t < 2; ++t) {
+			int first = 0, second = 0;
+			for (const auto& building : plan.buildings) {
+				if (building.settlement == t) {
+					first += building.blueprint == 1;
+					second += building.blueprint == 2;
+				}
+			}
+			Check(first == 1 && second == 2, "Min/max requirements must reset and hold independently in each settlement");
+		}
+	}
+	auto altered = plan;
+	altered.catalog[0].minPerSettlement = 8;
+	Check(!Validate(altered).valid && Fingerprint(altered) != Fingerprint(plan), "Validation and fingerprint must independently reflect missing required templates");
+	settings.buildingsPerSettlement = 2;
+	Check(!Build(settings, plan, error, &catalog, &input) && plan.layers.empty() && error.find("budget") != std::string::npos, "Oversubscribed construction requirements must reject and discard a partial plan");
+	catalog[1].biomes = { "desert" };
+	catalog[2].biomes = { "desert" };
+	Check(Build(settings, plan, error, &catalog, &input) && Validate(plan).valid, "Minimums for other biomes must not apply to grass settlements");
+	catalog.resize(1);
+	catalog[0].minPerSettlement = 64;
+	settings.buildingsPerSettlement = 64;
+	settings.width = settings.height = 64;
+	settings.settlementCount = 1;
+	input.elevation.assign(64 * 64, 6000);
+	input.biomes.assign(64 * 64, Terrain::Grass);
+	Check(!Build(settings, plan, error, &catalog, &input) && plan.layers.empty() && error.find("cannot fit") != std::string::npos, "Terrain failure must report the unmet construction ID and discard all partial tiles");
+}
+
 static void TestCancellation() {
 	Settings settings;
 	settings.width = settings.height = 96;
@@ -372,6 +424,7 @@ int main() {
 		TestClimateAndCoast();
 		TestReliefAndBiomeDetail();
 		TestCityBlocks();
+		TestConstructionMinimums();
 		TestCancellation();
 		TestCaves();
 		TestCaveEntrances();

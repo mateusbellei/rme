@@ -10,6 +10,11 @@ Generic example recipes for **OTServer map generation**. No game-specific theme.
 | `example_training_ground.json` | forest | Open grass training area |
 | `example_continent.json` | world | Continent, biomes, rivers and connected settlements |
 | `example_world_layers.json` | world | Buildings above surface and connected cave floors below |
+| `example_city_blocks.json` | world | Larger street blocks with multiple floors |
+| `example_balanced_city.json` | world | Required houses, inn and courtyard hall in each settlement |
+| `example_ridged_continent.json` | world | Mountain ridges, climate detail and distributed cave entrances |
+| `example_furnished_city_1098.json` | world | Public 10.98 materials and required rotated furniture |
+| `example_large_continent_1098.json` | world | 1024-square continent; batch tile budget required |
 
 Load via **File → Generate Map → Load Recipe**.
 

@@ -109,7 +109,7 @@ static void TestRecipes() {
 	for (const char* example : { "example_forest.json", "example_village_forest.json", "example_desert_village.json", "example_training_ground.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error), "Existing v3 recipes must remain loadable");
 	}
-	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json", "example_ridged_continent.json", "example_large_continent_1098.json" }) {
+	for (const char* example : { "example_continent.json", "example_world_layers.json", "example_city_blocks.json", "example_ridged_continent.json", "example_large_continent_1098.json", "example_balanced_city.json" }) {
 		Check(ProceduralRecipe::Load("data/procedural/recipes/" + wxString::FromUTF8(example), loaded, error) && loaded.source == GenerationSource::WorldPlan, "Bundled world recipes must load");
 	}
 	std::filesystem::remove(path);
@@ -233,11 +233,11 @@ static void TestCatalogJson() {
 		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed template material bindings must fail atomically");
 	}
 
-	for (const char* metadata : { R"("role":"civic","maxPerSettlement":1)", R"("role":"residential","maxPerSettlement":0)" }) {
+	for (const char* metadata : { R"("role":"civic","maxPerSettlement":1)", R"("role":"residential","maxPerSettlement":0)", R"("minPerSettlement":2,"maxPerSettlement":2)" }) {
 		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"role\",\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"]," << metadata << "}]}";
 		Check(WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Role and per-town template caps must parse");
 	}
-	for (const char* metadata : { R"("role":4)", R"("role":"")", R"("maxPerSettlement":-1)", R"("maxPerSettlement":65)", R"("maxPerSettlement":true)" }) {
+	for (const char* metadata : { R"("role":4)", R"("role":"")", R"("maxPerSettlement":-1)", R"("maxPerSettlement":65)", R"("maxPerSettlement":true)", R"("minPerSettlement":-1)", R"("minPerSettlement":65)", R"("minPerSettlement":true)", R"("minPerSettlement":1.5)", R"("minPerSettlement":2,"maxPerSettlement":1)" }) {
 		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"role\",\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"]," << metadata << "}]}";
 		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed role/quota metadata must fail atomically");
 	}

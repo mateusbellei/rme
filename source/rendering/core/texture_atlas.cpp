@@ -1,4 +1,5 @@
 #include "rendering/core/texture_atlas.h"
+#include <cstring>
 #include <iostream>
 #include <algorithm>
 TextureAtlas::TextureAtlas() = default;

@@ -1,0 +1,30 @@
+name: Editor build
+
+on:
+  pull_request:
+    paths:
+      - 'source/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/editor-build.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'source/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/editor-build.yml'
+  workflow_dispatch:
+
+jobs:
+  editor-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libwxgtk3.2-dev libboost-thread-dev libboost-system-dev freeglut3-dev libarchive-dev libglm-dev zlib1g-dev
+      - name: Configure
+        run: cmake -S . -B build/editor -DCMAKE_BUILD_TYPE=Release
+      - name: Build complete editor
+        run: cmake --build build/editor --parallel 2

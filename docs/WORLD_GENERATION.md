@@ -538,6 +538,22 @@ Per-floor styles participate in the plan fingerprint, undo and OTBM verification
 
 ## Settlement composition
 
+`world.diverseSettlements:true` (World settings: **Prefer different biomes**)
+prefers suitable sites in different habitats before repeating one. The first
+pass takes the fittest separated site for each available biome; the second
+fills remaining settlements in the normal fitness order. Both passes retain
+dry/flat-site and spacing requirements. This is a preference rather than a
+promise that every biome or requested town will fit. With only one suitable
+habitat, remaining towns still use it.
+
+The default is false, preserving the previous placement and fingerprint. The
+setting is saved in recipes/diagnostics and works with PNG biome hints and
+biome-specific construction templates. Try
+`example_diverse_continent_1098.json` for a ridged continent with four settlements
+and regional furniture/material bindings. Regression tests use a flat PNG and
+four habitat quadrants to verify grass, forest, desert and snow towns together,
+including their actual regional buildings in a byte-verified OTBM.
+
 A blueprint's optional `role` is a short identifier such as `residential`,
 `commercial`, `industrial` or `civic`. It labels the plan and role preview; it
 does not create NPCs, house ownership or server scripts. `maxPerSettlement`

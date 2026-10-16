@@ -9,15 +9,19 @@ import sys
 import tempfile
 
 
-def flat_biome_png(path, rgb):
+def rgb_png(path, rows):
     def chunk(kind, payload):
         return (struct.pack(">I", len(payload)) + kind + payload
                 + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff))
-    size = 8
-    scanlines = (b"\0" + bytes(rgb) * size) * size
+    height, width = len(rows), len(rows[0])
+    scanlines = b"".join(b"\0" + b"".join(bytes(rgb) for rgb in row) for row in rows)
     path.write_bytes(b"\x89PNG\r\n\x1a\n"
-                     + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+                     + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
                      + chunk(b"IDAT", zlib.compress(scanlines)) + chunk(b"IEND", b""))
+
+
+def flat_biome_png(path, rgb):
+    rgb_png(path, [[rgb] * 8] * 8)
 
 
 def main():
@@ -98,6 +102,32 @@ def main():
         assert ridged_report["skippedFurniture"] == 0 and ridged_report["previews"] == []
         assert sum(link["upper"][2] == 0 and link["lower"][2] == 1 for link in ridged_plan["verticalLinks"]) == 4
         assert not list(ridged_output.glob("preview_*.png"))
+
+        diversity_output = Path(temporary) / "diverse-world"
+        habitats = [(0, 255, 0), (0, 128, 0), (232, 192, 96), (240, 248, 255)]
+        hints = Path(temporary) / "habitats.png"
+        rgb_png(hints, [[habitats[(2 if y >= 4 else 0) + (1 if x >= 4 else 0)]
+                         for x in range(8)] for y in range(8)])
+        flat = Path(temporary) / "flat.png"
+        flat_biome_png(flat, (153, 153, 153))
+        diverse_recipe = dict(ridged_recipe)
+        diverse_recipe["world"] = dict(ridged_recipe["world"])
+        diverse_recipe["world"].update(diverseSettlements=True, settlements=4, buildings=4,
+                                       heightmap=str(flat), biomeHints=str(hints), rivers=0)
+        diverse_path = Path(temporary) / "diverse-recipe.json"
+        diverse_path.write_text(json.dumps(diverse_recipe), encoding="utf-8")
+        diverse_command = ridged_command.copy()
+        diverse_command[2], diverse_command[6] = str(diverse_path), str(diversity_output)
+        generated = subprocess.run(diverse_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        diverse = json.loads((diversity_output / "plan.json").read_text(encoding="utf-8"))
+        assert diverse["settings"]["diverseSettlements"] is True
+        assert {town["biome"] for town in diverse["settlements"]} == {"grass", "forest", "desert", "snow"}
+        for index, town in enumerate(diverse["settlements"]):
+            residences = [b for b in diverse["buildings"] if b["settlement"] == index and b["role"] == "residential"]
+            expected = town["biome"] + "_residence" if town["biome"] in ("desert", "snow") else "residence"
+            assert residences and all(b["blueprint"] == expected for b in residences)
 
         balanced_output = Path(temporary) / "balanced-city"
         balanced_command = command.copy()

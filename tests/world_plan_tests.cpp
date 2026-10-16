@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <limits>
+#include <set>
 #include <queue>
 #include <stdexcept>
 #include <unordered_set>
@@ -369,6 +370,42 @@ static void TestCityBlocks() {
 	Check(Build(settings, plan, error, &catalog, &input) && plan.buildings.size() == 1 && !plan.warnings.empty(), "An exhausted catalog must report an underfilled settlement without exceeding caps");
 }
 
+static void TestDiverseSettlements() {
+	Settings settings;
+	settings.settlementCount = 4;
+	settings.buildingsPerSettlement = 0;
+	settings.riverCount = 0;
+	settings.diverseSettlements = true;
+	GeographyInput input;
+	input.elevation.assign(256 * 256, 6000);
+	input.biomes.resize(256 * 256);
+	const Terrain habitats[] = { Terrain::Grass, Terrain::Forest, Terrain::Desert, Terrain::Snow };
+	for (int y = 0; y < 256; ++y) {
+		for (int x = 0; x < 256; ++x) input.biomes[size_t(y) * 256 + x] = habitats[(y >= 128 ? 2 : 0) + (x >= 128 ? 1 : 0)];
+	}
+	Plan plan, repeat;
+	std::string error;
+	for (uint32_t seed : { 0u, 42u, 1337u }) {
+		settings.seed = seed;
+		Check(Build(settings, plan, error, nullptr, &input) && Validate(plan).valid, "Diverse settlement placement must remain valid");
+		std::set<Terrain> selected;
+		for (const auto& town : plan.settlements) selected.insert(town.biome);
+		Check(selected.size() == 4, "Separated suitable habitats must each receive a settlement before repeats");
+		Check(Build(settings, repeat, error, nullptr, &input) && Fingerprint(repeat) == Fingerprint(plan), "Diverse site selection must be deterministic");
+	}
+	settings.settlementCount = 6;
+	input.biomes.assign(256 * 256, Terrain::Grass);
+	Check(Build(settings, plan, error, nullptr, &input) && plan.settlements.size() == 6 && Validate(plan).valid, "A single available biome must still fill the requested settlement count");
+	settings.diverseSettlements = false;
+	Check(Build(settings, repeat, error, nullptr, &input) && repeat.settlements.size() == plan.settlements.size(), "Fitness mode must remain available");
+	for (size_t i = 0; i < plan.settlements.size(); ++i) Check(plan.settlements[i].center == repeat.settlements[i].center, "Single-habitat fallback must retain the original fitness order");
+	settings = Settings();
+	settings.width = settings.height = 128;
+	settings.settlementLayout = SettlementLayout::Blocks;
+	settings.buildingLevels = settings.caveDepth = 2;
+	Check(Build(settings, plan, error) && Fingerprint(plan) == 3278022085088056009ull, "Default-off diversity must preserve the pre-feature algorithm fingerprint");
+}
+
 static void TestLayeredBuildings() {
 	Blueprint blueprint;
 	blueprint.id = "layered";
@@ -525,6 +562,7 @@ int main() {
 		TestCityBlocks();
 		TestConstructionMinimums();
 		TestLayeredBuildings();
+		TestDiverseSettlements();
 		TestCancellation();
 		TestCaves();
 		TestCaveEntrances();

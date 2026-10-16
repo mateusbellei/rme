@@ -101,6 +101,7 @@ namespace WorldGen {
 		int riverWidth = 3;
 		int riverCount = 8;
 		int settlementCount = 3;
+		bool diverseSettlements = false;
 		int buildingsPerSettlement = 8;
 		int buildingLevels = 1;
 		int caveDepth = 0;

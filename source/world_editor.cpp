@@ -935,6 +935,12 @@ namespace WorldEditor {
 		for (const auto& role : roles) {
 			text << wxString::Format(" %s=%u (#%06X)", wxString::FromUTF8(role.first), unsigned(role.second), unsigned(WorldGen::RoleColor(role.first)));
 		}
+		std::map<std::string, size_t> habitats;
+		for (const auto& town : plan.settlements) ++habitats[WorldGen::TerrainName(town.biome)];
+		if (!habitats.empty()) text << "\nSettlement habitats:";
+		for (const auto& habitat : habitats) {
+			text << wxString::Format(" %s=%u", wxString::FromUTF8(habitat.first), unsigned(habitat.second));
+		}
 		for (const auto& warning : plan.warnings) {
 			text << "\n"
 				 << wxstr(warning);

@@ -532,6 +532,10 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	grid->Add(riverWidth, 1, wxEXPAND);
 	auto* rivers = spin("River sources:", 0, 64, settings.riverCount);
 	auto* towns = spin("Settlements:", 0, 32, settings.settlementCount);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Settlement habitats:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* diverseSettlements = new wxCheckBox(content, wxID_ANY, "Prefer different biomes");
+	diverseSettlements->SetValue(settings.diverseSettlements);
+	grid->Add(diverseSettlements, 0, wxEXPAND);
 	auto* buildings = spin("Buildings per settlement:", 0, 64, settings.buildingsPerSettlement);
 	auto* floors = spin("Building floors:", 1, 4, settings.buildingLevels);
 	auto* depth = spin("Cave floors below surface:", 0, 8, settings.caveDepth);
@@ -597,6 +601,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.riverWidth = 1 + 2 * riverWidth->GetSelection();
 	candidate.settings.riverCount = rivers->GetValue();
 	candidate.settings.settlementCount = towns->GetValue();
+	candidate.settings.diverseSettlements = diverseSettlements->GetValue();
 	candidate.settings.buildingsPerSettlement = buildings->GetValue();
 	candidate.settings.buildingLevels = floors->GetValue();
 	candidate.settings.caveDepth = depth->GetValue();

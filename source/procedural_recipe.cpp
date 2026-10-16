@@ -178,6 +178,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["riverWidth"] = json::mValue(spec.world.settings.riverWidth);
 	world["rivers"] = json::mValue(spec.world.settings.riverCount);
 	world["settlements"] = json::mValue(spec.world.settings.settlementCount);
+	world["diverseSettlements"] = spec.world.settings.diverseSettlements;
 	world["buildings"] = json::mValue(spec.world.settings.buildingsPerSettlement);
 	world["buildingLevels"] = json::mValue(spec.world.settings.buildingLevels);
 	world["caveDepth"] = json::mValue(spec.world.settings.caveDepth);
@@ -435,6 +436,14 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		integer("riverWidth", spec.world.settings.riverWidth);
 		integer("rivers", spec.world.settings.riverCount);
 		integer("settlements", spec.world.settings.settlementCount);
+		const auto diversity = world.find("diverseSettlements");
+		if (diversity != world.end()) {
+			if (diversity->second.type() != json::bool_type) {
+				error = "World diverseSettlements must be a boolean.";
+				return false;
+			}
+			spec.world.settings.diverseSettlements = diversity->second.get_bool();
+		}
 		integer("buildings", spec.world.settings.buildingsPerSettlement);
 		integer("buildingLevels", spec.world.settings.buildingLevels);
 		integer("caveDepth", spec.world.settings.caveDepth);

@@ -15,6 +15,7 @@ Generic example recipes for **OTServer map generation**. No game-specific theme.
 | `example_layered_town.json` | world | Different floor plans, interior partitions and stepped upper footprints |
 | `example_layered_town_1098.json` | world | Stepped buildings with stone, wood and marble styles by floor |
 | `example_ridged_continent.json` | world | Mountain ridges, climate detail and distributed cave entrances |
+| `example_diverse_continent_1098.json` | world | Prefer settlements across different biomes with regional buildings |
 | `example_furnished_city_1098.json` | world | Public 10.98 materials and required rotated furniture |
 | `example_large_continent_1098.json` | world | 1024-square continent; batch tile budget required |
 

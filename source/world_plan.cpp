@@ -570,32 +570,39 @@ namespace WorldGen {
 			}
 			std::sort(candidates.begin(), candidates.end(), [](Candidate a, Candidate b) { return a.score != b.score ? a.score > b.score : a.index < b.index; });
 			const int spacing = std::max(20, std::min(s.width, s.height) / 4);
-			for (Candidate candidate : candidates) {
-				if (int(plan.settlements.size()) >= s.settlementCount) {
-					break;
-				}
-				const Point center { candidate.index % s.width, candidate.index / s.width };
-				bool near = false;
-				for (const auto& town : plan.settlements) {
-					if (std::abs(center.x - town.center.x) + std::abs(center.y - town.center.y) < spacing) {
-						near = true;
+			for (int pass = 0; pass < (s.diverseSettlements ? 2 : 1); ++pass) {
+				for (Candidate candidate : candidates) {
+					if (int(plan.settlements.size()) >= s.settlementCount) {
+						break;
 					}
-				}
-				if (near) {
-					continue;
-				}
-				Settlement town;
-				town.center = center;
-				town.biome = cells[candidate.index].terrain;
-				town.radius = std::max(10, std::min(28, std::min(s.width, s.height) / 8));
-				for (int dy = -2; dy <= 2; ++dy) {
-					for (int dx = -2; dx <= 2; ++dx) {
-						Cell& c = cells[size_t(center.y + dy) * s.width + center.x + dx];
-						c.terrain = Terrain::Plaza;
-						c.flags |= Reserved;
+					const Point center { candidate.index % s.width, candidate.index / s.width };
+					// The first pass chooses the fittest separated site of each habitat;
+					// the second fills remaining places using the original fitness order.
+					if (s.diverseSettlements && pass == 0 && std::any_of(plan.settlements.begin(), plan.settlements.end(), [&](const Settlement& town) { return town.biome == cells[candidate.index].terrain; })) {
+						continue;
 					}
+					bool near = false;
+					for (const auto& town : plan.settlements) {
+						if (std::abs(center.x - town.center.x) + std::abs(center.y - town.center.y) < spacing) {
+							near = true;
+						}
+					}
+					if (near) {
+						continue;
+					}
+					Settlement town;
+					town.center = center;
+					town.biome = cells[candidate.index].terrain;
+					town.radius = std::max(10, std::min(28, std::min(s.width, s.height) / 8));
+					for (int dy = -2; dy <= 2; ++dy) {
+						for (int dx = -2; dx <= 2; ++dx) {
+							Cell& c = cells[size_t(center.y + dy) * s.width + center.x + dx];
+							c.terrain = Terrain::Plaza;
+							c.flags |= Reserved;
+						}
+					}
+					plan.settlements.push_back(town);
 				}
-				plan.settlements.push_back(town);
 			}
 			// A minimum-distance tree avoids redundant roads and connects every reachable town.
 			std::vector<bool> joined(plan.settlements.size(), false);
@@ -1433,6 +1440,10 @@ namespace WorldGen {
 		auto add = [&](uint32_t value) {for(int byte=0;byte<4;++byte){hash^=(value>>(byte*8))&255;hash*=1099511628211ull;} };
 		auto string = [&](const std::string& value) {add(uint32_t(value.size()));for(unsigned char byte:value){hash^=byte;hash*=1099511628211ull;} };
 		add(AlgorithmVersion);
+		if (plan.settings.diverseSettlements) {
+			string("diverse-settlements");
+			add(1);
+		}
 		if (plan.settings.caveEntrances != 1) {
 			string("cave-entrances");
 			add(uint32_t(plan.settings.caveEntrances));

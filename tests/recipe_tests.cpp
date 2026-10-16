@@ -36,6 +36,7 @@ static void TestRecipes() {
 	original.world.settings.riverWidth = 5;
 	original.world.settings.riverCount = 6;
 	original.world.settings.settlementCount = 4;
+	original.world.settings.diverseSettlements = true;
 	original.world.settings.buildingsPerSettlement = 5;
 	original.world.settings.buildingLevels = 3;
 	original.world.settings.caveDepth = 2;
@@ -59,6 +60,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.shape == original.world.settings.shape && loaded.world.settings.seaLevel == 4000 && loaded.world.settings.riverCount == 6, "World geography must round-trip");
 	Check(loaded.world.settings.coastRoughness == 80 && loaded.world.settings.temperatureBias == -3200 && loaded.world.settings.moistureBias == 2100 && loaded.world.settings.riverWidth == 5, "Coast, climate and river width must round-trip");
 	Check(loaded.world.settings.settlementCount == 4 && loaded.world.settings.buildingsPerSettlement == 5 && loaded.world.settings.buildingLevels == 3, "World settlement settings must round-trip");
+	Check(loaded.world.settings.diverseSettlements, "Settlement habitat preference must round-trip");
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
 	Check(loaded.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks, "City street layout must round-trip");
 	Check(loaded.world.settings.caveEntrances == 5, "Surface cave entrance count must round-trip");
@@ -90,6 +92,7 @@ static void TestRecipes() {
 			 R"({"source":"world","world":{"seaLevel":4294967296}})",
 			 R"({"source":"world","world":{"shape":"typo"}})",
 			 R"({"source":"world","world":{"protectExisting":0}})",
+			 R"({"source":"world","world":{"diverseSettlements":1}})",
 			 R"({"source":"world","world":{"wallBrush":false}})",
 			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"algorithmVersion":99}})", R"({"world":{"heightmap":42}})" }) {
 		std::ofstream output(path);

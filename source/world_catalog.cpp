@@ -140,6 +140,12 @@ namespace WorldGen {
 			error = "Blueprint id, weight or maximum floor count is invalid.";
 			return false;
 		}
+		for (const auto& name : { b.floorBrush, b.wallBrush }) {
+			if (name.size() > 128 || name.find('\0') != std::string::npos) {
+				error = "Blueprint material brush names must contain at most 128 bytes without NUL.";
+				return false;
+			}
+		}
 		if (!ValidateRows(b.rows, false, b.maxLevels > 1, error)) {
 			return false;
 		}

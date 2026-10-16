@@ -31,6 +31,11 @@ namespace WorldEditor {
 			int tileId = 0;
 		};
 
+		struct BuildingMaterial {
+			Material floor;
+			WallBrush* wall = nullptr;
+		};
+
 		bool Update(const WorldGen::ProgressCallback& progress, const char* stage, int percent, wxString& error) {
 			if (progress && !progress(stage, percent)) {
 				error = "World generation cancelled.";
@@ -434,8 +439,10 @@ namespace WorldEditor {
 						continue;
 					}
 					used[size_t(cell.terrain)] = true;
-					needsWalls = needsWalls || (cell.flags & WorldGen::Wall);
 				}
+			}
+			for (const auto& building : plan.buildings) {
+				needsWalls = needsWalls || plan.catalog[building.blueprint].wallBrush.empty();
 			}
 			for (size_t i = 0; i < used.size(); ++i) {
 				if (!used[i]) {
@@ -479,7 +486,47 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
+		bool ResolveBuildingMaterials(const WorldGen::Plan& plan, std::vector<BuildingMaterial>& materials, wxString& error) {
+			materials.resize(plan.catalog.size());
+			std::vector<bool> used(plan.catalog.size(), false);
+			for (const auto& building : plan.buildings) {
+				used[building.blueprint] = true;
+			}
+			for (size_t i = 0; i < plan.catalog.size(); ++i) {
+				if (!used[i]) {
+					continue;
+				}
+				const auto& blueprint = plan.catalog[i];
+				for (int type = 0; type < 2; ++type) {
+					const auto& name = type == 0 ? blueprint.floorBrush : blueprint.wallBrush;
+					if (name.empty()) {
+						continue;
+					}
+					Brush* brush = g_brushes.getBrush(name);
+					if (!brush || (type == 0 ? !brush->isGround() : !brush->isWall())) {
+						error = "Template '" + wxString::FromUTF8(blueprint.id) + "' requires an exact " + (type == 0 ? "ground" : "wall") + " brush: " + wxString::FromUTF8(name);
+						return false;
+					}
+					if (type == 0) {
+						materials[i].floor.brush = brush->asGround();
+					} else {
+						materials[i].wall = brush->asWall();
+					}
+				}
+			}
+			return true;
+		}
+
+		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, const std::vector<BuildingMaterial>& buildingMaterials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
+			std::vector<int> owners(size_t(spec.region.width) * spec.region.height, -1);
+			for (const auto& building : plan.buildings) {
+				for (int y = building.origin.y; y < building.origin.y + building.height; ++y) {
+					for (int x = building.origin.x; x < building.origin.x + building.width; ++x) {
+						owners[size_t(y) * spec.region.width + x] = building.blueprint;
+					}
+				}
+			}
+
 			// Copy context, including untouched void cells and the outer ring. Borders see
 			// final neighbors without ever exposing a partly generated map to the editor.
 			for (const auto& layer : plan.layers) {
@@ -515,7 +562,10 @@ namespace WorldEditor {
 						}
 						const auto pos = PositionFor(spec, { x, y }, layer.offsetZ);
 						Tile* tile = scratch.allocator(scratch.createTileL(pos));
-						const auto& material = materials[size_t(cell.terrain)];
+						const int owner = owners[size_t(y) * spec.region.width + x];
+						const BuildingMaterial* style = owner >= 0 ? &buildingMaterials[owner] : nullptr;
+						const auto& material = style && cell.terrain == WorldGen::Terrain::BuildingFloor && style->floor.brush ? style->floor : materials[size_t(cell.terrain)];
+						WallBrush* selectedWall = style && style->wall ? style->wall : wall;
 						if (material.tileId) {
 							tile->addItem(Item::Create(uint16_t(material.tileId)));
 						} else {
@@ -528,9 +578,9 @@ namespace WorldEditor {
 							error = wxString::Format("World material at %d,%d,%d has no ground or blocks a planned walkable cell. Correct the legend for %s.", pos.x, pos.y, pos.z, wxString::FromUTF8(WorldGen::TerrainName(cell.terrain)));
 							return false;
 						}
-						if (wall && (cell.flags & WorldGen::Wall)) {
+						if (selectedWall && (cell.flags & WorldGen::Wall)) {
 							ScopedMTRandom random(CellSeed(spec.seed, x, y, layer.offsetZ, 2));
-							wall->draw(&scratch, tile, nullptr);
+							selectedWall->draw(&scratch, tile, nullptr);
 						}
 					}
 				}
@@ -550,7 +600,7 @@ namespace WorldEditor {
 						if (spec.pipeline.borderizeAfter) {
 							tile->borderize(&scratch);
 						}
-						if (wall && (cell.flags & WorldGen::Wall)) {
+						if (cell.flags & WorldGen::Wall) {
 							tile->wallize(&scratch);
 						}
 					}
@@ -732,7 +782,11 @@ namespace WorldEditor {
 		}
 		BaseMap scratch;
 		ApplicationStats result;
-		if (!BuildScratch(editor, resolved, plan, materials, wall, teleportId, scratch, error, result, progress)) {
+		std::vector<BuildingMaterial> buildingMaterials;
+		if (!ResolveBuildingMaterials(plan, buildingMaterials, error)) {
+			return false;
+		}
+		if (!BuildScratch(editor, resolved, plan, materials, buildingMaterials, wall, teleportId, scratch, error, result, progress)) {
 			return false;
 		}
 		if (!Update(progress, "Applying world as one undo operation", 95, error)) {

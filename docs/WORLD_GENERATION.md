@@ -438,3 +438,24 @@ rejects truncated records, missing flag terminators, zero/oversized sprite
 products and invalid animation settings before using those values. Its sprite
 ID loop handles the maximum 16-bit item ID without wrapping. Regression data
 is synthetic and contains dimensions only; it requires no game sprites.
+
+
+## Construction materials by template
+
+Catalog templates can bind exact client ground/wall brushes in addition to their
+furniture. For example, a desert-only house can use sandstone floors and an
+Egyptian wall brush while a forest residence uses wooden floors and walls:
+
+```json
+{"id":"desert_house", "biomes":["desert"], "materials":{"floor":"sandstone","wall":"egypt stone wall"}}
+```
+
+Add these fields to a complete valid template with rows and landings. Omitted
+floor/wall bindings inherit the world legend and wall setting. Explicit names
+must match a loaded brush of the correct type exactly; missing names reject
+preparation instead of silently changing style. Only templates actually used
+by the plan need their materials available. The same bindings apply on upper
+floors, preserve courtyard terrain, and pass the physical/navigation checks
+before the map changes. A global wall setting may be empty if every placed
+template supplies a wall. The 10.98 furnished profile demonstrates wooden
+residences, marble-floored inns and stone-floored brick workshops.

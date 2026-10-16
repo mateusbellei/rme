@@ -25,6 +25,8 @@ namespace WorldGen {
 		std::vector<std::string> upperRows;
 		std::vector<std::string> biomes;
 		std::vector<BlueprintProp> objects;
+		// Exact client brush bindings; empty values inherit the world legend/settings.
+		std::string floorBrush, wallBrush;
 	};
 
 	using BlueprintCatalog = std::vector<Blueprint>;

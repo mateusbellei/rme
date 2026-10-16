@@ -275,6 +275,9 @@ static void TestCancellation() {
 	altered = observed;
 	altered.catalog[0].objects.push_back({ 2, 2, 0, { "table" }, false });
 	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include authored furniture and client brush bindings");
+	altered = observed;
+	altered.catalog[0].floorBrush = "custom floor";
+	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include exact construction material bindings");
 }
 
 int main() {

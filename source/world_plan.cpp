@@ -1234,6 +1234,11 @@ namespace WorldGen {
 					string(row);
 				}
 			}
+			if (!blueprint.floorBrush.empty() || !blueprint.wallBrush.empty()) {
+				string("materials");
+				string(blueprint.floorBrush);
+				string(blueprint.wallBrush);
+			}
 			add(uint32_t(blueprint.objects.size()));
 			for (const auto& object : blueprint.objects) {
 				add(object.x);

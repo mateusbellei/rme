@@ -66,6 +66,24 @@ namespace WorldGen {
 				error = "Template rows, upperRows and biomes must be bounded string arrays.";
 				return false;
 			}
+			const auto materials = entry.find("materials");
+			if (materials != entry.end()) {
+				if (materials->second.type() != json::obj_type) {
+					error = "Template materials must be an object with exact floor/wall brush names.";
+					return false;
+				}
+				for (const auto& binding : { std::pair { "floor", &blueprint.floorBrush }, std::pair { "wall", &blueprint.wallBrush } }) {
+					const auto value = materials->second.get_obj().find(binding.first);
+					if (value == materials->second.get_obj().end()) {
+						continue;
+					}
+					if (value->second.type() != json::str_type || value->second.get_str().empty()) {
+						error = "Template material bindings must be nonempty strings.";
+						return false;
+					}
+					*binding.second = value->second.get_str();
+				}
+			}
 			const auto objects = entry.find("objects");
 			if (objects != entry.end()) {
 				if (objects->second.type() != json::array_type || objects->second.get_array().size() > 128) {

@@ -128,7 +128,11 @@
           ],
           "required": true
         }
-      ]
+      ],
+      "materials": {
+        "floor": "wooden floor",
+        "wall": "wooden wall"
+      }
     },
     {
       "id": "inn",
@@ -257,7 +261,11 @@
           ],
           "required": true
         }
-      ]
+      ],
+      "materials": {
+        "floor": "white marble floor",
+        "wall": "stone"
+      }
     },
     {
       "id": "workshop",
@@ -388,7 +396,11 @@
           ],
           "required": true
         }
-      ]
+      ],
+      "materials": {
+        "floor": "stone floor",
+        "wall": "brick wall"
+      }
     }
   ]
 }

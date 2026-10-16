@@ -88,6 +88,7 @@ namespace {
 		g_items.BuildNumber = 0;
 		FixtureItem(100, ITEM_GROUP_GROUND);
 		FixtureItem(101, ITEM_GROUP_GROUND, true);
+		FixtureItem(104, ITEM_GROUP_GROUND);
 		FixtureItem(103, ITEM_GROUP_TELEPORT, false, ITEM_TYPE_TELEPORT);
 		for (int id = 200; id < 204; ++id) {
 			FixtureItem(id, ITEM_GROUP_NONE, true);
@@ -107,6 +108,12 @@ namespace {
 		wxArrayString warnings;
 		Check(wall->load(xml.child("brush"), warnings), "Wall fixture must load");
 		g_brushes.addBrush(wall.release());
+		pugi::xml_document groundXml;
+		Check(bool(groundXml.load(R"(<brush><item id="104" chance="1"/></brush>)")), "Styled ground fixture XML");
+		auto ground = std::make_unique<GroundBrush>();
+		ground->setName("fixture floor");
+		Check(ground->load(groundXml.child("brush"), warnings), "Styled ground fixture must load");
+		g_brushes.addBrush(ground.release());
 		for (int id = 204; id < 208; ++id) {
 			FixtureItem(id, ITEM_GROUP_NONE, true);
 		}
@@ -414,6 +421,31 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		Check(MapHash(editor.map) == applied, "Redo must restore exact generated content");
 		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error) && MapHash(editor.map) == applied, "Collision rejection must leave existing world unchanged");
 		editor.actionQueue->undo();
+		auto styled = plan;
+		for (auto& blueprint : styled.catalog) {
+			blueprint.floorBrush = "fixture floor";
+			blueprint.wallBrush = "a stone decoy";
+		}
+		GenerationSpec styledSpec = resolved;
+		styledSpec.world.wallBrushName.clear(); // Every used template supplies its own wall.
+		Check(WorldEditor::ApplyPlan(editor, styledSpec, styled, error), "Exact template floors/walls must replace inherited materials: " + nstr(error));
+		for (const auto& building : styled.buildings) {
+			for (int floor = 0; floor < building.levels; ++floor) {
+				const Tile* entrance = editor.map.getTile(resolved.region.originX + building.entrance.x, resolved.region.originY + building.entrance.y, resolved.region.z - floor);
+				Check(entrance && entrance->ground->getID() == 104, "Styled floor must apply on every building level");
+				const Tile* corner = editor.map.getTile(resolved.region.originX + building.origin.x, resolved.region.originY + building.origin.y, resolved.region.z - floor);
+				Check(std::any_of(corner->items.begin(), corner->items.end(), [](const Item* item) { return item->getID() >= 204 && item->getID() <= 207; }), "Styled walls must use the exact per-template brush");
+			}
+		}
+		CheckTravel(editor, styledSpec, styled);
+		editor.actionQueue->undo();
+		Check(MapHash(editor.map) == before, "Styled construction application must remain one undo operation");
+		for (const bool floorBinding : { true, false }) {
+			auto missingStyle = styled;
+			for (auto& blueprint : missingStyle.catalog) (floorBinding ? blueprint.floorBrush : blueprint.wallBrush) = "missing exact style";
+			Check(!WorldEditor::ApplyPlan(editor, styledSpec, missingStyle, error) && MapHash(editor.map) == before, "Missing exact template materials must reject staging without fallback or mutations");
+		}
+
 		auto missingFurniture = plan;
 		for (auto& b : missingFurniture.catalog) {
 			for (auto& object : b.objects) {

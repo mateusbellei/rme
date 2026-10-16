@@ -22,6 +22,13 @@ int main() {
 				Check(back.rows == blueprint.rows && back.upperRows == blueprint.upperRows, "Four rotations must restore every floor exactly");
 			}
 		}
+		auto styled = catalog[1];
+		styled.floorBrush = "floor";
+		styled.wallBrush = "wall";
+		Check(WorldGen::ValidateBlueprint(styled, error), "Optional exact client materials must validate");
+		Check(WorldGen::RotateBlueprint(styled, 1).floorBrush == "floor", "Rotation must preserve material bindings");
+		styled.floorBrush = std::string("bad\0floor", 9);
+		Check(!WorldGen::ValidateBlueprint(styled, error), "NUL material names must fail before client lookup");
 		auto furnished = catalog[1];
 		furnished.objects.push_back({ 3, 3, 0, { "north", "east", "south", "west" }, true });
 		Check(WorldGen::ValidateBlueprint(furnished, error), "Furniture anchors must validate on interior floor");

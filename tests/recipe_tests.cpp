@@ -198,6 +198,15 @@ static void TestCatalogJson() {
 		file.close();
 		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed furniture data must fail atomically");
 	}
+	for (const char* materials : { R"({"floor":"wooden floor","wall":"stone"})", R"({"floor":"wooden floor"})", R"({"wall":"stone"})" }) {
+		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"styled\",\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"materials\":" << materials << "}]}";
+		Check(WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Partial/exact template materials must parse");
+	}
+	for (const char* materials : { "false", R"({"floor":0})", R"({"floor":""})", R"({"wall":[]})" }) {
+		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"styled\",\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"materials\":" << materials << "}]}";
+		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed template material bindings must fail atomically");
+	}
+
 	std::filesystem::remove(path);
 }
 

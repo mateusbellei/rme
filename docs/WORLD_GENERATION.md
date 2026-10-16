@@ -377,6 +377,7 @@ brushes, runs the same planner and staged editor adapter, and writes:
 
 - `world.otbm`, `world-spawns.xml`, `world-houses.xml` using production serializers;
 - `plan.json` and per-floor PPM diagnostics;
+- `preview_z<map-z>_{terrain,elevation,moisture,temperature,roles}.png` diagnostics;
 - `recipe.json` with references resolved relative to its new location;
 - `generation.json` with client registry version, actual placement counts and warnings.
 
@@ -498,3 +499,11 @@ or input failure leaves the previous plan inspectable. The summary identifies
 the displayed seed and fingerprint, and **Apply displayed world** always applies
 that exact plan. Successful previews update the main dialog's seed so a saved
 recipe can reproduce the chosen candidate.
+
+
+Batch output includes the same five semantic preview views as the editor, with
+actual target z values in PNG filenames. `generation.json` lists their relative
+filenames. Transparent cells preserve absent upper-floor terrain. These images
+show the plan and authored furniture anchors, rather than client sprite renders.
+Pass `--no-previews` to omit PNGs while retaining OTBM, XML and PPM/JSON outputs.
+Each PNG is written through a temporary file and committed after encoding.

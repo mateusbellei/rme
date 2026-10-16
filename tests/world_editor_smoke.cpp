@@ -609,9 +609,11 @@ static int RunMetadataScenario(const wxString& outputDirectory) {
 		options.materials = outputDirectory + "/batch-materials.xml";
 		options.dataDirectory = wxString::FromUTF8(data.string());
 		options.clientDat = filename;
+		options.exportPreviews = false;
 		options.outputDirectory = outputDirectory + "/metadata-" + std::to_string(wxGetProcessId());
 		WorldBatch::Result result;
 		Check(WorldBatch::Generate(options, result, error), "Batch generation with explicit metadata: " + nstr(error));
+		Check(!wxFileExists(options.outputDirectory + "/preview_z7_terrain.png"), "Disabling preview export must leave the OTBM bundle usable without PNG artifacts");
 		Check(g_items[300].sprite && g_items[300].sprite->width == 2 && result.application.furniture > 0, "Batch adapter must bind real metadata before placing decorations and furniture");
 		Check(std::none_of(result.warnings.begin(), result.warnings.end(), [](const wxString& warning) { return warning.Contains("No client DAT supplied"); }), "Loaded metadata must not be reported as unavailable");
 		std::cout << "PASS: explicit clients.xml/DAT, truncated metadata rejection, maximum sprite ID and metadata-backed batch generation\n";

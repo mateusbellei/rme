@@ -12,6 +12,8 @@
 #include "settings.h"
 #include "json.h"
 #include <wx/file.h>
+#include <wx/imagpng.h>
+#include <wx/wfstream.h>
 #include <filesystem>
 #include <iostream>
 namespace WorldBatch {
@@ -216,11 +218,29 @@ namespace WorldBatch {
 			error = wxString::FromUTF8(diagnosticError);
 			return false;
 		}
+		json::mArray previews;
+		if (options.exportPreviews) {
+			const char* names[] = { "terrain", "elevation", "moisture", "temperature", "roles" };
+			wxPNGHandler encoder;
+			for (const auto& layer : plan.layers) {
+				for (int view = 0; view < 5; ++view) {
+					const wxString filename = wxString::Format("preview_z%d_%s.png", resolved.region.z + layer.offsetZ, wxString::FromUTF8(names[view]));
+					wxImage image = WorldEditor::Render(plan, layer.offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
+					wxTempFileOutputStream stream(output + filename);
+					if (!stream.IsOk() || !encoder.SaveFile(&image, stream, false) || !stream.Commit()) {
+						error = "Could not finish batch preview: " + filename;
+						return false;
+					}
+					previews.push_back(nstr(filename));
+				}
+			}
+		}
 		if (!ProceduralRecipe::Save(output + "recipe.json", resolved, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 			return false;
 		}
 		json::mObject report, client;
 		report["schemaVersion"] = 1;
+		report["previews"] = previews;
 		report["algorithmVersion"] = int(WorldGen::AlgorithmVersion);
 		report["planFingerprint"] = std::to_string(prepared.fingerprint);
 		report["tiles"] = json::mValue(uint64_t(prepared.application.changedTiles));
@@ -252,7 +272,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -267,7 +287,11 @@ namespace WorldBatch {
 		options.itemsXml = args[2];
 		options.materials = args[3];
 		options.outputDirectory = args[4];
-		for (size_t i = 5; i < args.size(); i += 2) {
+		for (size_t i = 5; i < args.size(); ++i) {
+			if (args[i] == "--no-previews") {
+				options.exportPreviews = false;
+				continue;
+			}
 			if (i + 1 >= args.size()) {
 				std::cerr << usage << '\n';
 				return 2;
@@ -280,6 +304,7 @@ namespace WorldBatch {
 				std::cerr << usage << '\n';
 				return 2;
 			}
+			++i;
 		}
 		Result result;
 		wxString error;

@@ -37,6 +37,11 @@ def main():
         assert report["tiles"] > 750000 and report["doodads"] > 0
         assert report["furniture"] == sum(building["levels"] * 3 for building in plan["buildings"])
         assert report["skippedFurniture"] == 0
+        assert len(report["previews"]) == len(plan["layers"]) * 5
+        for filename in report["previews"]:
+            assert Path(filename).name == filename
+            assert (output / filename).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+        assert "preview_z7_roles.png" in report["previews"]
         assert len(report["warnings"]) == 1 and "No client DAT supplied" in report["warnings"][0]
         mapfile = output / "world.otbm"
         assert mapfile.read_bytes()[:4] == b"OTBM"

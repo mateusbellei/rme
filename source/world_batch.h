@@ -5,6 +5,7 @@ namespace WorldBatch {
 	struct Options {
 		wxString recipe, itemsOtb, itemsXml, materials, outputDirectory;
 		wxString dataDirectory, clientDat;
+		bool exportPreviews = true;
 	};
 	struct Result {
 		uint64_t fingerprint = 0;

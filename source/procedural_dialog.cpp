@@ -491,6 +491,17 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 			catalog->SetValue(picker.GetPath());
 		}
 	});
+	auto pngPath = [&](const wxString& label,const wxString& initial) {
+		grid->Add(new wxStaticText(&dialog,wxID_ANY,label),0,wxALIGN_CENTER_VERTICAL);
+		auto* row=new wxBoxSizer(wxHORIZONTAL);
+		auto* path=new wxTextCtrl(&dialog,wxID_ANY,initial);
+		auto* browse=new wxButton(&dialog,wxID_ANY,"Browse...");
+		row->Add(path,1,wxRIGHT,4);row->Add(browse,0);grid->Add(row,1,wxEXPAND);
+		browse->Bind(wxEVT_BUTTON,[&,path,label](wxCommandEvent&){wxFileDialog picker(&dialog,label,"","","PNG (*.png)|*.png",wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK)path->SetValue(picker.GetPath());});
+		return path;
+	};
+	auto* heightmap=pngPath("Heightmap PNG (optional grayscale):",worldSettings.heightmapPath);
+	auto* biomeHints=pngPath("Biome hints PNG (optional palette):",worldSettings.biomeHintsPath);
 	layout->Add(grid, 1, wxEXPAND | wxALL, 12);
 	auto* note = new wxStaticText(&dialog, wxID_ANY, "Multi-floor travel uses paired teleports with safe arrival tiles.\nThe legend must match the grounds and brushes of your loaded client.");
 	layout->Add(note, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
@@ -513,6 +524,8 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.connectionItemId = travel->GetValue();
 	candidate.wallBrushName = wall->GetValue();
 	candidate.catalogPath = catalog->GetValue();
+	candidate.heightmapPath = heightmap->GetValue();
+	candidate.biomeHintsPath = biomeHints->GetValue();
 	worldSettings = candidate;
 }
 

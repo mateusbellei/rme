@@ -96,6 +96,14 @@ namespace WorldGen {
 		int roadWidth = 2;
 	};
 
+	// Optional raster-derived inputs, already resampled to the target dimensions.
+	// 65535/ Void preserve procedural terrain. Biome hints apply only on dry land;
+	// drainage and subsequent settlement construction retain precedence.
+	struct GeographyInput {
+		std::vector<uint16_t> elevation;
+		std::vector<Terrain> biomes;
+	};
+
 	struct Plan {
 		Settings settings;
 		BlueprintCatalog catalog;
@@ -125,7 +133,7 @@ namespace WorldGen {
 	const char* TerrainName(Terrain terrain);
 	uint32_t TerrainColor(Terrain terrain);
 	bool ValidateSettings(const Settings& settings, std::string& error);
-	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog = nullptr);
+	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog = nullptr, const GeographyInput* input = nullptr);
 	Report Validate(const Plan& plan);
 	uint64_t Fingerprint(const Plan& plan);
 

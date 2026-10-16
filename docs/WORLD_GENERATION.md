@@ -187,3 +187,35 @@ The pure decoration suite checks bounds, footprints, route protection and
 adversarial enclosing layouts. The production editor regression exercises
 blocking/nonblocking single brushes and multi-tile composites, including
 repeatability, one undo/redo and OTBM round-trip.
+
+
+## PNG-guided worlds
+
+World settings accepts two optional PNGs. **Heightmap** uses grayscale 0..255
+as normalized elevation 0..10000, where sea level controls the shoreline.
+Fully transparent pixels use the seeded procedural elevation. The outermost
+region boundary always remains ocean, providing drainage outlets. The planner
+then computes drainage, climate, settlements and caves on that authored shape.
+
+**Biome hints** uses exact colors from the table below. Transparent pixels keep
+the automatic biome. Hints replace dry natural biomes after hydrology; ocean,
+lakes and rivers take precedence, and towns/roads can subsequently use dry land.
+Use a heightmap to author coastline and water placement; a biome hint does not
+raise land from the sea. Both inputs resample with nearest-neighbor to keep
+categorical boundaries and allow a small painted map to guide a larger world.
+
+Partial transparency, colored heightmaps and unknown hint colors fail with the
+source pixel location. Validation covers every source pixel, including those
+that would disappear when downsampling. PNG headers are checked before decode;
+inputs are capped at 16 million source pixels and 64 MiB. Recipe fields are
+`world.heightmap` and `world.biomeHints`. Empty paths retain fully seeded worlds.
+
+
+| Biome | Exact RGB |
+| --- | --- |
+| Beach | `#FFD700` |
+| Grass | `#00FF00` |
+| Forest | `#008000` |
+| Desert | `#E8C060` |
+| Snow | `#F0F8FF` |
+| Mountain | `#654321` |

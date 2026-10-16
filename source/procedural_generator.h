@@ -88,6 +88,8 @@ struct GenerationWorld {
 	int connectionItemId = 0;
 	wxString wallBrushName = "stone";
 	wxString catalogPath;
+	wxString heightmapPath;
+	wxString biomeHintsPath;
 };
 
 struct GenerationSpec {

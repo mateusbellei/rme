@@ -1,6 +1,8 @@
 #include "main.h"
 
 #include "world_editor.h"
+#include <wx/imagpng.h>
+#include <wx/wfstream.h>
 #include "editor.h"
 #include "copybuffer.h"
 #include "items.h"
@@ -190,6 +192,21 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 		WorldGen::Plan plan;
 		wxString error;
 		Check(WorldEditor::BuildPlan(editor, spec, resolved, plan, error), "Build real editor plan: " + nstr(error));
+		// Feed a real PNG back into the production adapter before OTBM generation.
+		wxImage heightmap(plan.settings.width, plan.settings.height);
+		for (int y = 0; y < plan.settings.height; ++y) {
+			for (int x = 0; x < plan.settings.width; ++x) {
+				const unsigned char value = static_cast<unsigned char>((uint32_t(plan.FindLayer(0)->cells[size_t(y) * plan.settings.width + x].elevation) * 255 + 5000) / 10000);
+				heightmap.SetRGB(x, y, value, value, value);
+			}
+		}
+		spec.world.heightmapPath = wxString::FromUTF8((directory / "heightmap.png").string());
+		{
+			wxPNGHandler encoder;
+			wxFileOutputStream stream(spec.world.heightmapPath);
+			Check(encoder.SaveFile(&heightmap, stream, false), "Heightmap fixture must save as real PNG");
+		}
+		Check(WorldEditor::BuildPlan(editor, spec, resolved, plan, error), "Real PNG must feed the production world planner: " + nstr(error));
 		Check(!plan.buildings.empty() && !plan.links.empty(), "Smoke fixture must exercise buildings and vertical travel");
 		mt_seed(717);
 		const auto randomBefore = mt_capture_state();

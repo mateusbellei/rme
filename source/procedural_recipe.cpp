@@ -137,6 +137,8 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["connectionItemId"] = json::mValue(spec.world.connectionItemId);
 	world["wallBrush"] = json::mValue(nstr(spec.world.wallBrushName));
 	world["catalog"] = json::mValue(nstr(spec.world.catalogPath));
+	world["heightmap"] = json::mValue(nstr(spec.world.heightmapPath));
+	world["biomeHints"] = json::mValue(nstr(spec.world.biomeHintsPath));
 	root["world"] = world;
 
 	std::ofstream output(std::filesystem::u8path(nstr(path)));
@@ -346,6 +348,12 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 				return false;
 			}
 			spec.world.catalogPath = wxstr(catalog->second.get_str());
+		}
+		for (const auto& field : {std::pair{"heightmap", &spec.world.heightmapPath}, std::pair{"biomeHints", &spec.world.biomeHintsPath}}) {
+			const auto value=world.find(field.first);
+			if(value==world.end())continue;
+			if(value->second.type()!=json::str_type){error="World PNG paths must be strings.";return false;}
+			*field.second=wxstr(value->second.get_str());
 		}
 		const auto wall = world.find("wallBrush");
 		if (wall != world.end()) {

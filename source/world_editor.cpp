@@ -13,6 +13,7 @@
 #include "mt_rand.h"
 #include "gui.h"
 #include "world_decoration.h"
+#include "world_inputs.h"
 #include "doodad_brush.h"
 
 #include <array>
@@ -543,7 +544,21 @@ namespace WorldEditor {
 		} else {
 			catalog = WorldGen::DefaultBlueprints();
 		}
-		if (!WorldGen::Build(settings, plan, buildError, &catalog)) {
+		WorldGen::GeographyInput input;
+		for (int type = 0; type < 2; ++type) {
+			const wxString path = type == 0 ? spec.world.heightmapPath : spec.world.biomeHintsPath;
+			if (path.empty()) {
+				continue;
+			}
+			wxImage image;
+			if (!WorldGen::LoadWorldPNG(path, image, error)) {
+				return false;
+			}
+			if (!(type == 0 ? WorldGen::DecodeHeightmap(image, settings.width, settings.height, input, error) : WorldGen::DecodeBiomeHints(image, settings.width, settings.height, input, error))) {
+				return false;
+			}
+		}
+		if (!WorldGen::Build(settings, plan, buildError, &catalog, &input)) {
 			error = wxstr(buildError);
 			return false;
 		}

@@ -64,6 +64,7 @@ set_tests_properties(procedural_masks PROPERTIES WORKING_DIRECTORY "${CMAKE_CURR
 
 add_executable(procedural_recipe_tests
     recipe_tests.cpp
+    ../source/world_inputs.cpp
     ../source/world_catalog_json.cpp
     ../source/procedural_recipe.cpp
     ../source/common.cpp

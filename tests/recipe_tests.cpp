@@ -1,6 +1,7 @@
 #include "procedural_recipe.h"
 #include "mt_rand.h"
 #include "world_catalog.h"
+#include "world_inputs.h"
 
 #include <filesystem>
 #include <fstream>
@@ -35,6 +36,8 @@ static void TestRecipes() {
 	original.world.connectionItemId = 1387;
 	original.world.wallBrushName = "Stone walls";
 	original.world.catalogPath = "custom-buildings.json";
+	original.world.heightmapPath = "height.png";
+	original.world.biomeHintsPath = "biomes.png";
 	original.world.protectExisting = false;
 	original.imageMask.legendPath = "custom-world.json";
 	wxString error;
@@ -48,6 +51,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
 	Check(loaded.world.connectionItemId == 1387 && loaded.world.wallBrushName == "Stone walls" && !loaded.world.protectExisting, "Client/protection settings must round-trip");
 	Check(loaded.world.catalogPath == original.world.catalogPath, "Construction catalog path must round-trip");
+	Check(loaded.world.heightmapPath == original.world.heightmapPath && loaded.world.biomeHintsPath == original.world.biomeHintsPath, "World raster paths must round-trip");
 	const auto unicodePath = std::filesystem::temp_directory_path() / std::filesystem::path(u8"rme-world-\u00E7-\u6D4B\u8BD5.json");
 	const auto encodedPath = unicodePath.u8string();
 	const wxString unicodeFile = wxString::FromUTF8(std::string(encodedPath.begin(), encodedPath.end()));
@@ -60,7 +64,7 @@ static void TestRecipes() {
 			 R"({"source":"world","world":{"shape":"typo"}})",
 			 R"({"source":"world","world":{"protectExisting":0}})",
 			 R"({"source":"world","world":{"wallBrush":false}})",
-			 R"({"region":{"width":4294967296}})", R"({"world":null})" }) {
+			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"heightmap":42}})" }) {
 		std::ofstream output(path);
 		output << malformed;
 		output.close();
@@ -132,8 +136,66 @@ static void TestCatalogJson() {
 	std::filesystem::remove(path);
 }
 
+static void TestWorldInputs() {
+	WorldGen::GeographyInput input;
+	wxString error;
+	wxImage image(2, 2);
+	image.InitAlpha();
+	image.SetAlpha(0, 0, 255);
+	image.SetAlpha(1, 0, 255);
+	image.SetAlpha(0, 1, 255);
+	image.SetAlpha(1, 1, 0);
+	image.SetRGB(0, 0, 0, 0, 0);
+	image.SetRGB(1, 0, 255, 255, 255);
+	image.SetRGB(0, 1, 128, 128, 128);
+	image.SetRGB(1, 1, 43, 200, 99);
+	Check(WorldGen::DecodeHeightmap(image, 4, 4, input, error), "Grayscale source with transparent procedural holes must load");
+	Check(input.elevation[0] == 0 && input.elevation[3] == 10000 && input.elevation[12] == 5020 && input.elevation[15] == 65535, "Raster sampling must preserve endpoints and transparent holes");
+	const auto before = input.elevation;
+	image.SetAlpha(0, 0, 128);
+	Check(!WorldGen::DecodeHeightmap(image, 1, 1, input, error) && input.elevation == before, "Partial alpha must fail without changing input");
+	image.SetAlpha(0, 0, 255);
+	image.SetRGB(0, 0, 0, 1, 0);
+	Check(!WorldGen::DecodeHeightmap(image, 1, 1, input, error), "Colored heightmaps must fail");
+	for (int y = 0; y < 2; ++y) {
+		for (int x = 0; x < 2; ++x) {
+			uint32_t color = WorldGen::TerrainColor(WorldGen::Terrain::Forest);
+			image.SetRGB(x, y, color >> 16, (color >> 8) & 255, color & 255);
+		}
+	}
+	Check(WorldGen::DecodeBiomeHints(image, 4, 4, input, error) && input.biomes[0] == WorldGen::Terrain::Forest && input.biomes[15] == WorldGen::Terrain::Void, "Biome palette must preserve categories and alpha");
+	image.SetRGB(1, 0, 1, 2, 3);
+	Check(!WorldGen::DecodeBiomeHints(image, 1, 1, input, error), "Downsampling cannot conceal unknown source colors");
+	WorldGen::Settings settings;
+	settings.width = settings.height = 32;
+	settings.riverCount = 0;
+	settings.settlementCount = 0;
+	input.elevation.assign(1024, 6000);
+	input.biomes.assign(1024, WorldGen::Terrain::Desert);
+	WorldGen::Plan plan;
+	std::string message;
+	Check(WorldGen::Build(settings, plan, message, nullptr, &input), "Raster constrained plan must build");
+	Check(plan.FindLayer(0)->cells[16 * 32 + 16].terrain == WorldGen::Terrain::Desert, "Dry biome hints must override procedural climate");
+	Check(plan.FindLayer(0)->cells[0].terrain == WorldGen::Terrain::Ocean, "Ocean boundary must survive dry input pixels");
+	Check(WorldGen::Validate(plan).valid, "Raster constrained plan must preserve world invariants");
+	input.elevation[500] = 12000;
+	Check(!WorldGen::Build(settings, plan, message, nullptr, &input), "Out of range elevations must fail");
+	input.elevation.clear();
+	input.biomes.assign(1024, WorldGen::Terrain::Road);
+	Check(!WorldGen::Build(settings, plan, message, nullptr, &input), "Infrastructure cannot masquerade as a natural biome hint");
+	const auto path = std::filesystem::temp_directory_path() / "rme-world-invalid.png";
+	{
+		std::ofstream file(path, std::ios::binary);
+		file << "not a PNG";
+	}
+	wxImage loaded;
+	Check(!WorldGen::LoadWorldPNG(wxString::FromUTF8(path.string()), loaded, error), "Invalid PNG signature must fail before decode");
+	std::filesystem::remove(path);
+}
+
 int main() {
 	try {
+		TestWorldInputs();
 		TestRecipes();
 		TestScopedRandom();
 		TestCatalogJson();

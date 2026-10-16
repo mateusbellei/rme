@@ -76,7 +76,7 @@ namespace WorldGen {
 			return labels;
 		}
 
-		void BuildGeography(Plan& plan) {
+		void BuildGeography(Plan& plan, const GeographyInput* input) {
 			const auto& s = plan.settings;
 			Layer surface;
 			surface.cells.resize(size_t(s.width) * s.height);
@@ -106,6 +106,9 @@ namespace WorldGen {
 						}
 					}
 					cell.elevation = uint16_t(Clamp(7800 - int(falloff) + noise * 65 / 100));
+					if (input && !input->elevation.empty() && input->elevation[size_t(y) * s.width + x] != 65535) {
+						cell.elevation = input->elevation[size_t(y) * s.width + x];
+					}
 					if (x == 0 || y == 0 || x == s.width - 1 || y == s.height - 1) {
 						cell.elevation = 0;
 					}
@@ -740,19 +743,46 @@ namespace WorldGen {
 		return true;
 	}
 
-	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog) {
+	bool Build(const Settings& settings, Plan& plan, std::string& error, const BlueprintCatalog* catalog, const GeographyInput* input) {
 		plan = Plan();
 		if (!ValidateSettings(settings, error)) {
 			return false;
+		}
+		if (input) {
+			const size_t count = size_t(settings.width) * settings.height;
+			if ((!input->elevation.empty() && input->elevation.size() != count) || (!input->biomes.empty() && input->biomes.size() != count)) {
+				error = "World input dimensions do not match the target region.";
+				return false;
+			}
+			for (uint16_t value : input->elevation) {
+				if (value > 10000 && value != 65535) {
+					error = "World height input is outside 0..10000.";
+					return false;
+				}
+			}
+			for (Terrain biome : input->biomes) {
+				if (biome != Terrain::Void && (biome < Terrain::Beach || biome > Terrain::Mountain)) {
+					error = "Biome hints must be dry natural terrain categories.";
+					return false;
+				}
+			}
 		}
 		plan.catalog = catalog ? *catalog : DefaultBlueprints();
 		if (!ValidateCatalog(plan.catalog, error)) {
 			return false;
 		}
 		plan.settings = settings;
-		BuildGeography(plan);
+		BuildGeography(plan, input);
 		BuildDrainage(plan);
 		ClassifyBiomes(plan);
+		if (input && !input->biomes.empty()) {
+			auto& cells = plan.layers.front().cells;
+			for (size_t i = 0; i < cells.size(); ++i) {
+				if (input->biomes[i] != Terrain::Void && !IsWater(cells[i].terrain)) {
+					cells[i].terrain = input->biomes[i];
+				}
+			}
+		}
 		BuildSettlements(plan);
 		return BuildVertical(plan, error);
 	}

@@ -471,6 +471,8 @@
     </ClCompile>
     <ClCompile Include="..\..\source\procedural_dialog.cpp" />
     <ClInclude Include="..\..\source\world_decoration.h" />
+    <ClInclude Include="..\..\source\world_inputs.h" />
+    <ClCompile Include="..\..\source\world_inputs.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
     <ClCompile Include="..\..\source\world_decoration.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

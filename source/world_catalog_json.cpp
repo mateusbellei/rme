@@ -46,9 +46,17 @@ namespace WorldGen {
 			auto integer = [&](const char* key, int& target) {const auto it=entry.find(key);if(it==entry.end()){return true;
 }if(it->second.type()!=json::int_type||it->second.get_int64()<0||it->second.get_int64()>1000){return false;
 }target=int(it->second.get_int64());return true; };
-			if (!integer("weight", blueprint.weight) || !integer("maxLevels", blueprint.maxLevels)) {
+			if (!integer("weight", blueprint.weight) || !integer("maxLevels", blueprint.maxLevels) || !integer("maxPerSettlement", blueprint.maxPerSettlement)) {
 				error = "Invalid construction template weight or levels.";
 				return false;
+			}
+			const auto role = entry.find("role");
+			if (role != entry.end()) {
+				if (role->second.type() != json::str_type || role->second.get_str().empty()) {
+					error = "Template role must be a nonempty identifier.";
+					return false;
+				}
+				blueprint.role = role->second.get_str();
 			}
 			const auto rotate = entry.find("rotate");
 			if (rotate != entry.end()) {

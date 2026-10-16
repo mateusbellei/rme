@@ -420,7 +420,7 @@ rme --generate-world data/procedural/recipes/example_furnished_city_1098.json da
 
 The default seed creates two settlements with 24 buildings and 216 required
 furniture composites, including rotated beds and 2×2 tables. Three building
-floors and two cave levels produce 792,548 non-void tiles, within the application
+floors and two cave levels produce approximately 792,000 non-void tiles, within the application
 limit. Furniture count means accepted composite placements, rather than item
 count. These IDs and orientations are specific to the bundled 10.98 data;
 other clients need their own bindings. No DAT/SPR assets are bundled with this
@@ -459,3 +459,22 @@ floors, preserve courtyard terrain, and pass the physical/navigation checks
 before the map changes. A global wall setting may be empty if every placed
 template supplies a wall. The 10.98 furnished profile demonstrates wooden
 residences, marble-floored inns and stone-floored brick workshops.
+
+
+## Settlement composition
+
+A blueprint's optional `role` is a short identifier such as `residential`,
+`commercial`, `industrial` or `civic`. It labels the plan and role preview; it
+does not create NPCs, house ownership or server scripts. `maxPerSettlement`
+limits how often that template can appear in each settlement (0 means unlimited,
+1–64 are hard caps). Selection retains biome filtering and weighted random
+choice among templates that have not reached their caps. Limits reset per town.
+If all eligible templates are exhausted or terrain does not fit, the planner
+reports fewer buildings instead of breaking a cap.
+
+The furnished 10.98 catalog permits at most one inn and two workshops per town,
+leaving the remaining lots for residences. The **Construction roles** preview
+colors interiors by role, retains wall/entrance/travel markers, and lists role
+counts and colors below the image. Diagnostic building records include the role;
+PNG export includes an additional roles view per floor. Both role and quota
+bindings contribute to the plan fingerprint.

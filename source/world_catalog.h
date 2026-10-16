@@ -2,6 +2,7 @@
 #define RME_WORLD_CATALOG_H_
 
 #include <string>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -27,6 +28,8 @@ namespace WorldGen {
 		std::vector<BlueprintProp> objects;
 		// Exact client brush bindings; empty values inherit the world legend/settings.
 		std::string floorBrush, wallBrush;
+		std::string role;
+		int maxPerSettlement = 0; // Zero means unlimited.
 	};
 
 	using BlueprintCatalog = std::vector<Blueprint>;
@@ -36,6 +39,8 @@ namespace WorldGen {
 	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns);
 	std::pair<int, int> FindBlueprintSymbol(const std::vector<std::string>& rows, char symbol);
 	const BlueprintCatalog& DefaultBlueprints();
+	const std::string& BlueprintRole(const Blueprint& blueprint);
+	uint32_t RoleColor(const std::string& role);
 
 	// JSON/file adapter; compiled with the existing json_spirit parser.
 	bool LoadBlueprintCatalog(const std::string& filename, BlueprintCatalog& catalog, std::string& error);

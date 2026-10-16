@@ -250,6 +250,21 @@ static void TestCityBlocks() {
 		b = RotateBlueprint(b, 2);
 	}
 	Check(Build(settings, plan, error, &catalog, &input) && Validate(plan).valid, "North-facing source doors must rotate toward their actual street access");
+	catalog = DefaultBlueprints();
+	for (size_t i = 0; i < catalog.size(); ++i) {
+		catalog[i].maxPerSettlement = i == 1 ? 0 : 1;
+		catalog[i].weight = i == 1 ? 1 : 1000;
+		catalog[i].role = i == 1 ? "residential" : "civic";
+	}
+	Check(Build(settings, plan, error, &catalog, &input) && Validate(plan).valid, "Template caps must preserve a valid connected city");
+	std::vector<int> counts(catalog.size(), 0);
+	for (const auto& building : plan.buildings) ++counts[building.blueprint];
+	Check(plan.buildings.size() >= 24 && counts[0] <= 1 && counts[2] <= 1 && counts[3] <= 1 && counts[1] >= 21, "Capped civic templates must leave remaining city lots for unbounded residences");
+	auto invalidLimit = plan;
+	invalidLimit.catalog[1].maxPerSettlement = 1;
+	Check(!Validate(invalidLimit).valid, "Validation must independently reject plans exceeding template caps");
+	catalog.resize(1);
+	Check(Build(settings, plan, error, &catalog, &input) && plan.buildings.size() == 1 && !plan.warnings.empty(), "An exhausted catalog must report an underfilled settlement without exceeding caps");
 }
 
 static void TestCancellation() {
@@ -278,6 +293,12 @@ static void TestCancellation() {
 	altered = observed;
 	altered.catalog[0].floorBrush = "custom floor";
 	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include exact construction material bindings");
+	altered = observed;
+	altered.catalog[0].role = "civic";
+	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include construction roles");
+	altered = observed;
+	altered.catalog[0].maxPerSettlement = 1;
+	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include construction quotas");
 }
 
 int main() {

@@ -572,6 +572,7 @@ namespace WorldGen {
 			for (int t = 0; t < int(plan.settlements.size()); ++t) {
 				control.Poll();
 				auto& town = plan.settlements[t];
+				std::vector<int> templateCounts(plan.catalog.size(), 0);
 				// Organic radial lots or compact street blocks, always connected to the plaza.
 				for (const auto& slot : SettlementLots(plan, town)) {
 					if (int(town.buildings.size()) >= s.buildingsPerSettlement) {
@@ -599,7 +600,7 @@ namespace WorldGen {
 					int totalWeight = 0;
 					for (int i = 0; i < int(plan.catalog.size()); ++i) {
 						const auto& candidate = plan.catalog[i];
-						if (candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end()) {
+						if ((!candidate.maxPerSettlement || templateCounts[i] < candidate.maxPerSettlement) && (candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end())) {
 							eligible.push_back(i);
 							totalWeight += candidate.weight;
 						}
@@ -692,6 +693,7 @@ namespace WorldGen {
 					const int index = int(plan.buildings.size());
 					plan.buildings.push_back(building);
 					town.buildings.push_back(index);
+					++templateCounts[templateIndex];
 					for (int y = origin.y - 1; y <= origin.y + h; ++y) {
 						for (int x = origin.x - 1; x <= origin.x + w; ++x) {
 							cells[size_t(y) * s.width + x].flags |= Reserved;
@@ -1179,6 +1181,7 @@ namespace WorldGen {
 				}
 			}
 		}
+		std::vector<std::vector<int>> templateCounts(plan.settlements.size(), std::vector<int>(plan.catalog.size(), 0));
 		for (const auto& building : plan.buildings) {
 			if (building.blueprint < 0 || building.blueprint >= int(plan.catalog.size()) || building.rotation < 0 || building.rotation > 3 || building.levels < 1 || building.levels > plan.settings.buildingLevels) {
 				fail("Invalid building template, rotation or levels.");
@@ -1194,6 +1197,10 @@ namespace WorldGen {
 			if (building.settlement < 0 || building.settlement >= int(plan.settlements.size()) || !plan.Contains(plan.settlements[building.settlement].center)) {
 				fail("Building has an invalid settlement reference.");
 				continue;
+			}
+			const auto& blueprint = plan.catalog[building.blueprint];
+			if (blueprint.maxPerSettlement && ++templateCounts[building.settlement][building.blueprint] > blueprint.maxPerSettlement) {
+				fail("A settlement exceeds its construction template limit.");
 			}
 			const auto center = plan.settlements[building.settlement].center;
 			if (component(0, building.entrance) < 0 || component(0, building.entrance) != component(0, center)) {
@@ -1233,6 +1240,11 @@ namespace WorldGen {
 				for (const auto& row : *rows) {
 					string(row);
 				}
+			}
+			if (!blueprint.role.empty() || blueprint.maxPerSettlement) {
+				string("role-limits");
+				string(blueprint.role);
+				add(uint32_t(blueprint.maxPerSettlement));
 			}
 			if (!blueprint.floorBrush.empty() || !blueprint.wallBrush.empty()) {
 				string("materials");

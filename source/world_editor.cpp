@@ -859,6 +859,8 @@ namespace WorldEditor {
 					if (cell.flags & WorldGen::Connection) {
 						color = 0xFFFF00;
 					}
+				} else if (view == PreviewLayer::ConstructionRoles) {
+					color = ((color >> 2) & 0x3F3F3F) + 0x202020;
 				} else {
 					const int value = view == PreviewLayer::Elevation ? cell.elevation : (view == PreviewLayer::Moisture ? cell.moisture : cell.temperature);
 					const uint32_t amount = uint32_t(value) * 255 / 10000;
@@ -866,6 +868,24 @@ namespace WorldEditor {
 				}
 				image.SetRGB(x, y, uint8_t(color >> 16), uint8_t(color >> 8), uint8_t(color));
 				image.SetAlpha(x, y, cell.terrain == WorldGen::Terrain::Void ? 0 : 255);
+			}
+		}
+		if (view == PreviewLayer::ConstructionRoles) {
+			for (const auto& building : plan.buildings) {
+				if (floor > 0 || -floor >= building.levels) {
+					continue;
+				}
+				const uint32_t color = WorldGen::RoleColor(WorldGen::BlueprintRole(plan.catalog[building.blueprint]));
+				for (int y = building.origin.y; y < building.origin.y + building.height; ++y) {
+					for (int x = building.origin.x; x < building.origin.x + building.width; ++x) {
+						const auto& cell = layer->cells[size_t(y) * plan.settings.width + x];
+						if (cell.terrain != WorldGen::Terrain::BuildingFloor) {
+							continue;
+						}
+						const uint32_t pixel = cell.flags & WorldGen::Connection ? 0xFFFF00 : (cell.flags & WorldGen::Entrance ? 0xFF40FF : (cell.flags & WorldGen::Wall ? 0x404040 : color));
+						image.SetRGB(x, y, uint8_t(pixel >> 16), uint8_t(pixel >> 8), uint8_t(pixel));
+					}
+				}
 			}
 		}
 		if (view == PreviewLayer::Terrain) {
@@ -884,6 +904,16 @@ namespace WorldEditor {
 	wxString Describe(const WorldGen::Plan& plan) {
 		const auto report = WorldGen::Validate(plan);
 		wxString text = wxString::Format("Algorithm %u | Plan %llu\n%d x %d | %u settlements | %u buildings | %u floors | %u planned vertical connections\nLand: %u tiles | Water: %u tiles | Roads/bridges: %u tiles\nYellow: travel portals; magenta: entrances; cyan: authored furniture anchors; dark gray: walls. Actual furniture placement is validated against client brushes.", unsigned(WorldGen::AlgorithmVersion), static_cast<unsigned long long>(WorldGen::Fingerprint(plan)), plan.settings.width, plan.settings.height, unsigned(plan.settlements.size()), unsigned(plan.buildings.size()), unsigned(plan.layers.size()), unsigned(plan.links.size()), unsigned(report.landTiles), unsigned(report.waterTiles), unsigned(report.roadTiles));
+		std::map<std::string, size_t> roles;
+		for (const auto& building : plan.buildings) {
+			++roles[WorldGen::BlueprintRole(plan.catalog[building.blueprint])];
+		}
+		if (!roles.empty()) {
+			text << "\nConstruction roles:";
+		}
+		for (const auto& role : roles) {
+			text << wxString::Format(" %s=%u (#%06X)", wxString::FromUTF8(role.first), unsigned(role.second), unsigned(WorldGen::RoleColor(role.first)));
+		}
 		for (const auto& warning : plan.warnings) {
 			text << "\n"
 				 << wxstr(warning);

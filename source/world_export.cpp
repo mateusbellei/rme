@@ -111,6 +111,8 @@ namespace WorldGen {
 				PointJSON(out, building.entrance, 0);
 				out << ",\"settlement\":" << building.settlement << ",\"rotation\":" << building.rotation << ",\"blueprint\":";
 				String(out, plan.catalog[building.blueprint].id);
+				out << ",\"role\":";
+				String(out, BlueprintRole(plan.catalog[building.blueprint]));
 				out << '}';
 			}
 			out << "],\n  \"verticalLinks\": [";

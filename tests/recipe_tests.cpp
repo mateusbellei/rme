@@ -207,6 +207,15 @@ static void TestCatalogJson() {
 		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed template material bindings must fail atomically");
 	}
 
+	for (const char* metadata : { R"("role":"civic","maxPerSettlement":1)", R"("role":"residential","maxPerSettlement":0)" }) {
+		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"role\",\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"]," << metadata << "}]}";
+		Check(WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Role and per-town template caps must parse");
+	}
+	for (const char* metadata : { R"("role":4)", R"("role":"")", R"("maxPerSettlement":-1)", R"("maxPerSettlement":65)", R"("maxPerSettlement":true)" }) {
+		std::ofstream(path) << "{\"version\":1,\"templates\":[{\"id\":\"role\",\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"]," << metadata << "}]}";
+		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed role/quota metadata must fail atomically");
+	}
+
 	std::filesystem::remove(path);
 }
 

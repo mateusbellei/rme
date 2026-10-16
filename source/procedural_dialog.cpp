@@ -620,7 +620,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	}
 	floors->SetSelection(0);
 	auto* views = new wxChoice(&preview, wxID_ANY);
-	for (const auto* label : { "Terrain", "Elevation", "Moisture", "Temperature" }) {
+	for (const auto* label : { "Terrain", "Elevation", "Moisture", "Temperature", "Construction roles" }) {
 		views->Append(label);
 	}
 	views->SetSelection(0);
@@ -668,10 +668,10 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 			g_gui.PopupDialog(&preview, "Export failed", wxstr(exportError), wxOK | wxICON_ERROR);
 			return;
 		}
-		const char* names[] = { "terrain", "elevation", "moisture", "temperature" };
+		const char* names[] = { "terrain", "elevation", "moisture", "temperature", "roles" };
 		wxPNGHandler encoder;
 		for (const auto& layer : plan.layers) {
-			for (int view = 0; view < 4; ++view) {
+			for (int view = 0; view < 5; ++view) {
 				const wxString filename = prefix.GetFullPath() + wxString::Format("_z%d_%s.png", layer.offsetZ, wxString::FromUTF8(names[view]));
 				wxImage image = WorldEditor::Render(plan, layer.offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
 				wxFileOutputStream stream(filename);

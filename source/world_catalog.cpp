@@ -140,6 +140,10 @@ namespace WorldGen {
 			error = "Blueprint id, weight or maximum floor count is invalid.";
 			return false;
 		}
+		if (b.maxPerSettlement < 0 || b.maxPerSettlement > 64 || b.role.size() > 32 || b.role.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos) {
+			error = "Blueprint role or per-settlement limit is invalid.";
+			return false;
+		}
 		for (const auto& name : { b.floorBrush, b.wallBrush }) {
 			if (name.size() > 128 || name.find('\0') != std::string::npos) {
 				error = "Blueprint material brush names must contain at most 128 bytes without NUL.";
@@ -236,6 +240,18 @@ namespace WorldGen {
 			result.upperRows = RotateRows(result.upperRows, turns);
 		}
 		return result;
+	}
+
+	const std::string& BlueprintRole(const Blueprint& blueprint) {
+		return blueprint.role.empty() ? blueprint.id : blueprint.role;
+	}
+
+	uint32_t RoleColor(const std::string& role) {
+		uint32_t hash = 2166136261u;
+		for (unsigned char value : role) {
+			hash = (hash ^ value) * 16777619u;
+		}
+		return ((80u + (hash & 255u) * 140u / 255u) << 16) | ((80u + ((hash >> 8) & 255u) * 140u / 255u) << 8) | (80u + ((hash >> 16) & 255u) * 140u / 255u);
 	}
 
 	const BlueprintCatalog& DefaultBlueprints() {

@@ -364,6 +364,21 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		Check(ProceduralRecipe::Load(recipePath, spec, error), "Production scenario must reload its PNG/catalog paths from the recipe directory");
 		Check(WorldEditor::BuildPlan(editor, spec, resolved, plan, error), "Real PNG must feed the production world planner: " + nstr(error));
 		Check(!plan.buildings.empty() && !plan.links.empty(), "Smoke fixture must exercise buildings and vertical travel");
+		const auto roles = WorldEditor::Render(plan, 0, WorldEditor::PreviewLayer::ConstructionRoles);
+		const auto& firstBuilding = plan.buildings.front();
+		const auto firstBlueprint = WorldGen::RotateBlueprint(plan.catalog[firstBuilding.blueprint], firstBuilding.rotation);
+		bool inspectedRole = false;
+		for (int y = 0; y < firstBuilding.height && !inspectedRole; ++y) {
+			for (int x = 0; x < firstBuilding.width && !inspectedRole; ++x) {
+				const int px = firstBuilding.origin.x + x, py = firstBuilding.origin.y + y;
+				if (firstBlueprint.rows[y][x] == '.' && !(plan.FindLayer(0)->cells[plan.Index({px, py})].flags & WorldGen::Connection)) {
+					const uint32_t color = WorldGen::RoleColor(WorldGen::BlueprintRole(firstBlueprint));
+					Check(roles.GetRed(px, py) == uint8_t(color >> 16) && roles.GetGreen(px, py) == uint8_t(color >> 8) && roles.GetBlue(px, py) == uint8_t(color), "Construction role preview must color actual interior cells by role");
+					inspectedRole = true;
+				}
+			}
+		}
+		Check(inspectedRole, "Role preview must contain an inspectable interior");
 		mt_seed(717);
 		const auto randomBefore = mt_capture_state();
 		for (const char* stage : { "Checking target and materials", "Copying existing context", "Preparing grounds and walls", "Resolving borders and walls", "Decorating biomes", "Furnishing construction templates", "Validating physical navigation", "Applying world as one undo operation" }) {

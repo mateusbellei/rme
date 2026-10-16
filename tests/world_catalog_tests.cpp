@@ -22,6 +22,18 @@ int main() {
 				Check(back.rows == blueprint.rows && back.upperRows == blueprint.upperRows, "Four rotations must restore every floor exactly");
 			}
 		}
+		auto limited = catalog[1];
+		limited.role = "residential";
+		limited.maxPerSettlement = 2;
+		Check(WorldGen::ValidateBlueprint(limited, error) && WorldGen::BlueprintRole(limited) == "residential", "Role identifiers and valid caps must validate");
+		Check(WorldGen::RoleColor("residential") != WorldGen::RoleColor("industrial"), "Public profile roles must have distinct stable preview colors");
+		limited.maxPerSettlement = -1;
+		Check(!WorldGen::ValidateBlueprint(limited, error), "Negative caps must fail");
+		limited.maxPerSettlement = 65;
+		Check(!WorldGen::ValidateBlueprint(limited, error), "Caps beyond the maximum town population must fail");
+		limited.maxPerSettlement = 1;
+		limited.role = "bad role";
+		Check(!WorldGen::ValidateBlueprint(limited, error), "Roles must be bounded identifiers");
 		auto styled = catalog[1];
 		styled.floorBrush = "floor";
 		styled.wallBrush = "wall";

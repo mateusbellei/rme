@@ -16,7 +16,8 @@ namespace WorldEditor {
 	enum class PreviewLayer { Terrain,
 							  Elevation,
 							  Moisture,
-							  Temperature };
+							  Temperature,
+							  ConstructionRoles };
 
 	bool BuildPlan(Editor& editor, const GenerationSpec& spec, GenerationSpec& resolved, WorldGen::Plan& plan, wxString& error, const WorldGen::ProgressCallback& progress = {});
 	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats = nullptr, const WorldGen::ProgressCallback& progress = {});

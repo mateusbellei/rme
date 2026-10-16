@@ -132,7 +132,9 @@
       "materials": {
         "floor": "wooden floor",
         "wall": "wooden wall"
-      }
+      },
+      "role": "residential",
+      "maxPerSettlement": 0
     },
     {
       "id": "inn",
@@ -265,7 +267,9 @@
       "materials": {
         "floor": "white marble floor",
         "wall": "stone"
-      }
+      },
+      "role": "commercial",
+      "maxPerSettlement": 1
     },
     {
       "id": "workshop",
@@ -400,7 +404,9 @@
       "materials": {
         "floor": "stone floor",
         "wall": "brick wall"
-      }
+      },
+      "role": "industrial",
+      "maxPerSettlement": 2
     }
   ]
 }

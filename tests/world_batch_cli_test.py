@@ -29,6 +29,10 @@ def main():
         assert report["client"]["clientVersion"] == 57
         assert report["planFingerprint"] == plan["fingerprint"]
         assert len(plan["settlements"]) == 2 and len(plan["buildings"]) == 24
+        for town in range(2):
+            roles = [b["role"] for b in plan["buildings"] if b["settlement"] == town]
+            assert roles.count("commercial") <= 1 and roles.count("industrial") <= 2
+            assert roles.count("residential") >= 9
         assert {layer["offsetZ"] for layer in plan["layers"]} == {-2, -1, 0, 1, 2}
         assert report["tiles"] > 750000 and report["doodads"] > 0
         assert report["furniture"] == sum(building["levels"] * 3 for building in plan["buildings"])

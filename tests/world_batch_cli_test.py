@@ -40,6 +40,7 @@ def main():
         report = json.loads((output / "generation.json").read_text(encoding="utf-8"))
         plan = json.loads((output / "plan.json").read_text(encoding="utf-8"))
         assert report["client"]["clientVersion"] == 57
+        assert report["tileBudget"] == 1048576
         assert report["townPrefix"] == "Frontier" and len(report["towns"]) == 2
         assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
         assert all(town["templePosition"][2] == 7 for town in report["towns"])
@@ -80,13 +81,14 @@ def main():
         ridged_command = command.copy()
         ridged_command[2] = str(recipe_path)
         ridged_command[6] = str(ridged_output)
-        ridged_command.append("--no-previews")
+        ridged_command.extend(["--no-previews", "--tile-budget", "200000"])
         generated = subprocess.run(ridged_command, cwd=temporary, capture_output=True, text=True,
                                    errors="replace", timeout=60)
         if generated.returncode:
             raise AssertionError(f"Ridged CLI returned {generated.returncode}: {generated.stdout} {generated.stderr}")
         ridged_report = json.loads((ridged_output / "generation.json").read_text(encoding="utf-8"))
         ridged_plan = json.loads((ridged_output / "plan.json").read_text(encoding="utf-8"))
+        assert ridged_report["tileBudget"] == 200000
         assert ridged_plan["settings"]["relief"] == "ridges" and ridged_plan["settings"]["biomeDetail"] == 75
         assert len(ridged_plan["buildings"]) >= 4 and ridged_report["furniture"] > 0
         assert ridged_report["skippedFurniture"] == 0 and ridged_report["previews"] == []

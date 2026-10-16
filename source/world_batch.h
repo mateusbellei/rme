@@ -6,6 +6,7 @@ namespace WorldBatch {
 		wxString recipe, itemsOtb, itemsXml, materials, outputDirectory;
 		wxString dataDirectory, clientDat, townPrefix;
 		bool exportPreviews = true;
+		size_t tileBudget = WorldEditor::DefaultTileBudget;
 	};
 	struct Result {
 		uint64_t fingerprint = 0;

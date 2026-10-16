@@ -87,7 +87,7 @@ the editor map. One undo batch replaces each affected tile exactly once. Ground
 and wall brush randomness uses per-cell scoped seeds that restore the global
 editor RNG. No partially prepared result is committed on validation failure.
 
-Application is limited to 1,048,576 non-void tiles; larger semantic plans remain
+Editor application defaults to 1,048,576 non-void tiles; larger semantic plans remain
 available through the standalone planner. Recipe version 4 saves world options,
 target origins and the complete uint32 seed; existing version-3 recipes remain
 loadable. `example_continent.json` and `example_world_layers.json` are generic
@@ -572,3 +572,27 @@ still describes geometry/materials; repeat the prefix option to reproduce town
 metadata. The editor preview/apply path keeps its existing single tile undo
 transaction. A town record provides a server arrival position; temple artwork,
 NPCs, houses, ownership and server scripts are separate authoring tasks.
+
+
+## Explicit batch budgets for larger continents
+
+`--tile-budget MAX_TILES` changes the allowed number of non-void tiles for a batch
+export. The editor and default batch limit remain 1,048,576. A 64-bit build can
+explicitly allow up to 4,194,304 tiles, covering a 1024×1024 surface with two full
+cave levels plus building floors. A 32-bit build retains the default maximum.
+The semantic planner's separate 8,388,608-cell total limit still applies.
+
+The count includes ocean and every populated underground/upper-floor cell.
+Preflight rejects over-budget worlds before staging tiles or changing undo state.
+`generation.json` records the chosen budget. Larger exports retain the same
+material, collision, navigation and serialization checks and require more memory
+because the staged world and undo transaction coexist until export completes.
+
+
+A local Windows x64 Release run with the bundled 10.98 registry/materials exported
+an optional-ridged 1024×1024 continent, two cave levels and three-floor buildings:
+3,161,744 tiles, 64 buildings, four registered towns, 576 furniture placements,
+79,193 biome doodads and 25 preview PNGs. Observed elapsed time was 14.4 seconds,
+peak working set 1,403.7 MiB and OTBM size 26.96 MiB. These are one machine's
+measurements, not a CI performance guarantee. No real DAT/SPR or game server was
+used; physical/navigation checks and production serialization ran normally.

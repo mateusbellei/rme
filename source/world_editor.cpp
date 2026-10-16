@@ -24,7 +24,6 @@
 
 namespace WorldEditor {
 	namespace {
-		constexpr size_t kMaxApplyTiles = 1024 * 1024;
 		constexpr size_t kTerrainCount = static_cast<size_t>(WorldGen::Terrain::Void);
 
 		struct Material {
@@ -383,7 +382,7 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool CheckTarget(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, wxString& error) {
+		bool CheckTarget(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, size_t tileBudget, wxString& error) {
 			if (editor.IsLiveClient()) {
 				error = "World generation is unavailable in a live client: visibility clipping can create partial worlds. Generate locally and import the result.";
 				return false;
@@ -396,8 +395,8 @@ namespace WorldEditor {
 						if (layer.cells[size_t(y) * spec.region.width + x].terrain == WorldGen::Terrain::Void) {
 							continue;
 						}
-						if (++changes > kMaxApplyTiles) {
-							error = "World application exceeds 1,048,576 tiles. Reduce the region or floor count; larger plans can still be inspected with the standalone planner.";
+						if (++changes > tileBudget) {
+							error = wxString::Format("World application exceeds its budget of %llu tiles. Reduce the region/floors or increase the explicit batch tile budget.", static_cast<unsigned long long>(tileBudget));
 							return false;
 						}
 						Position pos(spec.region.originX + x, spec.region.originY + y, z);
@@ -748,8 +747,13 @@ namespace WorldEditor {
 		return true;
 	}
 
-	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats, const WorldGen::ProgressCallback& progress) {
+	bool ApplyPlan(Editor& editor, const GenerationSpec& resolved, const WorldGen::Plan& plan, wxString& error, ApplicationStats* stats, const WorldGen::ProgressCallback& progress, size_t tileBudget) {
 		error.clear();
+		if (!tileBudget || tileBudget > MaximumTileBudget) {
+			error = wxString::Format("World tile budget must be between 1 and %llu for this build.", static_cast<unsigned long long>(MaximumTileBudget));
+			return false;
+		}
+
 		if (!Update(progress, "Checking target and materials", 0, error)) {
 			return false;
 		}
@@ -761,7 +765,7 @@ namespace WorldEditor {
 		if (!CheckRegion(editor, resolved, &plan, error)) {
 			return false;
 		}
-		if (!CheckTarget(editor, resolved, plan, error)) {
+		if (!CheckTarget(editor, resolved, plan, tileBudget, error)) {
 			return false;
 		}
 		std::array<Material, kTerrainCount> materials {};

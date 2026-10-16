@@ -137,6 +137,10 @@ namespace WorldBatch {
 			error = "Town prefix must contain 1..64 printable UTF-8 bytes, or be empty to omit town records.";
 			return false;
 		}
+		if (!options.tileBudget || options.tileBudget > WorldEditor::MaximumTileBudget) {
+			error = wxString::Format("World tile budget must be between 1 and %llu for this build.", static_cast<unsigned long long>(WorldEditor::MaximumTileBudget));
+			return false;
+		}
 		GenerationSpec spec;
 		if (!ProceduralRecipe::Load(options.recipe, spec, error)) {
 			return false;
@@ -230,7 +234,7 @@ namespace WorldBatch {
 		}
 		Result prepared;
 		auto applying = [&](const char* stage, int percent) { return !progress || progress(stage, 40 + percent * 45 / 100); };
-		if (!WorldEditor::ApplyPlan(editor, resolved, plan, error, &prepared.application, applying)) {
+		if (!WorldEditor::ApplyPlan(editor, resolved, plan, error, &prepared.application, applying, options.tileBudget)) {
 			return false;
 		}
 		prepared.fingerprint = WorldGen::Fingerprint(plan);
@@ -311,6 +315,7 @@ namespace WorldBatch {
 		}
 		json::mObject report, client;
 		report["schemaVersion"] = 1;
+		report["tileBudget"] = json::mValue(uint64_t(options.tileBudget));
 		report["previews"] = previews;
 		report["towns"] = townRecords;
 		report["townPrefix"] = nstr(options.townPrefix);
@@ -345,7 +350,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--town-prefix NAME] [--tile-budget MAX_TILES]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -375,6 +380,13 @@ namespace WorldBatch {
 				options.clientDat = args[i + 1];
 			} else if (args[i] == "--town-prefix") {
 				options.townPrefix = args[i + 1];
+			} else if (args[i] == "--tile-budget") {
+				unsigned long long budget = 0;
+				if (!args[i + 1].ToULongLong(&budget) || !budget || budget > WorldEditor::MaximumTileBudget) {
+					std::cerr << "Tile budget must be between 1 and " << WorldEditor::MaximumTileBudget << ".\n";
+					return 2;
+				}
+				options.tileBudget = size_t(budget);
 			} else {
 				std::cerr << usage << '\n';
 				return 2;

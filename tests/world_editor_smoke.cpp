@@ -381,6 +381,8 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			}
 		}
 		Check(inspectedRole, "Role preview must contain an inspectable interior");
+		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, {}, 1) && MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Tile budget rejection must happen before staging or undo mutations");
+		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, {}, WorldEditor::MaximumTileBudget + 1) && MapHash(editor.map) == before, "Tile budgets above the supported memory bound must fail");
 		mt_seed(717);
 		const auto randomBefore = mt_capture_state();
 		for (const char* stage : { "Checking target and materials", "Copying existing context", "Preparing grounds and walls", "Resolving borders and walls", "Decorating biomes", "Furnishing construction templates", "Validating physical navigation", "Applying world as one undo operation" }) {

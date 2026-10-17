@@ -322,6 +322,220 @@ namespace {
 	}
 }
 
+static int RunPrefabScenario(const wxString& outputDirectory) {
+    try {
+        const auto directory = std::filesystem::u8path(nstr(outputDirectory));
+        std::filesystem::create_directories(directory);
+        PrepareRegistry();
+        CopyBuffer copy;
+        MapVersion version(MAP_OTBM_2, 57);
+        const wxString prefabFile = outputDirectory + "/authored.otbm";
+        auto blueprint = WorldGen::DefaultBlueprints()[1];
+        blueprint.id = "authored_house";
+        blueprint.maxLevels = 3;
+        blueprint.allowRotation = false;
+        blueprint.minPerSettlement = 1;
+        blueprint.upperRows = blueprint.rows;
+        for (auto& row : blueprint.upperRows) for (auto& cell : row) if (cell == '+') cell = '#';
+        {
+            Editor source(copy, version);
+            source.map.setWidth(256); source.map.setHeight(256);
+            for (int floor = 0; floor < 3; ++floor) {
+                const auto& rows = WorldGen::BlueprintRowsForFloor(blueprint, floor);
+                for (int y = 0; y < int(rows.size()); ++y) for (int x = 0; x < int(rows[y].size()); ++x) {
+                    if (rows[y][x] == ' ') continue;
+                    auto* tile = source.map.createTile(40 + x, 50 + y, 7 - floor);
+                    tile->addItem(Item::Create(104));
+                    if (rows[y][x] == '#') tile->addItem(Item::Create(200));
+                    if (x == 3 && y == 3) {
+                        auto* prop = Item::Create(301); prop->setText("Authored room " + std::to_string(floor));
+                        tile->addItem(prop); tile->addItem(Item::Create(300));
+                    }
+                    tile->update();
+                }
+            }
+            MapCodec codec(version);
+            MemoryNodeFileWriteHandle encoded;
+            Check(codec.Write(source.map, encoded), "Encode the authored multi-floor OTBM fixture");
+            std::ofstream file(directory / "authored.otbm", std::ios::binary);
+            file.write("OTBM", 4); file.write(reinterpret_cast<const char*>(encoded.getMemory()), std::streamsize(encoded.getSize()));
+        }
+        auto writeCatalog = [&](const std::filesystem::path& path) {
+            std::ofstream out(path, std::ios::binary);
+            out << R"({"version":1,"templates":[{"id":"authored_house","maxLevels":3,"rotate":false,"minPerSettlement":1,"rows":[)";
+            for (size_t y = 0; y < blueprint.rows.size(); ++y) { if (y) out << ','; out << '"' << blueprint.rows[y] << '"'; }
+            out << R"(],"upperRows":[)";
+            for (size_t y = 0; y < blueprint.upperRows.size(); ++y) { if (y) out << ','; out << '"' << blueprint.upperRows[y] << '"'; }
+            out << R"(],"prefab":{"file":"authored.otbm","origin":[40,50,7]}}]})";
+        };
+        writeCatalog(directory / "catalog.json");
+        // No BuildingFloor mapping or wall brush is needed for an authored building.
+        {
+            std::ofstream out(directory / "legend.json"); out << "{\"entries\":[";
+            bool first = true;
+            for (int t = 0; t < int(WorldGen::Terrain::Void); ++t) {
+                if (t == int(WorldGen::Terrain::BuildingFloor)) continue;
+                if (!first) out << ','; first = false;
+                const auto terrain = WorldGen::Terrain(t);
+                const auto color = wxString::Format("#%06X", unsigned(WorldGen::TerrainColor(terrain)));
+                out << "{\"color\":\"" << nstr(color) << "\",\"tileId\":" << ((WorldGen::IsWater(terrain) || terrain == WorldGen::Terrain::Mountain || terrain == WorldGen::Terrain::CaveWall) ? 101 : 100) << '}';
+            }
+            out << "]}";
+        }
+        Editor editor(copy, version);
+        editor.map.setWidth(256); editor.map.setHeight(256);
+        GenerationSpec spec;
+        spec.source = GenerationSource::WorldPlan;
+        spec.region.originX = spec.region.originY = 16;
+        spec.region.width = spec.region.height = 192;
+        spec.world.settings.settlementCount = 1;
+        spec.world.settings.buildingsPerSettlement = 2;
+        spec.world.settings.buildingLevels = 3;
+        spec.world.settings.coastRoughness = 0;
+        spec.world.connectionItemId = 103;
+        spec.world.wallBrushName.clear();
+        spec.world.catalogPath = outputDirectory + "/catalog.json";
+        spec.imageMask.legendPath = outputDirectory + "/legend.json";
+        spec.pipeline.borderizeAfter = true;
+        spec.pipeline.randomizeGround = true;
+        const auto before = MapHash(editor.map);
+        GenerationSpec resolved;
+        WorldGen::Plan plan;
+        wxString error;
+        Check(WorldEditor::BuildPlan(editor, spec, resolved, plan, error), "Build authored OTBM plan: " + nstr(error));
+        Check(!plan.buildings.empty() && plan.buildings.front().rotation == 0, "Prefab catalog must actually place fixed-orientation buildings");
+        WorldEditor::ApplicationStats stats;
+        const bool appliedPrefab = WorldEditor::ApplyPlan(editor, resolved, plan, error, &stats);
+        Check(appliedPrefab, "Apply authored multi-floor OTBM: " + nstr(error));
+        Check(stats.prefabBuildings == plan.buildings.size() && stats.prefabTiles == plan.buildings.size() * blueprint.rows.size() * blueprint.rows.front().size() * 3, "Count actual prefab buildings and copied tiles");
+        for (const auto& building : plan.buildings) for (int floor = 0; floor < building.levels; ++floor) {
+            const auto* tile = editor.map.getTile(resolved.region.originX + building.origin.x + 3, resolved.region.originY + building.origin.y + 3, resolved.region.z - floor);
+            Check(tile && tile->ground && tile->ground->getID() == 104 && tile->items.size() == 2, "Preserve exact authored ground and furniture stacks despite automatic borders/randomization");
+            bool text = false, blocked = false;
+            for (const auto* item : tile->items) { text = text || (item->getID() == 301 && item->getText() == "Authored room " + std::to_string(floor)); blocked = blocked || item->getID() == 300; }
+            Check(text && blocked, "Preserve authored attributes and allow connected blocking furniture");
+        }
+        CheckTravel(editor, resolved, plan);
+        const auto generated = MapHash(editor.map);
+        MapCodec codec(version);
+        MemoryNodeFileWriteHandle encoded;
+        Check(codec.Write(editor.map, encoded), "Export the generated authored world");
+        Editor reopened(copy, version);
+        MemoryNodeFileReadHandle nodes(encoded.getMemory(), encoded.getSize());
+        Check(codec.Read(reopened.map, nodes) && MapHash(reopened.map) == generated, "Authored structures and generated links must survive production OTBM readback");
+        const auto& readBuilding = plan.buildings.front();
+        const auto* readTile = reopened.map.getTile(resolved.region.originX + readBuilding.origin.x + 3, resolved.region.originY + readBuilding.origin.y + 3, resolved.region.z - 2);
+        Check(readTile && std::any_of(readTile->items.begin(), readTile->items.end(), [](const Item* item) { return item->getID() == 301 && item->getText() == "Authored room 2"; }), "OTBM readback must preserve authored text attributes too");
+        editor.actionQueue->undo();
+        Check(MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Prefab application must undo as one operation");
+        editor.actionQueue->redo();
+        Check(MapHash(editor.map) == generated, "Prefab application must redo exactly");
+        editor.actionQueue->undo();
+        Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, [](const char* stage, int) { return std::string(stage) != "Loading OTBM construction prefabs"; }) && error == "World generation cancelled." && MapHash(editor.map) == before, "Prefab loading cancellation must preserve target tiles and history");
+        std::ifstream original(directory / "authored.otbm", std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(original)), {}); original.close();
+        auto writeBytes = [&](const std::string& value) { std::ofstream(directory / "authored.otbm", std::ios::binary).write(value.data(), std::streamsize(value.size())); };
+        writeBytes(bytes + "changed");
+        Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error) && error.Contains("changed since preview") && MapHash(editor.map) == before, "Changed prefab bytes must invalidate a displayed plan");
+        auto reject = [&](const std::string& value, const char* message) {
+            writeBytes(value);
+            GenerationSpec candidate; WorldGen::Plan invalid;
+            const bool planned = WorldEditor::BuildPlan(editor, spec, candidate, invalid, error);
+            Check((!planned || !WorldEditor::ApplyPlan(editor, candidate, invalid, error)) && !error.empty() && MapHash(editor.map) == before && !editor.actionQueue->canUndo(), message);
+        };
+        reject(bytes + "trailing", "Reject trailing nodes/bytes before the legacy reader");
+        reject(bytes.substr(0, bytes.size() - 1), "Reject truncated prefab trees");
+        auto unknownItem = bytes;
+        const auto itemOffset = unknownItem.find(std::string("\xfe\x06\x2d\x01", 4));
+        Check(itemOffset != std::string::npos, "Fixture must contain authored item nodes");
+        unknownItem[itemOffset + 2] = char(0xe7); unknownItem[itemOffset + 3] = char(0x03);
+        reject(unknownItem, "Unknown source item IDs must not silently disappear from copied prefabs");
+
+        auto nodeEnd = [&](size_t start) {
+            int depth = 0;
+            for (size_t i = start; i < bytes.size(); ++i) {
+                const auto value = static_cast<unsigned char>(bytes[i]);
+                if (value == 0xfd) ++i;
+                else if (value == 0xfe) ++depth;
+                else if (value == 0xff && --depth == 0) return i + 1;
+            }
+            throw std::runtime_error("Malformed fixture node");
+        };
+        const auto propEnd = nodeEnd(itemOffset);
+        auto scriptedProp = bytes.substr(itemOffset, propEnd - itemOffset);
+        scriptedProp.insert(scriptedProp.size() - 1, std::string("\x04\x39\x30", 3));
+        auto script = bytes; script.replace(itemOffset, propEnd - itemOffset, scriptedProp);
+        reject(script, "Reject authored script action IDs before changing the target map");
+        FixtureItem(400, ITEM_GROUP_CONTAINER, false, ITEM_TYPE_CONTAINER);
+        g_items[400].volume = 64;
+        std::string nestedChain;
+        for (int i = 0; i < 25; ++i) nestedChain += std::string("\xfe\x06\x90\x01", 4);
+        nestedChain += bytes.substr(itemOffset, propEnd - itemOffset) + std::string(25, char(0xff));
+        auto deeplyNested = bytes; deeplyNested.replace(itemOffset, propEnd - itemOffset, nestedChain);
+        reject(deeplyNested, "Reject deep valid container nesting before recursive decoding");
+
+        auto nestedScript = bytes;
+        nestedScript.replace(itemOffset, propEnd - itemOffset, std::string("\xfe\x06\x90\x01", 4) + scriptedProp + char(0xff));
+        reject(nestedScript, "Script IDs inside nested containers must not bypass preflight");
+        auto nested = bytes;
+        nested.replace(itemOffset, propEnd - itemOffset, std::string("\xfe\x06\x90\x01", 4) + bytes.substr(itemOffset, propEnd - itemOffset) + char(0xff));
+        writeBytes(nested);
+        GenerationSpec nestedResolved; WorldGen::Plan nestedPlan;
+        const bool nestedBuilt = WorldEditor::BuildPlan(editor, spec, nestedResolved, nestedPlan, error);
+        const bool nestedApplied = nestedBuilt && WorldEditor::ApplyPlan(editor, nestedResolved, nestedPlan, error);
+        Check(nestedApplied, "Plain nested containers must copy successfully: " + nstr(error));
+        editor.actionQueue->undo();
+        Check(MapHash(editor.map) == before, "Authored nested containers must undo with the world");
+        auto badWall = bytes;
+        const auto wallOffset = badWall.find(std::string("\xfe\x06\xc8\x00", 4));
+        Check(wallOffset != std::string::npos, "Fixture must contain explicit wall items");
+        badWall[wallOffset + 2] = char(0x2d); badWall[wallOffset + 3] = char(0x01);
+        reject(badWall, "Declared prefab walls must actually block in the active client");
+        const auto tileOffset = bytes.find(std::string("\xfe\x05", 2));
+        Check(tileOffset != std::string::npos, "Fixture must contain tile nodes");
+        auto missingGround = bytes;
+        missingGround.erase(tileOffset + 4, 3);
+        reject(missingGround, "Every declared prefab cell must have its own ground");
+        auto outside = bytes;
+        outside[tileOffset + 2] = char(200);
+        reject(outside, "Reject source tiles outside the declared authored region");
+        const auto areaOffset = bytes.find(std::string("\xfe\x04", 2));
+        Check(areaOffset != std::string::npos, "Fixture must contain tile areas");
+        auto invalidFloor = bytes;
+        invalidFloor.replace(areaOffset + 6, 1, std::string("\xfd\xff", 2));
+        reject(invalidFloor, "Reject escaped out-of-range floors before map allocation");
+        auto invalidCoordinate = bytes;
+        invalidCoordinate.replace(areaOffset + 2, 2, std::string("\xfd\xff\xfd\xff", 4));
+        reject(invalidCoordinate, "Reject overflowing tile-area offsets before map allocation");
+        auto wrongClient = bytes; wrongClient[18] = 58;
+        reject(wrongClient, "Reject mismatched OTB client versions without prompting or mutation");
+        auto future = bytes; future[6] = 5;
+        reject(future, "Reject unsupported OTBM formats without prompting or mutation");
+        reject(std::string(WorldGen::MaximumPrefabBytes + 1, 'x'), "Reject oversized prefab files before planning");
+        writeBytes(bytes);
+        std::filesystem::remove(directory / "authored.otbm");
+        Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error) && MapHash(editor.map) == before, "Missing source files must not partially apply a prefab world");
+        writeBytes(bytes);
+        const auto relocated = directory / std::filesystem::path(u8"relocated-\u00e7");
+        std::filesystem::create_directory(relocated);
+        std::ofstream(relocated / "authored.otbm", std::ios::binary).write(bytes.data(), std::streamsize(bytes.size()));
+        writeCatalog(relocated / "catalog.json");
+        const auto utf8 = (relocated / "catalog.json").u8string();
+        auto moved = spec; moved.world.catalogPath = wxString::FromUTF8(std::string(utf8.begin(), utf8.end()));
+        GenerationSpec movedResolved; WorldGen::Plan movedPlan;
+        const bool movedBuilt = WorldEditor::BuildPlan(editor, moved, movedResolved, movedPlan, error);
+        Check(movedBuilt && WorldGen::Fingerprint(movedPlan) == WorldGen::Fingerprint(plan), "Moving a catalog and identical prefab bytes to a Unicode folder must preserve the plan fingerprint");
+        auto changedDigest = movedPlan;
+        ++changedDigest.catalog.front().prefabFingerprint;
+        Check(WorldGen::Fingerprint(changedDigest) != WorldGen::Fingerprint(plan), "Plan fingerprints must include authored prefab contents");
+        std::cout << "PASS: authored OTBM catalog import, fixed multi-floor contents, attributes, physical navigation, digest pinning, cancellation, undo/redo and round-trip\n";
+        return 0;
+    } catch (const std::exception& exception) {
+        std::cerr << "FAIL: OTBM prefabs: " << exception.what() << '\n';
+        return 1;
+    }
+}
+
 static int RunPngScenario(const wxString& outputDirectory) {
 	try {
 		const auto directory = std::filesystem::u8path(nstr(outputDirectory));
@@ -815,6 +1029,8 @@ static int RunMetadataScenario(const wxString& outputDirectory) {
 }
 
 int RunWorldEditorSelfTest(const wxString& outputDirectory) {
+	const int prefabs = RunPrefabScenario(outputDirectory + "/otbm-prefabs");
+	if (prefabs != 0) return prefabs;
 	const int png = RunPngScenario(outputDirectory + "/png-import");
 	if (png != 0) return png;
 	const int village = RunWorldScenario(outputDirectory, false);

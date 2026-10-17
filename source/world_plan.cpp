@@ -1470,6 +1470,11 @@ namespace WorldGen {
 		add(uint32_t(plan.catalog.size()));
 		for (const auto& blueprint : plan.catalog) {
 			string(blueprint.id);
+			if (!blueprint.prefabPath.empty()) {
+				string("otbm-prefab");
+				add(blueprint.prefabX); add(blueprint.prefabY); add(blueprint.prefabZ);
+				add(uint32_t(blueprint.prefabFingerprint)); add(uint32_t(blueprint.prefabFingerprint >> 32));
+			}
 			if (!blueprint.floorMaterials.empty()) {
 				string("per-floor-materials");
 				add(uint32_t(blueprint.floorMaterials.size()));

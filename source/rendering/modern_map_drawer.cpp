@@ -73,8 +73,7 @@ void ModernMapDrawer::SetupVars() {
 void ModernMapDrawer::SetupGL() {
 	impl_->view.SetupGL();
 	if (!impl_->renderers_initialized) {
-		impl_->sprite_batch->initialize();
-		impl_->renderers_initialized = true;
+		impl_->renderers_initialized = impl_->sprite_batch->initialize();
 	}
 }
 
@@ -87,6 +86,7 @@ void ModernMapDrawer::Release() {
 }
 
 void ModernMapDrawer::Draw() {
+	if (!impl_->renderers_initialized) return;
 	impl_->light_buffer.Clear();
 	impl_->tooltip_drawer->clear();
 

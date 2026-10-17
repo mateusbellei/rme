@@ -5,12 +5,14 @@ on:
     paths:
       - 'source/**'
       - 'CMakeLists.txt'
+      - 'tests/gl_context_tests.cpp'
       - '.github/workflows/editor-build.yml'
   push:
     branches: [main]
     paths:
       - 'source/**'
       - 'CMakeLists.txt'
+      - 'tests/gl_context_tests.cpp'
       - '.github/workflows/editor-build.yml'
   workflow_dispatch:
 
@@ -23,8 +25,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libwxgtk3.2-dev libboost-thread-dev libboost-system-dev freeglut3-dev libarchive-dev libglm-dev zlib1g-dev
+          sudo apt-get install -y cmake g++ libwxgtk3.2-dev libboost-thread-dev libboost-system-dev freeglut3-dev libarchive-dev libglm-dev zlib1g-dev xvfb
       - name: Configure
-        run: cmake -S . -B build/editor -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build/editor -DCMAKE_BUILD_TYPE=Release -DRME_ENABLE_RENDERING_TESTS=ON
       - name: Build complete editor
         run: cmake --build build/editor --parallel 2
+      - name: Verify context availability and unsupported-driver fallback
+        run: xvfb-run -a ctest --test-dir build/editor --output-on-failure --timeout 30

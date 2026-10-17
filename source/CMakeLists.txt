@@ -109,6 +109,8 @@ ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_generator.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_common.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_legend.h
+${CMAKE_CURRENT_LIST_DIR}/procedural_mask.h
 ${CMAKE_CURRENT_LIST_DIR}/prompt_generator.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_recipe.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_sidecar.h

@@ -20,10 +20,14 @@ void GUI::OnRendererSwitched(bool now_modern) {
 		if (now_modern) {
 			canvas->SetCurrent(*GetGLContext(canvas));
 			gfx.invalidateAllGLTextures();
-			canvas->SetCurrent(*g_gl_context.GetGLContext(canvas));
+			if (auto* context = g_gl_context.GetGLContext(canvas)) {
+				canvas->SetCurrent(*context);
+			}
 			ModernSpriteBridge::get().clear(gfx);
 		} else {
-			canvas->SetCurrent(*g_gl_context.GetGLContext(canvas));
+			if (auto* context = g_gl_context.GetGLContext(canvas)) {
+				canvas->SetCurrent(*context);
+			}
 			ModernSpriteBridge::get().clear(gfx);
 			canvas->SetCurrent(*GetGLContext(canvas));
 			gfx.invalidateAllGLTextures();

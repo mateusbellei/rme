@@ -214,11 +214,19 @@ void MapCanvas::GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensi
 
 void MapCanvas::OnPaint(wxPaintEvent& event) {
 	frame_start_ = std::chrono::steady_clock::now();
-	const bool use_modern_renderer = g_settings.getBoolean(Config::USE_MODERN_RENDERER);
+	bool use_modern_renderer = g_settings.getBoolean(Config::USE_MODERN_RENDERER);
 	if (use_modern_renderer) {
-		SetCurrent(*g_gl_context.GetGLContext(this));
-		g_gl_context.ApplyVSyncIfNeeded(*this);
-	} else {
+		auto* context = g_gl_context.GetGLContext(this);
+		if (!context || !SetCurrent(*context)) {
+			g_settings.setInteger(Config::USE_MODERN_RENDERER, 0);
+			use_modern_renderer = false;
+			g_gui.UpdateMenus();
+			g_gui.SetStatusText("Modern renderer unavailable; using the legacy renderer.");
+		} else {
+			g_gl_context.ApplyVSyncIfNeeded(*this);
+		}
+	}
+	if (!use_modern_renderer) {
 		SetCurrent(*g_gui.GetGLContext(this));
 	}
 

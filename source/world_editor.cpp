@@ -403,9 +403,11 @@ namespace WorldEditor {
 						Position pos(spec.region.originX + x, spec.region.originY + y, z);
 						const Tile* tile = editor.map.getTile(pos);
 						const TileLocation* location = editor.map.getTileL(pos);
-						const bool metadata = (tile && (tile->house_id || tile->spawn || tile->creature || tile->hasUniqueItem() || tile->getMapFlags() || !tile->getZoneIds().empty() || tile->isHouseExit())) || (location && (location->getWaypointCount() || location->getTownCount() || location->getSpawnCount()));
+						auto scripted = [](const Item* item) { return item && (item->getUniqueID() || item->getActionID()); };
+						const bool scriptAttributes = tile && (scripted(tile->ground) || std::any_of(tile->items.begin(), tile->items.end(), scripted));
+						const bool metadata = scriptAttributes || (tile && (tile->house_id || tile->spawn || tile->creature || tile->hasUniqueItem() || tile->getMapFlags() || !tile->getZoneIds().empty() || tile->isHouseExit())) || (location && (location->getWaypointCount() || location->getTownCount() || location->getSpawnCount()));
 						if (metadata || (spec.world.protectExisting && tile && !tile->empty())) {
-							error = wxString::Format("World generation overlaps a protected tile at %d,%d,%d. Choose an empty area%s.", pos.x, pos.y, pos.z, metadata ? " (house, spawn, creature, zone, map flags, unique item or waypoint)" : " or disable 'Protect existing tiles' to replace ordinary tiles");
+							error = wxString::Format("World generation overlaps a protected tile at %d,%d,%d. Choose an empty area%s.", pos.x, pos.y, pos.z, metadata ? " (house, spawn, creature, zone, map flags, unique/action ID or waypoint)" : " or disable 'Protect existing tiles' to replace ordinary tiles");
 							return false;
 						}
 					}

@@ -322,6 +322,76 @@ namespace {
 	}
 }
 
+static int RunPngScenario(const wxString& outputDirectory) {
+	try {
+		const auto directory = std::filesystem::u8path(nstr(outputDirectory));
+		std::filesystem::create_directories(directory);
+		PrepareRegistry();
+		FixtureItem(303, ITEM_GROUP_NONE);
+		g_items[303].isBorder = true;
+		if (!wxImage::FindHandler(wxBITMAP_TYPE_PNG)) wxImage::AddHandler(new wxPNGHandler);
+		const wxString imagePath = outputDirectory + "/mask.png", legendPath = outputDirectory + "/legend.json";
+		wxImage image(5, 1);
+		image.InitAlpha();
+		const unsigned char colors[5][3] = {{0,255,0},{0,0,0},{0,255,255},{255,0,0},{0,0,255}};
+		for (int x = 0; x < 5; ++x) {
+			image.SetRGB(x, 0, colors[x][0], colors[x][1], colors[x][2]);
+			image.SetAlpha(x, 0, x == 2 ? 0 : (x == 0 ? 1 : 255));
+		}
+		Check(image.SaveFile(imagePath, wxBITMAP_TYPE_PNG), "Write actual PNG mask fixture");
+		std::ofstream(directory / "legend.json") << R"({"colors":[{"hex":"#00FF00","tileId":104},{"hex":"#000000","tileId":105},{"hex":"#00FFFF","tileId":104},{"hex":"#FF0000","tileId":0}]})";
+		CopyBuffer copy;
+		MapVersion version(MAP_OTBM_2, 57);
+		Editor editor(copy, version);
+		editor.map.setWidth(64);
+		editor.map.setHeight(64);
+		for (int y = 8; y < 10; ++y) for (int x = 8; x < 18; ++x) {
+			auto* tile = editor.map.createTile(x, y, 7);
+			tile->addItem(Item::Create(100));
+			if (x == 8 && y == 8) tile->addBorderItem(Item::Create(303));
+			tile->update();
+		}
+		const uint64_t before = MapHash(editor.map);
+		GenerationSpec spec;
+		spec.source = GenerationSource::ImageMask;
+		spec.region.originX = spec.region.originY = 8;
+		spec.region.width = 10;
+		spec.region.height = 2;
+		spec.imageMask.imagePath = imagePath;
+		spec.imageMask.legendPath = legendPath;
+		spec.pipeline.borderizeAfter = false;
+		const int previousAutomagic = g_settings.getInteger(Config::USE_AUTOMAGIC);
+		g_settings.setInteger(Config::USE_AUTOMAGIC, 1);
+		wxString error;
+		const bool generated = ProceduralGenerator::Run(editor, spec, error);
+		g_settings.setInteger(Config::USE_AUTOMAGIC, previousAutomagic);
+		Check(generated, "Actual PNG import failed: " + nstr(error));
+		for (int y = 8; y < 10; ++y) for (int x = 8; x < 18; ++x) {
+			const int category = (x - 8) / 2;
+			const auto* tile = editor.map.getTile(x, y, 7);
+			Check(tile && tile->ground && tile->ground->getID() == (category == 0 ? 104 : category == 1 ? 105 : 100), "PNG import must preserve exact/black IDs and skip alpha-zero, zero-ID and unmapped colors after resize");
+		}
+		const auto* bordered = editor.map.getTile(8, 8, 7);
+		Check(bordered->items.size() == 1 && bordered->items.front()->getID() == 303, "Disabling recipe borders must preserve existing borders even with global automagic enabled");
+		const auto generatedHash = MapHash(editor.map);
+		editor.actionQueue->undo();
+		Check(MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Raw PNG import must undo in one operation");
+		editor.actionQueue->redo();
+		Check(MapHash(editor.map) == generatedHash, "Raw PNG import must redo exactly");
+		MapCodec codec(version);
+		MemoryNodeFileWriteHandle encoded;
+		Check(codec.Write(editor.map, encoded), "Encode imported PNG as OTBM");
+		Editor reopened(copy, version);
+		MemoryNodeFileReadHandle nodes(encoded.getMemory(), encoded.getSize());
+		Check(codec.Read(reopened.map, nodes) && MapHash(reopened.map) == generatedHash, "OTBM must retain imported PNG IDs and skipped tiles");
+		std::cout << "PASS: PNGtoOTBM import, alpha, categorical resize, border opt-out, undo/redo and OTBM readback\n";
+		return 0;
+	} catch (const std::exception& exception) {
+		std::cerr << "FAIL: PNG import: " << exception.what() << '\n';
+		return 1;
+	}
+}
+
 static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 	try {
 		const std::filesystem::path directory = nstr(outputDirectory);
@@ -408,6 +478,23 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			}
 		}
 		Check(inspectedRole, "Role preview must contain an inspectable interior");
+		// Script action IDs are protected even when ordinary terrain replacement is allowed.
+		const Position questPosition(resolved.region.originX, resolved.region.originY, resolved.region.z);
+		auto* questTile = editor.map.createTile(questPosition.x, questPosition.y, questPosition.z);
+		questTile->addItem(Item::Create(100));
+		GenerationSpec replacement = resolved;
+		replacement.world.protectExisting = false;
+		for (bool onGround : {true, false}) {
+			Item* scripted = onGround ? questTile->ground : Item::Create(301);
+			if (!onGround) questTile->addItem(scripted);
+			scripted->setActionID(4500);
+			questTile->update();
+			Check(!WorldEditor::ApplyPlan(editor, replacement, plan, error) && error.Contains("protected tile"), "Action-ID grounds and items must remain protected when replacing ordinary tiles");
+			Check(editor.map.getTile(questPosition) == questTile && scripted->getActionID() == 4500 && !editor.actionQueue->canUndo(), "Scripted tile rejection must preserve the tile, action ID and undo history");
+			scripted->setActionID(0);
+		}
+		delete editor.map.swapTile(questPosition, nullptr);
+		Check(MapHash(editor.map) == before, "Removing the quest fixture must restore the original map");
 		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, {}, 1) && MapHash(editor.map) == before && !editor.actionQueue->canUndo(), "Tile budget rejection must happen before staging or undo mutations");
 		Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, {}, WorldEditor::MaximumTileBudget + 1) && MapHash(editor.map) == before, "Tile budgets above the supported memory bound must fail");
 		auto wrongSeed = resolved;
@@ -728,6 +815,8 @@ static int RunMetadataScenario(const wxString& outputDirectory) {
 }
 
 int RunWorldEditorSelfTest(const wxString& outputDirectory) {
+	const int png = RunPngScenario(outputDirectory + "/png-import");
+	if (png != 0) return png;
 	const int village = RunWorldScenario(outputDirectory, false);
 	if (village != 0) {
 		return village;

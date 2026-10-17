@@ -101,7 +101,7 @@ Actual server behavior still needs client-specific in-game QA.
 
 **Protect existing tiles** defaults on and rejects the operation if any affected
 tile is occupied. Turning it off allows replacing ordinary ground/items.
-House tiles, spawns, creatures, zones, map flags, unique items, house exits,
+House tiles, spawns, creatures, zones, map flags, unique/action IDs on grounds or items, house exits,
 waypoints and town exits remain protected. Void cells on upper floors are not
 affected. Live-client generation is rejected to prevent visibility clipping.
 

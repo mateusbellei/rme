@@ -20,8 +20,8 @@ Este repositório é **público**. Não incluir IPs, temas, receitas ou paths de
 | Feature | Status |
 |---------|--------|
 | Procedural v3 (image/prompt/recipe) | Beta legado |
-| World planner v4 (continentes, cidades, cavernas) | Draft PR #7 — `docs/WORLD_GENERATION.md` |
-| Exportação OTBM em lote / verificação | Draft PR #7 — `--generate-world`, `--verify` |
+| World planner v4 (continentes, cidades, cavernas) | Opt-in (PR #7) — `docs/WORLD_GENERATION.md` |
+| Exportação OTBM em lote / verificação | Opt-in (PR #7) — `--generate-world`, `--verify` |
 | Auto-borders runtime | Maduro |
 | Data Editor → Borders | Beta |
 | Data Editor → Grounds/Tilesets | Placeholder |

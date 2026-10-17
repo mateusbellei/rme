@@ -493,6 +493,9 @@ static int RunPrefabScenario(const wxString& outputDirectory) {
         reject(badWall, "Declared prefab walls must actually block in the active client");
         const auto tileOffset = bytes.find(std::string("\xfe\x05", 2));
         Check(tileOffset != std::string::npos, "Fixture must contain tile nodes");
+        auto unterminatedZones = bytes;
+        unterminatedZones.insert(tileOffset + 4, std::string("\x03\x40\x00\x00\x00\x01\x00", 7));
+        reject(unterminatedZones, "Reject unterminated zone lists before the legacy reader can loop");
         auto missingGround = bytes;
         missingGround.erase(tileOffset + 4, 3);
         reject(missingGround, "Every declared prefab cell must have its own ground");

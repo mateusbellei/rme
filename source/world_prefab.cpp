@@ -16,7 +16,7 @@ namespace {
     };
     // Bound the legacy reader before it can recurse or allocate map/item nodes.
     bool Structure(const std::string& bytes, wxString& error) {
-        struct Node { unsigned char type; size_t payload = 0; std::array<unsigned char, 5> prefix {}; };
+        struct Node { unsigned char type; size_t payload = 0; std::array<unsigned char, 5> prefix {}; std::vector<unsigned char> tileData; };
         std::vector<Node> stack;
         auto validNode = [&](size_t index) {
             const auto& node = stack[index];
@@ -26,6 +26,27 @@ namespace {
                 if (node.payload < 2 || !index || stack[index - 1].type != OTBM_TILE_AREA) return false;
                 const auto& area = stack[index - 1].prefix;
                 if ((unsigned(area[0]) | unsigned(area[1]) << 8) + node.prefix[0] > 65535 || (unsigned(area[2]) | unsigned(area[3]) << 8) + node.prefix[1] > 65535) return false;
+                // Do not expose malformed zone lists to the legacy reader, whose
+                // zone loop expects a terminating zero. Prefabs forbid map flags.
+                const auto& root = stack.front().prefix;
+                const unsigned format = unsigned(root[0]) | unsigned(root[1]) << 8 | unsigned(root[2]) << 16 | unsigned(root[3]) << 24;
+                for (size_t cursor = 2; cursor < node.tileData.size();) {
+                    const auto attribute = node.tileData[cursor++];
+                    if (attribute == OTBM_ATTR_TILE_FLAGS) {
+                        if (node.tileData.size() - cursor < 4) return false;
+                        for (int i = 0; i < 4; ++i) if (node.tileData[cursor++] != 0) return false;
+                    } else if (attribute == OTBM_ATTR_ITEM) {
+                        if (node.tileData.size() - cursor < 2) return false;
+                        const unsigned id = unsigned(node.tileData[cursor]) | unsigned(node.tileData[cursor + 1]) << 8;
+                        cursor += 2;
+                        if (!g_items.typeExists(id)) return false;
+                        const auto& type = g_items[id];
+                        if (format == MAP_OTBM_1 && (type.stackable || type.isSplash() || type.isFluidContainer())) {
+                            if (cursor == node.tileData.size()) return false;
+                            ++cursor;
+                        }
+                    } else return false;
+                }
             }
             if (node.type == OTBM_ITEM && (node.payload < 2 || !g_items.typeExists(unsigned(node.prefix[0]) | unsigned(node.prefix[1]) << 8))) return false;
             return true;
@@ -64,6 +85,7 @@ namespace {
                 }
                 auto& node = stack.back();
                 if (node.payload < node.prefix.size()) node.prefix[node.payload] = value;
+                if (node.type == OTBM_TILE) node.tileData.push_back(value);
                 ++node.payload;
             }
         }

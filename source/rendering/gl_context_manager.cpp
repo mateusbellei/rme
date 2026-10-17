@@ -12,7 +12,7 @@ namespace {
 GLADapiproc gladLoadProc(const char* name) {
 #ifdef __WXMSW__
 	GLADapiproc proc = reinterpret_cast<GLADapiproc>(wglGetProcAddress(name));
-	if (proc) {
+	if (proc && proc != reinterpret_cast<GLADapiproc>(1) && proc != reinterpret_cast<GLADapiproc>(2) && proc != reinterpret_cast<GLADapiproc>(3) && proc != reinterpret_cast<GLADapiproc>(-1)) {
 		return proc;
 	}
 	HMODULE module = GetModuleHandleA("opengl32.dll");
@@ -58,10 +58,12 @@ wxGLContext* GLContextManager::GetGLContext(wxGLCanvas* win) {
 		ctxAttrs.PlatformDefaults().CoreProfile().MajorVersion(4).MinorVersion(5).EndList();
 		OGLContext = std::make_unique<wxGLContext>(win, nullptr, &ctxAttrs);
 #endif
-		if (win && EnsureContextCurrent(*OGLContext, win)) {
-			if (!gladLoadGL(gladLoadProc)) {
-				wxLogDebug("GLContextManager: Failed to initialize GLAD");
-			}
+		// A context object can exist even when the driver rejected OpenGL 4.5.
+		// Never expose it to callers that use GLAD's 4.5 entry points.
+		if (!OGLContext->IsOK() || !win || !EnsureContextCurrent(*OGLContext, win) || !gladLoadGL(gladLoadProc) || !GLAD_GL_VERSION_4_5) {
+			OGLContext.reset();
+			wxLogDebug("Modern renderer unavailable: an OpenGL 4.5 context is required.");
+			return nullptr;
 		}
 	}
 

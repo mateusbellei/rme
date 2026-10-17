@@ -819,8 +819,10 @@ bool ItemDatabase::loadFromOtb(const FileName& datafile, wxString& error, wxArra
 	return true;
 }
 
-bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
-	ClientVersionID clientVersion = g_gui.GetCurrentVersionID();
+bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id, int clientVersion) {
+	if (clientVersion == CLIENT_VERSION_NONE) {
+		clientVersion = g_gui.GetCurrentVersionID();
+	}
 	if (clientVersion < CLIENT_VERSION_980 && id > 20000 && id < 20100) {
 		itemNode = itemNode.next_sibling();
 		return true;
@@ -1016,7 +1018,7 @@ bool ItemDatabase::loadItemFromGameXml(pugi::xml_node itemNode, int id) {
 	return true;
 }
 
-bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, wxArrayString& warnings) {
+bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, wxArrayString& warnings, int clientVersion) {
 	pugi::xml_document doc;
 	pugi::xml_parse_result result = doc.load_file(identifier.GetFullPath().mb_str());
 	if (!result) {
@@ -1044,13 +1046,13 @@ bool ItemDatabase::loadFromGameXml(const FileName& identifier, wxString& error, 
 			toId = itemNode.attribute("toid").as_ushort();
 		}
 
-		if (fromId == 0 || toId == 0) {
+		if (fromId == 0 || toId == 0 || fromId > toId) {
 			error = "Could not read item id from item node.";
 			return false;
 		}
 
-		for (uint16_t id = fromId; id <= toId; ++id) {
-			if (!loadItemFromGameXml(itemNode, id)) {
+		for (uint32_t id = fromId; id <= toId; ++id) {
+			if (!loadItemFromGameXml(itemNode, int(id), clientVersion)) {
 				return false;
 			}
 		}

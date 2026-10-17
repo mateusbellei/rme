@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include "application.h"
+#include "world_batch.h"
 #include "sprites.h"
 #include "editor.h"
 #include "common_windows.h"
@@ -94,6 +95,18 @@ Application::~Application() {
 }
 
 bool Application::OnInit() {
+	if (argc >= 2 && wxString(argv[1]) == "--generate-world") {
+		m_worldBatch = true;
+		delete wxLog::SetActiveTarget(new wxLogStderr());
+		return true;
+	}
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	if (argc >= 2 && wxString(argv[1]) == "--world-self-test") {
+		m_worldSelfTest = true;
+		m_worldTestOutput = argc >= 3 ? wxString(argv[2]) : wxFileName::GetTempDir() + "/rme-world-self-test";
+		return true;
+	}
+#endif
 #if defined __DEBUG_MODE__ && defined __WINDOWS__
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
@@ -333,11 +346,38 @@ void Application::Unload() {
 }
 
 int Application::OnExit() {
+	if (m_worldBatch) {
+		return 0;
+	}
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	if (m_worldSelfTest) {
+		return 0;
+	}
+#endif
 #ifdef _USE_PROCESS_COM
 	wxDELETE(m_proc_server);
 	wxDELETE(m_single_instance_checker);
 #endif
 	return 1;
+}
+
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+int RunWorldEditorSelfTest(const wxString& outputDirectory);
+#endif
+int Application::OnRun() {
+#ifdef RME_ENABLE_WORLD_SELF_TEST
+	if (m_worldSelfTest) {
+		return RunWorldEditorSelfTest(m_worldTestOutput);
+	}
+#endif
+	if (m_worldBatch) {
+		wxArrayString arguments;
+		for (int i = 2; i < argc; ++i) {
+			arguments.push_back(wxString(argv[i]));
+		}
+		return WorldBatch::CommandLine(arguments);
+	}
+	return wxApp::OnRun();
 }
 
 void Application::OnFatalException() {

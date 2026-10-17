@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "procedural_json.h"
 
 #include "procedural_common.h"
 #include "procedural_generator.h"
@@ -24,6 +25,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <filesystem>
 #include <limits>
 #include <map>
 #include <cctype>
@@ -148,16 +150,23 @@ GroundBrush* ProceduralCommon::FindGroundBrush(const std::string& targetLower) {
 }
 
 WallBrush* ProceduralCommon::FindWallBrush(const std::string& targetLower) {
-	for (const auto& kv : g_brushes.getMap()) {
-		Brush* brush = kv.second;
-		if (brush && brush->isWall()) {
-			const std::string name = as_lower_str(brush->getName());
-			if (name.find(targetLower) != std::string::npos) {
-				return brush->asWall();
-			}
+	WallBrush* best = nullptr;
+	size_t bestLength = std::numeric_limits<size_t>::max();
+	for (const auto& entry : g_brushes.getMap()) {
+		Brush* brush = entry.second;
+		if (!brush || !brush->isWall()) {
+			continue;
+		}
+		const std::string name = as_lower_str(brush->getName());
+		if (name == targetLower) {
+			return brush->asWall();
+		}
+		if (name.find(targetLower) != std::string::npos && name.size() < bestLength) {
+			best = brush->asWall();
+			bestLength = name.size();
 		}
 	}
-	return nullptr;
+	return best;
 }
 
 GroundBrush* ProceduralCommon::PickDefaultLandBrush() {
@@ -279,15 +288,14 @@ bool ProceduralCommon::LoadLegend(const wxString& path, LegendMapping& mapping, 
 		return true;
 	}
 
-	std::ifstream input(nstr(path).c_str());
-	if (!input.good()) {
-		error = "Failed to open legend JSON: " + path;
+	if (path.find(wxUniChar(0)) != wxString::npos) {
+		error = "Legend filename contains an embedded NUL.";
 		return false;
 	}
-
 	json::mValue root;
-	if (!json::read(input, root) || root.type() != json::obj_type) {
-		error = "Invalid legend JSON: " + path;
+	std::string readError;
+	if (!ProceduralJSON::ReadFile(nstr(path), 4 * 1024 * 1024, root, readError) || root.type() != json::obj_type) {
+		error = readError.empty() ? wxString("Legend JSON must be an object.") : wxString::FromUTF8(readError);
 		return false;
 	}
 
@@ -667,7 +675,7 @@ bool ProceduralCommon::ScatterPresetDoodads(Editor& editor, const GenerationSpec
 
 	if (!loaded) {
 		const wxString path = g_gui.GetProceduralDataDirectory() + wxString("biome_doodads.json");
-		std::ifstream input(nstr(path).c_str());
+		std::ifstream input(std::filesystem::u8path(nstr(path)));
 		if (input.good()) {
 			json::mValue root;
 			if (json::read(input, root) && root.type() == json::obj_type) {

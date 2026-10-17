@@ -1,0 +1,40 @@
+{
+  "version": 4,
+  "source": "world",
+  "seed": 1337,
+  "useSelection": false,
+  "region": {
+    "originX": 0,
+    "originY": 0,
+    "width": 512,
+    "height": 512,
+    "z": 7
+  },
+  "legend": "../world_legend.json",
+  "pipeline": {
+    "borderize": true,
+    "randomize": true,
+    "walls": true
+  },
+  "world": {
+    "shape": "continent",
+    "seaLevel": 4200,
+    "rivers": 4,
+    "settlements": 2,
+    "buildings": 8,
+    "buildingLevels": 3,
+    "caveDepth": 1,
+    "caveFill": 45,
+    "roadWidth": 2,
+    "protectExisting": true,
+    "wallBrush": "stone",
+    "connectionItemId": 0,
+    "layout": "blocks",
+    "catalog": "../layered_buildings.json"
+  },
+  "doodads": {
+    "enabled": true,
+    "density": 10
+  },
+  "pathBase": "recipe"
+}

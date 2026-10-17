@@ -6,6 +6,8 @@ on:
       - 'source/**'
       - 'tests/**'
       - 'data/procedural/**'
+      - 'data/1098/**'
+      - 'CMakeLists.txt'
       - '.github/workflows/procedural-tests.yml'
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - 'source/**'
       - 'tests/**'
       - 'data/procedural/**'
+      - 'data/1098/**'
+      - 'CMakeLists.txt'
       - '.github/workflows/procedural-tests.yml'
   workflow_dispatch:
 
@@ -31,3 +35,19 @@ jobs:
         run: cmake --build build/procedural-tests --parallel 2
       - name: Test
         run: ctest --test-dir build/procedural-tests --output-on-failure
+
+  editor-otbm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install full editor build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libwxgtk3.2-dev libboost-thread-dev libboost-system-dev freeglut3-dev libarchive-dev libglm-dev zlib1g-dev xvfb
+      - name: Configure real editor regression
+        run: cmake -S . -B build/editor -DCMAKE_BUILD_TYPE=Release -DRME_ENABLE_WORLD_SELF_TEST=ON
+      - name: Build complete editor
+        run: cmake --build build/editor --parallel 2
+      - name: Verify real editor undo and OTBM round-trip
+        run: xvfb-run -a ctest --test-dir build/editor --output-on-failure --timeout 90

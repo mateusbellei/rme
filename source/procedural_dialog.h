@@ -23,6 +23,8 @@ private:
 	void OnModeChanged(wxCommandEvent& event);
 	void OnUseSelectionChanged(wxCommandEvent& event);
 	void OnPresetChanged(wxCommandEvent& event);
+	void OnWorldSettings(wxCommandEvent& event);
+	void OnPreviewWorld(wxCommandEvent& event);
 	void SyncFromSelection();
 	void UpdateElevationLabel();
 	void ApplySpecToDialog(const GenerationSpec& spec);
@@ -36,6 +38,7 @@ private:
 	wxRadioButton* rbImageMask;
 	wxRadioButton* rbTextPrompt;
 	wxRadioButton* rbPromptWithImage;
+	wxRadioButton* rbWorldPlan;
 
 	wxTextCtrl* txtImagePath;
 	wxTextCtrl* txtLegendPath;
@@ -47,7 +50,9 @@ private:
 	wxSpinCtrl* spnWidth;
 	wxSpinCtrl* spnHeight;
 	wxSpinCtrl* spnZ;
-	wxSpinCtrl* spnSeed;
+	wxSpinCtrlDouble* spnSeed;
+	wxSpinCtrl* spnOriginX;
+	wxSpinCtrl* spnOriginY;
 	wxSpinCtrl* spnElevation;
 	wxSpinCtrl* spnReferenceWeight;
 	wxSpinCtrl* spnDoodadDensity;
@@ -58,6 +63,9 @@ private:
 	wxCheckBox* chkPlaceWalls;
 	wxCheckBox* chkDoodads;
 	wxCheckBox* chkSidecar;
+	wxCheckBox* chkProtectExisting;
+	wxButton* btnWorldSettings;
+	GenerationWorld worldSettings;
 
 	wxButton* btnGenerate;
 };

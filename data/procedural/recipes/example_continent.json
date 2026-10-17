@@ -1,0 +1,23 @@
+{
+  "version": 4,
+  "source": "world",
+  "seed": 1337,
+  "useSelection": false,
+  "region": { "originX": 0, "originY": 0, "width": 256, "height": 256, "z": 7 },
+  "legend": "",
+  "pipeline": { "borderize": true, "randomize": true, "walls": true },
+  "world": {
+    "shape": "continent",
+    "seaLevel": 4200,
+    "rivers": 8,
+    "settlements": 3,
+    "buildings": 8,
+    "buildingLevels": 1,
+    "caveDepth": 0,
+    "caveFill": 45,
+    "roadWidth": 2,
+    "protectExisting": true,
+    "wallBrush": "stone",
+    "connectionItemId": 0
+  }
+}

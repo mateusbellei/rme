@@ -7,6 +7,7 @@
 
 #include "main.h"
 #include "position.h"
+#include "world_plan.h"
 
 class Map;
 class Editor;
@@ -25,7 +26,8 @@ struct GenerationRegion {
 enum class GenerationSource {
 	ImageMask,
 	TextPrompt,
-	PromptWithImage
+	PromptWithImage,
+	WorldPlan
 };
 
 enum class GenerationPreset {
@@ -79,6 +81,17 @@ struct GenerationReference {
 		blendWeight(0) { }
 };
 
+struct GenerationWorld {
+	WorldGen::Settings settings;
+	bool protectExisting = true;
+	// Zero selects an appropriate teleport type from the active client.
+	int connectionItemId = 0;
+	wxString wallBrushName = "stone";
+	wxString catalogPath;
+	wxString heightmapPath;
+	wxString biomeHintsPath;
+};
+
 struct GenerationSpec {
 	GenerationRegion region;
 	bool useSelection;
@@ -89,6 +102,7 @@ struct GenerationSpec {
 	GenerationDoodads doodads;
 	GenerationPipeline pipeline;
 	GenerationReference reference;
+	GenerationWorld world;
 	bool useSidecar;
 	ImageMaskRequest imageMask;
 	TextPromptRequest textPrompt;

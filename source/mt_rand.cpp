@@ -16,6 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "main.h"
+#include "mt_rand.h"
 
 static inline unsigned long int mt_get(void* vstate);
 static double mt_get_double(void* vstate);
@@ -107,6 +108,27 @@ mt_set(void* vstate, unsigned long int s) {
 }
 
 static mt_state_t mt_state;
+
+MTRandomState mt_capture_state() {
+	MTRandomState result;
+	std::copy(mt_state.mt, mt_state.mt + N, result.values.begin());
+	result.index = mt_state.mti;
+	return result;
+}
+
+void mt_restore_state(const MTRandomState& state) {
+	std::copy(state.values.begin(), state.values.end(), mt_state.mt);
+	mt_state.mti = state.index;
+}
+
+ScopedMTRandom::ScopedMTRandom(unsigned long seed) :
+	previous(mt_capture_state()) {
+	mt_seed(seed);
+}
+
+ScopedMTRandom::~ScopedMTRandom() {
+	mt_restore_state(previous);
+}
 
 void mt_seed(unsigned long s) {
 	mt_set(&mt_state, s);

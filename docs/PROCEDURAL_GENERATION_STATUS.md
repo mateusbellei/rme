@@ -2,6 +2,31 @@
 
 Audit: 2026-10-15. Tracking: https://github.com/mateusbellei/rme/issues/5
 
+## World planner update (2026-10-16, draft PR #7)
+
+The original audit below describes the legacy v3 pipeline. The new opt-in
+`source:world` path now has deterministic continents/biomes, urban lots and
+furnished rotating catalogs, multi-floor structures, connected caves, distributed
+entrances, preview/seed comparison and staged single undo/redo. Recipes support
+relative paths and strict bounded UTF-8/BOM loading.
+
+The latest draft also includes hard construction minimums, different floor plans
+and client materials by building level, optional settlement distribution across
+biomes, seed overrides with exact recipe replay, and zoom/tile inspection. Plan
+exports can produce editable height/biome PNGs with a separate relative recipe.
+
+Batch generation loads client OTB/XML/materials explicitly, exports OTBM/XML/PNG
+bundles, optionally registers towns and verifies production read/re-encode byte
+equality. The public 10.98 large profile was exported and verified at 3,161,744
+tiles locally. This does not establish server/client visual QA. Physical
+stairs/ramps, arbitrary OTBM prefab imports and house/spawn/NPC authoring remain
+open. See [the current guide](WORLD_GENERATION.md) and
+[PR #7](https://github.com/mateusbellei/rme/pull/7).
+
+The world path has five core/integration suites plus three full-application
+tests; the old one-test limitation below applies to the PNG foundation audit,
+not the current world regression. Existing v3 presets remain supported.
+
 ## Repository state at audit
 
 - Remote: `mateusbellei/rme`, default branch `main`.

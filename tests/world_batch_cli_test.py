@@ -1,0 +1,271 @@
+"""Exercise the public 10.98 profile through the installed application entry point."""
+import hashlib
+import json
+import struct
+import zlib
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+
+def rgb_png(path, rows):
+    def chunk(kind, payload):
+        return (struct.pack(">I", len(payload)) + kind + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff))
+    height, width = len(rows), len(rows[0])
+    scanlines = b"".join(b"\0" + b"".join(bytes(rgb) for rgb in row) for row in rows)
+    path.write_bytes(b"\x89PNG\r\n\x1a\n"
+                     + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(scanlines)) + chunk(b"IEND", b""))
+
+
+def flat_biome_png(path, rgb):
+    rgb_png(path, [[rgb] * 8] * 8)
+
+
+def main():
+    executable, source, build = map(Path, sys.argv[1:])
+    source = source.resolve()
+    executable = executable.resolve()
+    with tempfile.TemporaryDirectory(prefix="rme-world-cli-", dir=build) as temporary:
+        output = Path(temporary) / "world"
+        command = [str(executable), "--generate-world",
+                   str(source / "data/procedural/recipes/example_furnished_city_1098.json"),
+                   str(source / "data/1098/items_original1098.otb"),
+                   str(source / "data/1098/items_original1098.xml"),
+                   str(source / "data/1098/materials.xml"), str(output),
+                   "--data-dir", str(source / "data"), "--town-prefix", "Frontier", "--verify"]
+        # Run outside the checkout: only explicit arguments / recipe-relative paths apply.
+        generated = subprocess.run(command, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        if generated.returncode:
+            raise AssertionError(f"CLI returned {generated.returncode}: {generated.stdout} {generated.stderr}")
+        report = json.loads((output / "generation.json").read_text(encoding="utf-8"))
+        plan = json.loads((output / "plan.json").read_text(encoding="utf-8"))
+        assert report["client"]["clientVersion"] == 57
+        assert report["tileBudget"] == 1048576
+        assert report["seed"] == plan["settings"]["seed"]
+        assert report["verifiedOTBM"] is True
+        assert report["editableInputs"] == {}
+        assert report["townPrefix"] == "Frontier" and len(report["towns"]) == 2
+        assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
+        assert all(town["templePosition"][2] == 7 for town in report["towns"])
+        assert report["planFingerprint"] == plan["fingerprint"]
+        assert plan["counts"]["plannedTiles"] == report["tiles"]
+        assert len(plan["settlements"]) == 2 and len(plan["buildings"]) == 24
+        for town in range(2):
+            roles = [b["role"] for b in plan["buildings"] if b["settlement"] == town]
+            assert roles.count("commercial") <= 1 and roles.count("industrial") <= 2
+            assert roles.count("residential") >= 9
+        assert {layer["offsetZ"] for layer in plan["layers"]} == {-2, -1, 0, 1, 2}
+        assert report["tiles"] > 750000 and report["doodads"] > 0
+        assert report["furniture"] == sum(building["levels"] * 3 for building in plan["buildings"])
+        assert report["skippedFurniture"] == 0
+        assert len(report["previews"]) == len(plan["layers"]) * 5
+        for filename in report["previews"]:
+            assert Path(filename).name == filename
+            assert (output / filename).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+        assert "preview_z7_roles.png" in report["previews"]
+        assert len(report["warnings"]) == 1 and "No client DAT supplied" in report["warnings"][0]
+        mapfile = output / "world.otbm"
+        assert mapfile.read_bytes()[:4] == b"OTBM"
+        before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in output.iterdir()}
+        repeated = subprocess.run(command, cwd=temporary, capture_output=True, text=True,
+                                  errors="replace", timeout=10)
+        assert repeated.returncode == 1
+        assert "already exists" in repeated.stderr
+        assert before == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in output.iterdir()}
+
+        ridged_recipe = json.loads((source / "data/procedural/recipes/example_furnished_city_1098.json").read_text(encoding="utf-8"))
+        ridged_recipe["legend"] = str(source / "data/procedural/world_legend.json")
+        ridged_recipe["world"].update(catalog=str(source / "data/procedural/profiles/1098/buildings.json"),
+                                      relief="ridges", biomeDetail=75, settlements=1, buildings=8,
+                                      buildingLevels=2, caveDepth=1, caveEntrances=4)
+        ridged_recipe["region"].update(width=256, height=256)
+        recipe_path = Path(temporary) / "ridged-recipe.json"
+        recipe_path.write_text(json.dumps(ridged_recipe), encoding="utf-8")
+        ridged_output = Path(temporary) / "ridged-world"
+        ridged_command = command.copy()
+        ridged_command[2] = str(recipe_path)
+        ridged_command[6] = str(ridged_output)
+        ridged_command.extend(["--no-previews", "--tile-budget", "200000"])
+        generated = subprocess.run(ridged_command, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        if generated.returncode:
+            raise AssertionError(f"Ridged CLI returned {generated.returncode}: {generated.stdout} {generated.stderr}")
+        ridged_report = json.loads((ridged_output / "generation.json").read_text(encoding="utf-8"))
+        ridged_plan = json.loads((ridged_output / "plan.json").read_text(encoding="utf-8"))
+        assert ridged_report["tileBudget"] == 200000
+        assert ridged_report["verifiedOTBM"] is True
+        assert ridged_plan["settings"]["relief"] == "ridges" and ridged_plan["settings"]["biomeDetail"] == 75
+        assert len(ridged_plan["buildings"]) >= 4 and ridged_report["furniture"] > 0
+        assert ridged_report["skippedFurniture"] == 0 and ridged_report["previews"] == []
+        assert sum(link["upper"][2] == 0 and link["lower"][2] == 1 for link in ridged_plan["verticalLinks"]) == 4
+        assert not list(ridged_output.glob("preview_*.png"))
+
+        diversity_output = Path(temporary) / "diverse-world"
+        habitats = [(0, 255, 0), (0, 128, 0), (232, 192, 96), (240, 248, 255)]
+        hints = Path(temporary) / "habitats.png"
+        rgb_png(hints, [[habitats[(2 if y >= 4 else 0) + (1 if x >= 4 else 0)]
+                         for x in range(8)] for y in range(8)])
+        flat = Path(temporary) / "flat.png"
+        flat_biome_png(flat, (153, 153, 153))
+        diverse_recipe = dict(ridged_recipe)
+        diverse_recipe["world"] = dict(ridged_recipe["world"])
+        diverse_recipe["world"].update(diverseSettlements=True, settlements=4, buildings=4,
+                                       heightmap=str(flat), biomeHints=str(hints), rivers=0)
+        diverse_path = Path(temporary) / "diverse-recipe.json"
+        diverse_path.write_text(json.dumps(diverse_recipe), encoding="utf-8")
+        diverse_command = ridged_command.copy()
+        diverse_command[2], diverse_command[6] = str(diverse_path), str(diversity_output)
+        diverse_command.append("--editable-inputs")
+        generated = subprocess.run(diverse_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        diverse = json.loads((diversity_output / "plan.json").read_text(encoding="utf-8"))
+        assert diverse["settings"]["diverseSettlements"] is True
+        assert {town["biome"] for town in diverse["settlements"]} == {"grass", "forest", "desert", "snow"}
+        for index, town in enumerate(diverse["settlements"]):
+            residences = [b for b in diverse["buildings"] if b["settlement"] == index and b["role"] == "residential"]
+            expected = town["biome"] + "_residence" if town["biome"] in ("desert", "snow") else "residence"
+            assert residences and all(b["blueprint"] == expected for b in residences)
+        diversity_report = json.loads((diversity_output / "generation.json").read_text(encoding="utf-8"))
+        assert diversity_report["previews"] == []
+        assert diversity_report["editableInputs"] == {"heightmap": "inputs_heightmap.png",
+                                                       "biomeHints": "inputs_biomes.png",
+                                                       "recipe": "editable-recipe.json"}
+        editable = json.loads((diversity_output / "editable-recipe.json").read_text(encoding="utf-8"))
+        assert editable["world"]["heightmap"] == "inputs_heightmap.png"
+        assert editable["world"]["biomeHints"] == "inputs_biomes.png"
+        assert editable["pathBase"] == "recipe"
+        # The editable starting point must be accepted by the real PNG import path.
+        diverse_command[2] = str(diversity_output / "editable-recipe.json")
+        diverse_command[6] = str(Path(temporary) / "diverse-edited")
+        generated = subprocess.run(diverse_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+
+        balanced_output = Path(temporary) / "balanced-city"
+        balanced_command = command.copy()
+        balanced_command[2] = str(source / "data/procedural/recipes/example_balanced_city.json")
+        balanced_command[6] = str(balanced_output)
+        balanced_command.append("--no-previews")
+        generated = subprocess.run(balanced_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        balanced = json.loads((balanced_output / "plan.json").read_text(encoding="utf-8"))
+        assert len(balanced["settlements"]) == 2
+        for town in balanced["settlements"]:
+            mix = {entry["blueprint"]: entry for entry in town["constructionMix"]}
+            assert mix["house"]["count"] >= mix["house"]["min"] == 4
+            assert mix["inn"]["count"] == mix["inn"]["min"] == mix["inn"]["max"] == 1
+            assert mix["courtyard_hall"]["count"] == 1
+            assert sum(entry["count"] for entry in mix.values()) == len(town["buildings"])
+        impossible_recipe = json.loads((balanced_output / "recipe.json").read_text(encoding="utf-8"))
+        # Move the recipe while keeping its inputs explicit, then oversubscribe its lots.
+        impossible_recipe["legend"] = str(source / "data/procedural/world_legend.json")
+        impossible_recipe["world"]["catalog"] = str(source / "data/procedural/civic_buildings.json")
+        impossible_recipe["world"]["buildings"] = 1
+        impossible_path = Path(temporary) / "impossible-city.json"
+        impossible_path.write_text(json.dumps(impossible_recipe), encoding="utf-8")
+        balanced_command[2] = str(impossible_path)
+        balanced_command[6] = str(Path(temporary) / "impossible-city")
+        failed = subprocess.run(balanced_command, cwd=temporary, capture_output=True,
+                                text=True, errors="replace", timeout=60)
+        assert failed.returncode == 1 and "minimums exceed" in failed.stderr
+        assert not Path(balanced_command[6]).exists()
+
+        layered_output = Path(temporary) / "layered-town"
+        layered_command = command.copy()
+        layered_command[2] = str(source / "data/procedural/recipes/example_layered_town.json")
+        layered_command[6] = str(layered_output)
+        layered_command.append("--no-previews")
+        generated = subprocess.run(layered_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        layered = json.loads((layered_output / "plan.json").read_text(encoding="utf-8"))
+        layered_report = json.loads((layered_output / "generation.json").read_text(encoding="utf-8"))
+        layer_tiles = {layer["offsetZ"]: layer["tiles"] for layer in layered["layers"]}
+        assert layered["buildings"] and all(building["levels"] == 3 for building in layered["buildings"])
+        assert layer_tiles[-1] == len(layered["buildings"]) * 13 * 13
+        assert layer_tiles[-2] == len(layered["buildings"]) * 9 * 9
+        assert sum(layer_tiles.values()) == layered_report["tiles"]
+        assert layered_report["verifiedOTBM"] is True
+        styled_output = Path(temporary) / "layered-styles"
+        layered_command[2] = str(source / "data/procedural/recipes/example_layered_town_1098.json")
+        layered_command[6] = str(styled_output)
+        generated = subprocess.run(layered_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        styled = json.loads((styled_output / "generation.json").read_text(encoding="utf-8"))
+        assert styled["verifiedOTBM"] is True and styled["tiles"] == layered_report["tiles"]
+        assert styled["planFingerprint"] != layered_report["planFingerprint"]
+
+        for biome, rgb in [("desert", (232, 192, 96)), ("snow", (240, 248, 255))]:
+            hint = Path(temporary) / (biome + ".png")
+            flat_biome_png(hint, rgb)
+            ridged_recipe["world"]["biomeHints"] = str(hint)
+            recipe_path = Path(temporary) / (biome + "-recipe.json")
+            recipe_path.write_text(json.dumps(ridged_recipe), encoding="utf-8")
+            regional_output = Path(temporary) / (biome + "-world")
+            regional_command = ridged_command.copy()
+            regional_command[2], regional_command[6] = str(recipe_path), str(regional_output)
+            generated = subprocess.run(regional_command, cwd=temporary, capture_output=True,
+                                       text=True, errors="replace", timeout=60)
+            if generated.returncode:
+                raise AssertionError(f"{biome} CLI returned {generated.returncode}: {generated.stdout} {generated.stderr}")
+            regional = json.loads((regional_output / "plan.json").read_text(encoding="utf-8"))
+            placements = json.loads((regional_output / "generation.json").read_text(encoding="utf-8"))
+            residences = [b for b in regional["buildings"] if b["role"] == "residential"]
+            assert residences and all(b["blueprint"] == biome + "_residence" for b in residences)
+            assert regional["settlements"][0]["biome"] == biome
+            assert placements["furniture"] > 0 and placements["skippedFurniture"] == 0
+        # Seed overrides must survive recipe export, including both uint32 boundaries.
+        seed_recipe = ridged_recipe.copy()
+        seed_recipe["world"] = dict(ridged_recipe["world"])
+        seed_recipe["world"].pop("biomeHints", None)
+        seed_recipe["world"].update(relief="smooth", buildings=4, caveEntrances=1)
+        seed_recipe["region"] = dict(width=128, height=128, originX=0, originY=0, z=7)
+        seed_path = Path(temporary) / "seed-recipe.json"
+        seed_path.write_text(json.dumps(seed_recipe), encoding="utf-8")
+        recipe_hash = hashlib.sha256(seed_path.read_bytes()).digest()
+        seed_command = ridged_command.copy()
+        seed_command[2] = str(seed_path)
+        fingerprints = []
+        for seed in (0, 4294967295):
+            seed_output = Path(temporary) / f"seed-{seed}"
+            seed_command[6] = str(seed_output)
+            generated = subprocess.run(seed_command + ["--seed", str(seed)], cwd=temporary,
+                                       capture_output=True, text=True, errors="replace", timeout=60)
+            assert generated.returncode == 0, generated.stdout + generated.stderr
+            seeded = json.loads((seed_output / "generation.json").read_text(encoding="utf-8"))
+            saved_recipe = json.loads((seed_output / "recipe.json").read_text(encoding="utf-8"))
+            seeded_plan = json.loads((seed_output / "plan.json").read_text(encoding="utf-8"))
+            assert seeded["seed"] == saved_recipe["seed"] == seeded_plan["settings"]["seed"] == seed
+            fingerprints.append(seeded["planFingerprint"])
+        assert fingerprints[0] != fingerprints[1]
+        assert hashlib.sha256(seed_path.read_bytes()).digest() == recipe_hash
+        replay = seed_command.copy()
+        replay[2] = str(seed_output / "recipe.json")
+        replay[6] = str(Path(temporary) / "seed-replay")
+        generated = subprocess.run(replay, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        assert (Path(replay[6]) / "world.otbm").read_bytes() == (seed_output / "world.otbm").read_bytes()
+        invalid_output = Path(temporary) / "invalid-seed"
+        seed_command[6] = str(invalid_output)
+        for arguments in (["--seed", "-1"], ["--seed", "4294967296"], ["--seed", "+1"],
+                          ["--seed", "1.5"], ["--seed", " 1"], ["--seed", ""],
+                          ["--seed", "1", "--seed", "2"], ["--seed"]):
+            failed = subprocess.run(seed_command + arguments, cwd=temporary, capture_output=True,
+                                    text=True, errors="replace", timeout=10)
+            assert failed.returncode == 2, (arguments, failed.stdout, failed.stderr)
+            assert not invalid_output.exists()
+        print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
+              f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite; "
+              "ridged cave entrances, desert/snow architecture, construction minimums and seeded OTBM replay")
+
+
+if __name__ == "__main__":
+    main()

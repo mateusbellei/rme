@@ -155,6 +155,19 @@ Editor::Editor(CopyBuffer& copybuffer, LiveClient* client) :
 	;
 }
 
+Editor::Editor(CopyBuffer& copybuffer, const MapVersion& version) :
+	live_server(nullptr),
+	live_client(nullptr),
+	actionQueue(newd ActionQueue(*this)),
+	selection(*this),
+	copybuffer(copybuffer),
+	replace_brush(nullptr) {
+	map.mapVersion = version;
+	map.unnamed = true;
+	map.name = "Generated.otbm";
+	map.description = "Procedurally generated map.";
+}
+
 Editor::~Editor() {
 	if (IsLive()) {
 		CloseLiveServer();

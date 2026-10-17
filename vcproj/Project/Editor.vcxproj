@@ -470,6 +470,30 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\..\source\procedural_dialog.cpp" />
+    <ClInclude Include="..\..\source\world_decoration.h" />
+    <ClInclude Include="..\..\source\world_inputs.h" />
+    <ClInclude Include="..\..\source\world_export.h" />
+    <ClInclude Include="..\..\source\world_batch.h" />
+    <ClCompile Include="..\..\source\world_batch.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\world_export.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\world_inputs.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="..\..\source\world_decoration.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClInclude Include="..\..\source\world_catalog.h" />
+    <ClCompile Include="..\..\source\world_catalog.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\source\world_catalog_json.cpp" />
+    <ClInclude Include="..\..\source\world_plan.h" />
+    <ClInclude Include="..\..\source\world_editor.h" />
+    <ClInclude Include="..\..\source\procedural_json.h" />
+    <ClInclude Include="..\..\source\procedural_legend.h" />
+    <ClInclude Include="..\..\source\procedural_mask.h" />
+    <ClCompile Include="..\..\source\world_plan.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\source\world_editor.cpp" />
     <ClCompile Include="..\..\source\procedural_generator.cpp" />
     <ClCompile Include="..\..\source\procedural_common.cpp" />
     <ClCompile Include="..\..\source\prompt_generator.cpp" />

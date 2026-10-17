@@ -9,6 +9,46 @@
 #include "procedural_recipe.h"
 #include "editor.h"
 #include "gui.h"
+#include "world_editor.h"
+#include "world_export.h"
+#include "world_inputs.h"
+#include <wx/imagpng.h>
+#include <wx/wfstream.h>
+#include "procedural_mask.h"
+#include <wx/scrolwin.h>
+#include <wx/dcclient.h>
+#include <cmath>
+#include <wx/progdlg.h>
+#include <wx/stopwatch.h>
+#include <wx/display.h>
+
+namespace {
+	wxSize DialogSize(wxWindow* parent, int width, int height) {
+		int monitor = wxDisplay::GetFromWindow(parent);
+		wxDisplay display(monitor == wxNOT_FOUND ? 0 : monitor);
+		const wxRect area = display.GetClientArea();
+		return wxSize(std::min(width, std::max(320, area.width - 40)), std::min(height, std::max(320, area.height - 60)));
+	}
+	WorldGen::ProgressCallback DialogProgress(wxProgressDialog& dialog) {
+		// Shared state makes copied std::function callbacks throttle the same dialog.
+		struct State {
+			wxStopWatch elapsed;
+			wxString last;
+			int percent = -1;
+		};
+		auto state = std::make_shared<State>();
+		return [&dialog, state](const char* stage, int percent) {
+			const wxString label = wxString::FromUTF8(stage);
+			if (label == state->last && percent == state->percent && state->elapsed.Time() < 40) {
+				return true;
+			}
+			state->last = label;
+			state->percent = percent;
+			state->elapsed.Start();
+			return dialog.Update(percent, label);
+		};
+	}
+}
 
 enum {
 	ID_BROWSE_IMAGE = wxID_HIGHEST + 3001,
@@ -28,46 +68,52 @@ enum {
 	ID_DOODADS,
 	ID_DOODAD_DENSITY,
 	ID_REFERENCE_WEIGHT,
-	ID_SIDECAR
+	ID_SIDECAR,
+	ID_MODE_WORLD,
+	ID_WORLD_SETTINGS
 };
 
 ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	wxDialog(parent, wxID_ANY, "Procedural Generation", wxDefaultPosition, wxSize(560, 680), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	editor(editor) {
+	wxScrolledWindow* content = new wxScrolledWindow(this, wxID_ANY);
+	content->SetScrollRate(0, 16);
 	wxBoxSizer* top = new wxBoxSizer(wxVERTICAL);
 
-	wxStaticBoxSizer* sbMode = new wxStaticBoxSizer(wxVERTICAL, this, "Mode");
-	rbImageMask = new wxRadioButton(this, ID_MODE_IMAGE, "Image mask -> biomes", wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
-	rbTextPrompt = new wxRadioButton(this, ID_MODE_PROMPT, "Text prompt -> map");
-	rbPromptWithImage = new wxRadioButton(this, ID_MODE_PROMPT_IMAGE, "Prompt + reference image");
+	wxStaticBoxSizer* sbMode = new wxStaticBoxSizer(wxVERTICAL, content, "Mode");
+	rbImageMask = new wxRadioButton(content, ID_MODE_IMAGE, "Image mask -> biomes", wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
+	rbTextPrompt = new wxRadioButton(content, ID_MODE_PROMPT, "Text prompt -> map");
+	rbPromptWithImage = new wxRadioButton(content, ID_MODE_PROMPT_IMAGE, "Prompt + reference image");
+	rbWorldPlan = new wxRadioButton(content, ID_MODE_WORLD, "World planner: continents, settlements and caves");
 	sbMode->Add(rbImageMask, 0, wxALL, 4);
 	sbMode->Add(rbTextPrompt, 0, wxALL, 4);
 	sbMode->Add(rbPromptWithImage, 0, wxALL, 4);
+	sbMode->Add(rbWorldPlan, 0, wxALL, 4);
 	top->Add(sbMode, 0, wxEXPAND | wxALL, 8);
 
 	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 8, 8);
 	grid->AddGrowableCol(1, 1);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Image:"), 0, wxALIGN_CENTER_VERTICAL);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Image:"), 0, wxALIGN_CENTER_VERTICAL);
 	wxBoxSizer* imageRow = new wxBoxSizer(wxHORIZONTAL);
-	txtImagePath = new wxTextCtrl(this, wxID_ANY);
+	txtImagePath = new wxTextCtrl(content, wxID_ANY);
 	imageRow->Add(txtImagePath, 1, wxEXPAND | wxRIGHT, 4);
-	imageRow->Add(new wxButton(this, ID_BROWSE_IMAGE, "Browse..."), 0);
+	imageRow->Add(new wxButton(content, ID_BROWSE_IMAGE, "Browse..."), 0);
 	grid->Add(imageRow, 1, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Legend / color mappings (JSON):"), 0, wxALIGN_CENTER_VERTICAL);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Legend / color mappings (JSON):"), 0, wxALIGN_CENTER_VERTICAL);
 	wxBoxSizer* legendRow = new wxBoxSizer(wxHORIZONTAL);
-	txtLegendPath = new wxTextCtrl(this, wxID_ANY, g_gui.GetProceduralDataDirectory() + wxString("default_legend.json"));
+	txtLegendPath = new wxTextCtrl(content, wxID_ANY, g_gui.GetProceduralDataDirectory() + wxString("default_legend.json"));
 	legendRow->Add(txtLegendPath, 1, wxEXPAND | wxRIGHT, 4);
-	legendRow->Add(new wxButton(this, ID_BROWSE_LEGEND, "Browse..."), 0);
+	legendRow->Add(new wxButton(content, ID_BROWSE_LEGEND, "Browse..."), 0);
 	grid->Add(legendRow, 1, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Prompt:"), 0, wxALIGN_TOP);
-	txtPrompt = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(-1, 72), wxTE_MULTILINE);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Prompt:"), 0, wxALIGN_TOP);
+	txtPrompt = new wxTextCtrl(content, wxID_ANY, "", wxDefaultPosition, wxSize(-1, 72), wxTE_MULTILINE);
 	grid->Add(txtPrompt, 1, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Preset:"), 0, wxALIGN_CENTER_VERTICAL);
-	cboPreset = new wxComboBox(this, ID_PRESET, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxCB_READONLY);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Preset:"), 0, wxALIGN_CENTER_VERTICAL);
+	cboPreset = new wxComboBox(content, ID_PRESET, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0, nullptr, wxCB_READONLY);
 	cboPreset->Append("Auto (from prompt)");
 	cboPreset->Append("Forest");
 	cboPreset->Append("Desert");
@@ -79,43 +125,59 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	cboPreset->SetSelection(0);
 	grid->Add(cboPreset, 1, wxEXPAND);
 
-	lblElevation = new wxStaticText(this, wxID_ANY, "Elevation / depth (0 = auto/off):");
+	lblElevation = new wxStaticText(content, wxID_ANY, "Elevation / depth (0 = auto/off):");
 	grid->Add(lblElevation, 0, wxALIGN_CENTER_VERTICAL);
-	spnElevation = new wxSpinCtrl(this, ID_ELEVATION, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 6, 0);
+	spnElevation = new wxSpinCtrl(content, ID_ELEVATION, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 6, 0);
 	grid->Add(spnElevation, 0, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Reference blend %:"), 0, wxALIGN_CENTER_VERTICAL);
-	spnReferenceWeight = new wxSpinCtrl(this, ID_REFERENCE_WEIGHT, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 35);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Reference blend %:"), 0, wxALIGN_CENTER_VERTICAL);
+	spnReferenceWeight = new wxSpinCtrl(content, ID_REFERENCE_WEIGHT, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 35);
 	grid->Add(spnReferenceWeight, 0, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Size (w x h x z):"), 0, wxALIGN_CENTER_VERTICAL);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Size (w x h x z):"), 0, wxALIGN_CENTER_VERTICAL);
 	wxBoxSizer* sizeRow = new wxBoxSizer(wxHORIZONTAL);
-	spnWidth = new wxSpinCtrl(this, wxID_ANY, "512", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 8, 65000, 512);
-	spnHeight = new wxSpinCtrl(this, wxID_ANY, "512", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 8, 65000, 512);
-	spnZ = new wxSpinCtrl(this, wxID_ANY, "7", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 15, 7);
+	spnWidth = new wxSpinCtrl(content, wxID_ANY, "512", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 8, 65000, 512);
+	spnHeight = new wxSpinCtrl(content, wxID_ANY, "512", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 8, 65000, 512);
+	spnZ = new wxSpinCtrl(content, wxID_ANY, "7", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 15, 7);
 	sizeRow->Add(spnWidth, 0, wxRIGHT, 4);
 	sizeRow->Add(spnHeight, 0, wxRIGHT, 4);
 	sizeRow->Add(spnZ, 0);
 	grid->Add(sizeRow, 1, wxEXPAND);
 
-	grid->Add(new wxStaticText(this, wxID_ANY, "Seed:"), 0, wxALIGN_CENTER_VERTICAL);
-	spnSeed = new wxSpinCtrl(this, wxID_ANY, "1337", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, std::numeric_limits<int>::max(), 1337);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Seed:"), 0, wxALIGN_CENTER_VERTICAL);
+	spnSeed = new wxSpinCtrlDouble(content, wxID_ANY, "1337", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 4294967295.0, 1337, 1);
+	spnSeed->SetDigits(0);
 	grid->Add(spnSeed, 0, wxEXPAND);
 
+	grid->Add(new wxStaticText(content, wxID_ANY, "Origin (x, y):"), 0, wxALIGN_CENTER_VERTICAL);
+	wxBoxSizer* originRow = new wxBoxSizer(wxHORIZONTAL);
+	spnOriginX = new wxSpinCtrl(content, wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, MAP_MAX_WIDTH, 0);
+	spnOriginY = new wxSpinCtrl(content, wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, MAP_MAX_HEIGHT, 0);
+	originRow->Add(spnOriginX, 1, wxRIGHT, 4);
+	originRow->Add(spnOriginY, 1);
+	grid->Add(originRow, 1, wxEXPAND);
 	top->Add(grid, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
-	wxStaticBoxSizer* sbTarget = new wxStaticBoxSizer(wxVERTICAL, this, "Target area");
-	chkUseSelection = new wxCheckBox(this, ID_USE_SELECTION, "Use current map selection");
+	wxStaticBoxSizer* sbTarget = new wxStaticBoxSizer(wxVERTICAL, content, "Target area");
+	chkUseSelection = new wxCheckBox(content, ID_USE_SELECTION, "Use current map selection");
 	sbTarget->Add(chkUseSelection, 0, wxALL, 4);
-	sbTarget->Add(new wxStaticText(this, wxID_ANY, "Mountains stack up (z+); caves stack down (z-). Ground is usually z=7."), 0, wxALL, 4);
+	sbTarget->Add(new wxStaticText(content, wxID_ANY, "Mountains use smaller z; caves use larger z. Surface is usually z=7."), 0, wxALL, 4);
 	top->Add(sbTarget, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
-	wxStaticBoxSizer* sbPipeline = new wxStaticBoxSizer(wxVERTICAL, this, "Post-processing");
-	chkBorderize = new wxCheckBox(this, ID_BORDERIZE, "Borderize after generation");
-	chkRandomize = new wxCheckBox(this, ID_RANDOMIZE, "Randomize ground variants");
-	chkPlaceWalls = new wxCheckBox(this, ID_PLACE_WALLS, "Place walls on cave/city edges");
-	chkDoodads = new wxCheckBox(this, ID_DOODADS, "Place biome doodads (trees, ice props, etc.)");
-	chkSidecar = new wxCheckBox(this, ID_SIDECAR, "Run Python sidecar (LLM hook)");
+	wxStaticBoxSizer* worldBox = new wxStaticBoxSizer(wxVERTICAL, content, "World generation");
+	chkProtectExisting = new wxCheckBox(content, wxID_ANY, "Protect existing tiles");
+	chkProtectExisting->SetValue(true);
+	worldBox->Add(chkProtectExisting, 0, wxALL, 4);
+	btnWorldSettings = new wxButton(content, ID_WORLD_SETTINGS, "World settings...");
+	worldBox->Add(btnWorldSettings, 0, wxALL, 4);
+	top->Add(worldBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
+	wxStaticBoxSizer* sbPipeline = new wxStaticBoxSizer(wxVERTICAL, content, "Post-processing");
+	chkBorderize = new wxCheckBox(content, ID_BORDERIZE, "Borderize after generation");
+	chkRandomize = new wxCheckBox(content, ID_RANDOMIZE, "Randomize ground variants");
+	chkPlaceWalls = new wxCheckBox(content, ID_PLACE_WALLS, "Place walls on cave/city edges");
+	chkDoodads = new wxCheckBox(content, ID_DOODADS, "Place biome doodads (trees, ice props, etc.)");
+	chkSidecar = new wxCheckBox(content, ID_SIDECAR, "Run Python sidecar (LLM hook)");
 	chkBorderize->SetValue(true);
 	sbPipeline->Add(chkBorderize, 0, wxALL, 4);
 	sbPipeline->Add(chkRandomize, 0, wxALL, 4);
@@ -123,24 +185,28 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	sbPipeline->Add(chkDoodads, 0, wxALL, 4);
 	sbPipeline->Add(chkSidecar, 0, wxALL, 4);
 	wxBoxSizer* doodadRow = new wxBoxSizer(wxHORIZONTAL);
-	doodadRow->Add(new wxStaticText(this, wxID_ANY, "Doodad density %:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
-	spnDoodadDensity = new wxSpinCtrl(this, ID_DOODAD_DENSITY, "12", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 40, 12);
+	doodadRow->Add(new wxStaticText(content, wxID_ANY, "Doodad density %:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	spnDoodadDensity = new wxSpinCtrl(content, ID_DOODAD_DENSITY, "12", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 40, 12);
 	doodadRow->Add(spnDoodadDensity, 0);
 	sbPipeline->Add(doodadRow, 0, wxALL, 4);
 	top->Add(sbPipeline, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxBoxSizer* bottom = new wxBoxSizer(wxHORIZONTAL);
-	btnGenerate = new wxButton(this, ID_GENERATE, "Generate");
+	btnGenerate = new wxButton(content, ID_GENERATE, "Generate");
 	bottom->Add(btnGenerate, 0, wxRIGHT, 8);
-	bottom->Add(new wxButton(this, ID_SAVE_RECIPE, "Save recipe..."), 0, wxRIGHT, 8);
-	bottom->Add(new wxButton(this, ID_LOAD_RECIPE, "Load recipe..."), 0, wxRIGHT, 8);
-	bottom->Add(new wxButton(this, wxID_CANCEL, "Close"), 0);
+	bottom->Add(new wxButton(content, ID_SAVE_RECIPE, "Save recipe..."), 0, wxRIGHT, 8);
+	bottom->Add(new wxButton(content, ID_LOAD_RECIPE, "Load recipe..."), 0, wxRIGHT, 8);
+	bottom->Add(new wxButton(content, wxID_CANCEL, "Close"), 0);
 	top->Add(bottom, 0, wxALIGN_RIGHT | wxALL, 8);
 
-	SetSizer(top);
+	content->SetSizer(top);
+	wxBoxSizer* outer = new wxBoxSizer(wxVERTICAL);
+	outer->Add(content, 1, wxEXPAND);
+	SetSizer(outer);
 	Layout();
 	Centre(wxBOTH);
-	SetMinSize(wxSize(520, 640));
+	SetMinSize(DialogSize(this, 520, 480));
+	SetSize(DialogSize(this, 560, 680));
 
 	rbImageMask->SetValue(true);
 	UpdateElevationLabel();
@@ -158,6 +224,8 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	Bind(wxEVT_BUTTON, &ProceduralDialog::OnBrowseLegend, this, ID_BROWSE_LEGEND);
 	Bind(wxEVT_BUTTON, &ProceduralDialog::OnSaveRecipe, this, ID_SAVE_RECIPE);
 	Bind(wxEVT_BUTTON, &ProceduralDialog::OnLoadRecipe, this, ID_LOAD_RECIPE);
+	Bind(wxEVT_BUTTON, &ProceduralDialog::OnWorldSettings, this, ID_WORLD_SETTINGS);
+	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_WORLD);
 	Bind(wxEVT_BUTTON, &ProceduralDialog::OnGenerate, this, ID_GENERATE);
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_IMAGE);
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_PROMPT);
@@ -171,6 +239,8 @@ void ProceduralDialog::SyncFromSelection() {
 		spnWidth->Enable(true);
 		spnHeight->Enable(true);
 		spnZ->Enable(true);
+		spnOriginX->Enable(true);
+		spnOriginY->Enable(true);
 		return;
 	}
 
@@ -179,9 +249,13 @@ void ProceduralDialog::SyncFromSelection() {
 	spnWidth->SetValue(maxPos.x - minPos.x + 1);
 	spnHeight->SetValue(maxPos.y - minPos.y + 1);
 	spnZ->SetValue(minPos.z);
+	spnOriginX->SetValue(minPos.x);
+	spnOriginY->SetValue(minPos.y);
 	spnWidth->Enable(false);
 	spnHeight->Enable(false);
 	spnZ->Enable(false);
+	spnOriginX->Enable(false);
+	spnOriginY->Enable(false);
 }
 
 void ProceduralDialog::UpdateElevationLabel() {
@@ -200,15 +274,29 @@ void ProceduralDialog::OnUseSelectionChanged(wxCommandEvent& event) {
 }
 
 void ProceduralDialog::OnModeChanged(wxCommandEvent& event) {
+	const bool worldMode = rbWorldPlan->GetValue();
 	const bool imageMode = rbImageMask->GetValue();
 	const bool promptImageMode = rbPromptWithImage->GetValue();
 	const bool promptMode = rbTextPrompt->GetValue() || promptImageMode;
-
-	txtImagePath->Enable(imageMode || promptImageMode);
+	txtImagePath->Enable(!worldMode && (imageMode || promptImageMode));
 	txtLegendPath->Enable(true);
-	txtPrompt->Enable(promptMode);
-	cboPreset->Enable(promptMode);
-	spnReferenceWeight->Enable(promptImageMode);
+	txtPrompt->Enable(!worldMode && promptMode);
+	cboPreset->Enable(!worldMode && promptMode);
+	spnReferenceWeight->Enable(!worldMode && promptImageMode);
+	spnElevation->Enable(!worldMode);
+	chkSidecar->Enable(!worldMode);
+	chkPlaceWalls->Enable(!worldMode);
+	chkPlaceWalls->SetLabel(worldMode ? "Building walls are required by the world planner" : "Place walls on cave/city edges");
+	btnWorldSettings->Enable(worldMode);
+	chkProtectExisting->Enable(worldMode);
+	btnGenerate->SetLabel(worldMode ? "Preview world..." : "Generate");
+	if (worldMode && txtLegendPath->GetValue().EndsWith("default_legend.json")) {
+		txtLegendPath->SetValue(g_gui.GetProceduralDataDirectory() + "world_legend.json");
+		chkPlaceWalls->SetValue(true);
+		chkRandomize->SetValue(true);
+	} else if (!worldMode && txtLegendPath->GetValue().EndsWith("world_legend.json")) {
+		txtLegendPath->SetValue(g_gui.GetProceduralDataDirectory() + "default_legend.json");
+	}
 }
 
 void ProceduralDialog::OnPresetChanged(wxCommandEvent& event) {
@@ -278,6 +366,10 @@ void ProceduralDialog::SetPresetSelection(GenerationPreset preset) {
 
 GenerationSpec ProceduralDialog::BuildSpecFromDialog() const {
 	GenerationSpec spec;
+	spec.region.originX = spnOriginX->GetValue();
+	spec.region.originY = spnOriginY->GetValue();
+	spec.world = worldSettings;
+	spec.world.protectExisting = chkProtectExisting->GetValue();
 	spec.region.width = spnWidth->GetValue();
 	spec.region.height = spnHeight->GetValue();
 	spec.region.z = spnZ->GetValue();
@@ -288,7 +380,7 @@ GenerationSpec ProceduralDialog::BuildSpecFromDialog() const {
 	spec.doodads.enabled = chkDoodads->GetValue();
 	spec.doodads.density = spnDoodadDensity->GetValue();
 	spec.reference.blendWeight = spnReferenceWeight->GetValue();
-	spec.useSidecar = chkSidecar->GetValue();
+	spec.useSidecar = !rbWorldPlan->GetValue() && chkSidecar->GetValue();
 	spec.pipeline.borderizeAfter = chkBorderize->GetValue();
 	spec.pipeline.randomizeGround = chkRandomize->GetValue();
 	spec.pipeline.placeWalls = chkPlaceWalls->GetValue();
@@ -296,7 +388,9 @@ GenerationSpec ProceduralDialog::BuildSpecFromDialog() const {
 	spec.imageMask.imagePath = txtImagePath->GetValue();
 	spec.textPrompt.prompt = txtPrompt->GetValue();
 
-	if (rbImageMask->GetValue()) {
+	if (rbWorldPlan->GetValue()) {
+		spec.source = GenerationSource::WorldPlan;
+	} else if (rbImageMask->GetValue()) {
 		spec.source = GenerationSource::ImageMask;
 	} else if (rbPromptWithImage->GetValue()) {
 		spec.source = GenerationSource::PromptWithImage;
@@ -307,11 +401,15 @@ GenerationSpec ProceduralDialog::BuildSpecFromDialog() const {
 }
 
 void ProceduralDialog::ApplySpecToDialog(const GenerationSpec& spec) {
+	worldSettings = spec.world;
+	chkProtectExisting->SetValue(spec.world.protectExisting);
+	spnOriginX->SetValue(spec.region.originX);
+	spnOriginY->SetValue(spec.region.originY);
 	spnWidth->SetValue(spec.region.width);
 	spnHeight->SetValue(spec.region.height);
 	spnZ->SetValue(spec.region.z);
 	chkUseSelection->SetValue(spec.useSelection);
-	spnSeed->SetValue(static_cast<int>(spec.seed));
+	spnSeed->SetValue(static_cast<double>(spec.seed));
 	SetPresetSelection(spec.preset);
 	spnElevation->SetValue(spec.elevation.maxLevels);
 	chkDoodads->SetValue(spec.doodads.enabled);
@@ -325,6 +423,7 @@ void ProceduralDialog::ApplySpecToDialog(const GenerationSpec& spec) {
 	txtImagePath->SetValue(spec.imageMask.imagePath);
 	txtPrompt->SetValue(spec.textPrompt.prompt);
 
+	rbWorldPlan->SetValue(spec.source == GenerationSource::WorldPlan);
 	rbImageMask->SetValue(spec.source == GenerationSource::ImageMask);
 	rbTextPrompt->SetValue(spec.source == GenerationSource::TextPrompt);
 	rbPromptWithImage->SetValue(spec.source == GenerationSource::PromptWithImage);
@@ -355,7 +454,7 @@ void ProceduralDialog::OnSaveRecipe(wxCommandEvent& event) {
 		return;
 	}
 	wxString error;
-	if (!ProceduralRecipe::Save(dlg.GetPath(), BuildSpecFromDialog(), error)) {
+	if (!ProceduralRecipe::Save(dlg.GetPath(), BuildSpecFromDialog(), error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 		g_gui.PopupDialog(this, "Save failed", error, wxOK | wxICON_ERROR);
 	}
 }
@@ -375,6 +474,10 @@ void ProceduralDialog::OnLoadRecipe(wxCommandEvent& event) {
 }
 
 void ProceduralDialog::OnGenerate(wxCommandEvent& event) {
+	if (rbWorldPlan->GetValue()) {
+		OnPreviewWorld(event);
+		return;
+	}
 	const GenerationSpec spec = BuildSpecFromDialog();
 	wxString error;
 	if (!ProceduralHeadless::Run(editor, spec, error)) {
@@ -382,4 +485,358 @@ void ProceduralDialog::OnGenerate(wxCommandEvent& event) {
 			g_gui.PopupDialog(this, "Generation failed", error, wxOK | wxICON_ERROR);
 		}
 	}
+}
+
+void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
+	wxDialog dialog(this, wxID_ANY, "World settings", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+	auto* content = new wxScrolledWindow(&dialog, wxID_ANY);
+	content->SetScrollRate(0, 16);
+	wxBoxSizer* layout = new wxBoxSizer(wxVERTICAL);
+	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 8, 8);
+	grid->AddGrowableCol(1);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Land shape:"), 0, wxALIGN_CENTER_VERTICAL);
+	wxChoice* shape = new wxChoice(content, wxID_ANY);
+	shape->Append("Continent");
+	shape->Append("Archipelago");
+	shape->SetSelection(worldSettings.settings.shape == WorldGen::LandShape::Archipelago ? 1 : 0);
+	grid->Add(shape, 1, wxEXPAND);
+	auto spin = [&](const wxString& label, int low, int high, int initial) {
+		grid->Add(new wxStaticText(content, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
+		auto* control = new wxSpinCtrl(content, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, low, high, initial);
+		grid->Add(control, 1, wxEXPAND);
+		return control;
+	};
+	grid->Add(new wxStaticText(content, wxID_ANY, "Settlement layout:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* settlementLayout = new wxChoice(content, wxID_ANY);
+	settlementLayout->Append("Organic village lots");
+	settlementLayout->Append("City street blocks");
+	settlementLayout->SetSelection(worldSettings.settings.settlementLayout == WorldGen::SettlementLayout::Blocks ? 1 : 0);
+	grid->Add(settlementLayout, 1, wxEXPAND);
+	const auto& settings = worldSettings.settings;
+	auto* sea = spin("Sea level (2000-6500):", 2000, 6500, settings.seaLevel);
+	auto* roughness = spin("Coast roughness %:", 0, 100, settings.coastRoughness);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Relief style:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* relief = new wxChoice(content, wxID_ANY);
+	relief->Append("Smooth highlands");
+	relief->Append("Mountain ridges and breached valleys");
+	relief->SetSelection(settings.relief == WorldGen::ReliefStyle::Ridges ? 1 : 0);
+	grid->Add(relief, 1, wxEXPAND);
+	auto* biomeDetail = spin("Local biome variation %:", 0, 100, settings.biomeDetail);
+	auto* temperature = spin("Temperature adjustment:", -5000, 5000, settings.temperatureBias);
+	auto* moisture = spin("Moisture adjustment:", -5000, 5000, settings.moistureBias);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Maximum river width:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* riverWidth = new wxChoice(content, wxID_ANY);
+	for (const char* width : { "1", "3", "5", "7" }) {
+		riverWidth->Append(width);
+	}
+	riverWidth->SetSelection((settings.riverWidth - 1) / 2);
+	grid->Add(riverWidth, 1, wxEXPAND);
+	auto* rivers = spin("River sources:", 0, 64, settings.riverCount);
+	auto* towns = spin("Settlements:", 0, 32, settings.settlementCount);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Settlement habitats:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* diverseSettlements = new wxCheckBox(content, wxID_ANY, "Prefer different biomes");
+	diverseSettlements->SetValue(settings.diverseSettlements);
+	grid->Add(diverseSettlements, 0, wxEXPAND);
+	auto* buildings = spin("Buildings per settlement:", 0, 64, settings.buildingsPerSettlement);
+	auto* floors = spin("Building floors:", 1, 4, settings.buildingLevels);
+	auto* depth = spin("Cave floors below surface:", 0, 8, settings.caveDepth);
+	auto* caveEntrances = spin("Surface cave entrances:", 1, 16, settings.caveEntrances);
+	caveEntrances->Enable(settings.caveDepth > 0);
+	depth->Bind(wxEVT_SPINCTRL, [=](wxSpinEvent&) { caveEntrances->Enable(depth->GetValue() > 0); });
+	depth->Bind(wxEVT_TEXT, [=](wxCommandEvent& event) { caveEntrances->Enable(depth->GetValue() > 0); event.Skip(); });
+	auto* fill = spin("Cave initial rock density %:", 20, 65, settings.caveFill);
+	auto* road = spin("Road width:", 1, 4, settings.roadWidth);
+	auto* travel = spin("Travel teleport server ID (0 = auto):", 0, 65535, worldSettings.connectionItemId);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Building wall brush:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* wall = new wxTextCtrl(content, wxID_ANY, worldSettings.wallBrushName);
+	grid->Add(wall, 1, wxEXPAND);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Construction catalog (blank = default):"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* catalogRow = new wxBoxSizer(wxHORIZONTAL);
+	auto* catalog = new wxTextCtrl(content, wxID_ANY, worldSettings.catalogPath);
+	auto* browseCatalog = new wxButton(content, wxID_ANY, "Browse...");
+	catalogRow->Add(catalog, 1, wxRIGHT, 4);
+	catalogRow->Add(browseCatalog, 0);
+	grid->Add(catalogRow, 1, wxEXPAND);
+	browseCatalog->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+		wxFileDialog picker(content, "Choose construction catalog", "", "", "JSON (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+		if (picker.ShowModal() == wxID_OK) {
+			catalog->SetValue(picker.GetPath());
+		}
+	});
+	auto pngPath = [&](const wxString& label, const wxString& initial) {
+		grid->Add(new wxStaticText(content, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
+		auto* row = new wxBoxSizer(wxHORIZONTAL);
+		auto* path = new wxTextCtrl(content, wxID_ANY, initial);
+		auto* browse = new wxButton(content, wxID_ANY, "Browse...");
+		row->Add(path, 1, wxRIGHT, 4);
+		row->Add(browse, 0);
+		grid->Add(row, 1, wxEXPAND);
+		browse->Bind(wxEVT_BUTTON, [&, path, label](wxCommandEvent&) {wxFileDialog picker(content,label,"","","PNG (*.png)|*.png",wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK){path->SetValue(picker.GetPath());
+} });
+		return path;
+	};
+	auto* heightmap = pngPath("Heightmap PNG (optional grayscale):", worldSettings.heightmapPath);
+	auto* biomeHints = pngPath("Biome hints PNG (optional palette):", worldSettings.biomeHintsPath);
+	layout->Add(grid, 1, wxEXPAND | wxALL, 12);
+	auto* note = new wxStaticText(content, wxID_ANY, "Multi-floor travel uses paired teleports with safe arrival tiles.\nThe legend must match the grounds and brushes of your loaded client.");
+	layout->Add(note, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
+	content->SetSizer(layout);
+	auto* outer = new wxBoxSizer(wxVERTICAL);
+	outer->Add(content, 1, wxEXPAND);
+	outer->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxALL, 12);
+	dialog.SetSizer(outer);
+	dialog.SetSize(DialogSize(this, 720, 790));
+	dialog.CentreOnParent();
+	if (dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+	GenerationWorld candidate = worldSettings;
+	candidate.settings.settlementLayout = settlementLayout->GetSelection() == 1 ? WorldGen::SettlementLayout::Blocks : WorldGen::SettlementLayout::Organic;
+	candidate.settings.shape = shape->GetSelection() == 1 ? WorldGen::LandShape::Archipelago : WorldGen::LandShape::Continent;
+	candidate.settings.seaLevel = sea->GetValue();
+	candidate.settings.coastRoughness = roughness->GetValue();
+	candidate.settings.relief = relief->GetSelection() == 1 ? WorldGen::ReliefStyle::Ridges : WorldGen::ReliefStyle::Smooth;
+	candidate.settings.biomeDetail = biomeDetail->GetValue();
+	candidate.settings.temperatureBias = temperature->GetValue();
+	candidate.settings.moistureBias = moisture->GetValue();
+	candidate.settings.riverWidth = 1 + 2 * riverWidth->GetSelection();
+	candidate.settings.riverCount = rivers->GetValue();
+	candidate.settings.settlementCount = towns->GetValue();
+	candidate.settings.diverseSettlements = diverseSettlements->GetValue();
+	candidate.settings.buildingsPerSettlement = buildings->GetValue();
+	candidate.settings.buildingLevels = floors->GetValue();
+	candidate.settings.caveDepth = depth->GetValue();
+	candidate.settings.caveEntrances = caveEntrances->GetValue();
+	candidate.settings.caveFill = fill->GetValue();
+	candidate.settings.roadWidth = road->GetValue();
+	candidate.connectionItemId = travel->GetValue();
+	candidate.wallBrushName = wall->GetValue();
+	candidate.catalogPath = catalog->GetValue();
+	candidate.heightmapPath = heightmap->GetValue();
+	candidate.biomeHintsPath = biomeHints->GetValue();
+	worldSettings = candidate;
+}
+
+void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
+	GenerationSpec resolved;
+	WorldGen::Plan plan;
+	wxString error;
+	bool planned = false;
+	{
+		wxProgressDialog progress("Planning world", "Preparing geography", 100, this, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
+		planned = WorldEditor::BuildPlan(editor, BuildSpecFromDialog(), resolved, plan, error, DialogProgress(progress));
+	}
+	if (!planned) {
+		if (error != "World generation cancelled.") {
+			g_gui.PopupDialog(this, "World preview failed", error, wxOK | wxICON_ERROR);
+		}
+		return;
+	}
+	wxDialog preview(this, wxID_ANY, "World preview", wxDefaultPosition, DialogSize(this, 760, 850), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+	wxBoxSizer* layout = new wxBoxSizer(wxVERTICAL);
+	wxBoxSizer* controls = new wxBoxSizer(wxHORIZONTAL);
+	auto* floors = new wxChoice(&preview, wxID_ANY);
+	for (const auto& layer : plan.layers) {
+		floors->Append(wxString::Format("Floor z=%d%s", resolved.region.z + layer.offsetZ, layer.offsetZ == 0 ? " (surface)" : ""));
+	}
+	floors->SetSelection(0);
+	auto* views = new wxChoice(&preview, wxID_ANY);
+	for (const auto* label : { "Terrain", "Elevation", "Moisture", "Temperature", "Construction roles" }) {
+		views->Append(label);
+	}
+	views->SetSelection(0);
+	controls->Add(floors, 1, wxRIGHT, 8);
+	controls->Add(views, 1, wxRIGHT, 8);
+	auto* zoom = new wxChoice(&preview, wxID_ANY);
+	for (const auto* label : { "Fit", "100%", "200%", "400%" }) {
+		zoom->Append(label);
+	}
+	zoom->SetSelection(0);
+	controls->Add(zoom, 0);
+	layout->Add(controls, 0, wxEXPAND | wxALL, 8);
+	auto* seedRow = new wxBoxSizer(wxHORIZONTAL);
+	seedRow->Add(new wxStaticText(&preview, wxID_ANY, "Try seed:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	auto* seed = new wxSpinCtrlDouble(&preview, wxID_ANY, std::to_string(plan.settings.seed), wxDefaultPosition, wxSize(150, -1), wxSP_ARROW_KEYS, 0, 4294967295.0, plan.settings.seed, 1);
+	seed->SetDigits(0);
+	seedRow->Add(seed, 1, wxRIGHT, 6);
+	auto* previousSeed = new wxButton(&preview, wxID_ANY, "Previous seed");
+	auto* nextSeed = new wxButton(&preview, wxID_ANY, "Next seed");
+	auto* rebuild = new wxButton(&preview, wxID_ANY, "Preview seed");
+	seedRow->Add(previousSeed, 0, wxRIGHT, 6);
+	seedRow->Add(nextSeed, 0, wxRIGHT, 6);
+	seedRow->Add(rebuild, 0);
+	layout->Add(seedRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+	auto* canvas = new wxScrolledWindow(&preview, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxHSCROLL | wxVSCROLL | wxFULL_REPAINT_ON_RESIZE);
+	canvas->SetMinSize(wxSize(120, 100));
+	canvas->SetScrollRate(16, 16);
+	canvas->SetBackgroundStyle(wxBG_STYLE_PAINT);
+	canvas->SetToolTip("Choose a zoom level to inspect buildings; use the scroll bars to explore the plan.");
+	layout->Add(canvas, 1, wxEXPAND | wxALL, 8);
+	auto* inspection = new wxStaticText(&preview, wxID_ANY, "Point at a tile to inspect its coordinates, terrain and climate.", wxDefaultPosition, wxDefaultSize, wxST_NO_AUTORESIZE | wxST_ELLIPSIZE_END);
+	inspection->SetToolTip("Elevation, moisture and temperature are normalized to 0..10000.");
+	layout->Add(inspection, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+	auto* description = new wxTextCtrl(&preview, wxID_ANY, "", wxDefaultPosition, wxSize(-1, 95), wxTE_MULTILINE | wxTE_READONLY);
+	layout->Add(description, 0, wxEXPAND | wxLEFT | wxRIGHT, 8);
+	wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
+	auto* apply = new wxButton(&preview, wxID_OK, "Apply displayed world");
+	buttons->Add(apply, 0, wxRIGHT, 8);
+	auto* exportPlan = new wxButton(&preview, wxID_ANY, "Export plan / editable PNGs...");
+	buttons->Add(exportPlan, 0, wxRIGHT, 8);
+	buttons->Add(new wxButton(&preview, wxID_CANCEL, "Close"));
+	layout->Add(buttons, 0, wxALIGN_RIGHT | wxALL, 8);
+	preview.SetSizer(layout);
+	auto updateDescription = [&]() {
+		size_t tiles = 0;
+		description->SetValue(WorldEditor::Describe(plan, &tiles));
+		const bool fits = tiles <= WorldEditor::DefaultTileBudget;
+		apply->Enable(fits);
+		apply->SetToolTip(fits ? "Apply this displayed plan in one undo operation." : "This plan exceeds the editor tile budget. Reduce its size/floors or export in a 64-bit batch with --tile-budget.");
+	};
+	wxBitmap rendered;
+	int renderedFloor = -1, renderedView = -1;
+	double previewScale = 1.0;
+	auto redraw = [&]() {
+		const int index = floors->GetSelection();
+		if (index < 0) {
+			return;
+		}
+		const int view = views->GetSelection();
+		if (!rendered.IsOk() || renderedFloor != index || renderedView != view) {
+			const wxImage image = WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
+			rendered = image.IsOk() ? wxBitmap(image) : wxNullBitmap;
+			renderedFloor = index;
+			renderedView = view;
+		}
+		if (!rendered.IsOk()) {
+			inspection->SetLabel("Could not allocate the preview image. Reduce the region or floor count.");
+			return;
+		}
+		const wxSize area = canvas->GetClientSize();
+		previewScale = zoom->GetSelection() == 0 ? std::min(std::max(1, area.x) / double(rendered.GetWidth()), std::max(1, area.y) / double(rendered.GetHeight())) : double(1 << (zoom->GetSelection() - 1));
+		canvas->SetVirtualSize(std::max(1, int(rendered.GetWidth() * previewScale)), std::max(1, int(rendered.GetHeight() * previewScale)));
+		if (zoom->GetSelection() == 0) {
+			canvas->Scroll(0, 0);
+		}
+		canvas->Refresh(false);
+	};
+	canvas->Bind(wxEVT_PAINT, [&](wxPaintEvent&) {
+		wxPaintDC dc(canvas);
+		dc.SetBackground(wxBrush(canvas->GetBackgroundColour()));
+		dc.Clear();
+		canvas->PrepareDC(dc);
+		// Scale at drawing time: even 4096-square plans avoid a 16384-square bitmap.
+		dc.SetUserScale(previewScale, previewScale);
+		if (rendered.IsOk()) {
+			dc.DrawBitmap(rendered, 0, 0, true);
+		}
+	});
+	canvas->Bind(wxEVT_MOTION, [&](wxMouseEvent& event) {
+		const wxPoint pixel = canvas->CalcUnscrolledPosition(event.GetPosition());
+		const WorldGen::Point point { int(std::floor(pixel.x / previewScale)), int(std::floor(pixel.y / previewScale)) };
+		const int index = floors->GetSelection();
+		if (index >= 0 && plan.Contains(point)) {
+			const auto& layer = plan.layers[index];
+			const auto& cell = layer.cells[plan.Index(point)];
+			inspection->SetLabel(wxString::Format("(%d, %d, %d)  %s  |  elevation %u  moisture %u  temperature %u", resolved.region.originX + point.x, resolved.region.originY + point.y, resolved.region.z + layer.offsetZ, wxString::FromUTF8(WorldGen::TerrainName(cell.terrain)), unsigned(cell.elevation), unsigned(cell.moisture), unsigned(cell.temperature)));
+		}
+		event.Skip();
+	});
+	auto regenerate = [&](uint32_t requestedSeed) {
+		GenerationSpec candidate = resolved, candidateResolved;
+		candidate.seed = requestedSeed;
+		WorldGen::Plan candidatePlan;
+		bool generated = false;
+		{
+			wxProgressDialog progress("Planning world", "Preparing geography", 100, &preview, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
+			generated = WorldEditor::BuildPlan(editor, candidate, candidateResolved, candidatePlan, error, DialogProgress(progress));
+		}
+		if (!generated) {
+			seed->SetValue(double(plan.settings.seed));
+			if (error != "World generation cancelled.") {
+				g_gui.PopupDialog(&preview, "World preview failed", error, wxOK | wxICON_ERROR);
+			}
+			return;
+		}
+		const int selected = floors->GetSelection();
+		const int oldFloor = selected >= 0 ? plan.layers[selected].offsetZ : 0;
+		plan = std::move(candidatePlan);
+		resolved = std::move(candidateResolved);
+		rendered = wxNullBitmap;
+		floors->Clear();
+		int selectedFloor = 0;
+		for (const auto& layer : plan.layers) {
+			if (layer.offsetZ == oldFloor) {
+				selectedFloor = int(floors->GetCount());
+			}
+			floors->Append(wxString::Format("Floor z=%d%s", resolved.region.z + layer.offsetZ, layer.offsetZ == 0 ? " (surface)" : ""));
+		}
+		floors->SetSelection(selectedFloor);
+		seed->SetValue(double(plan.settings.seed));
+		spnSeed->SetValue(double(plan.settings.seed));
+		updateDescription();
+		redraw();
+	};
+	previousSeed->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(plan.settings.seed - uint32_t(1)); });
+	nextSeed->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(plan.settings.seed + uint32_t(1)); });
+	rebuild->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) { regenerate(uint32_t(seed->GetValue())); });
+	canvas->Bind(wxEVT_SIZE, [&](wxSizeEvent& event) {redraw();event.Skip(); });
+	zoom->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
+	floors->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
+	views->Bind(wxEVT_CHOICE, [&](wxCommandEvent&) { redraw(); });
+	exportPlan->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+		wxFileDialog picker(&preview, "Export plan diagnostics", "", "world-plan.json", "JSON manifest (*.json)|*.json", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+		if (picker.ShowModal() != wxID_OK) {
+			return;
+		}
+		wxFileName prefix(picker.GetPath());
+		prefix.ClearExt();
+		std::string exportError;
+		wxBusyCursor busy;
+		if (!WorldGen::ExportDiagnostics(plan, nstr(prefix.GetFullPath()), exportError)) {
+			g_gui.PopupDialog(&preview, "Export failed", wxstr(exportError), wxOK | wxICON_ERROR);
+			return;
+		}
+		GenerationSpec editable = resolved;
+		editable.world.settings = plan.settings;
+		if (!WorldGen::ExportGeographyInputs(plan, prefix.GetFullPath(), editable.world.heightmapPath, editable.world.biomeHintsPath, error) || !ProceduralRecipe::Save(prefix.GetFullPath() + "_editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
+			g_gui.PopupDialog(&preview, "Export failed", error, wxOK | wxICON_ERROR);
+			return;
+		}
+		const char* names[] = { "terrain", "elevation", "moisture", "temperature", "roles" };
+		wxPNGHandler encoder;
+		for (const auto& layer : plan.layers) {
+			for (int view = 0; view < 5; ++view) {
+				const wxString filename = prefix.GetFullPath() + wxString::Format("_z%d_%s.png", layer.offsetZ, wxString::FromUTF8(names[view]));
+				wxImage image = WorldEditor::Render(plan, layer.offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
+				wxFileOutputStream stream(filename);
+				if (!stream.IsOk() || !encoder.SaveFile(&image, stream, false)) {
+					g_gui.PopupDialog(&preview, "Export failed", "Could not write " + filename, wxOK | wxICON_ERROR);
+					return;
+				}
+			}
+		}
+		g_gui.SetStatusText("World plan diagnostics exported to " + prefix.GetFullPath());
+	});
+	apply->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+		bool applied = false;
+		{
+			wxProgressDialog progress("Applying world", "Checking target", 100, &preview, wxPD_APP_MODAL | wxPD_CAN_ABORT | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
+			applied = WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, DialogProgress(progress));
+			if (applied) {
+				progress.Update(100, "World applied");
+			}
+		}
+		if (!applied) {
+			if (error != "World generation cancelled.") {
+				g_gui.PopupDialog(&preview, "World application failed", error, wxOK | wxICON_ERROR);
+			}
+			return;
+		}
+		preview.EndModal(wxID_OK);
+	});
+	updateDescription();
+	preview.Layout();
+	redraw();
+	preview.CentreOnParent();
+	preview.ShowModal();
 }

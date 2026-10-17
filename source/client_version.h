@@ -192,7 +192,7 @@ public:
 	ClientVersion(OtbVersion otb, std::string versionName, wxString path);
 	~ClientVersion() = default;
 
-	static void loadVersions();
+	static void loadVersions(const wxString& explicitFile = wxEmptyString);
 	static void unloadVersions();
 	static void saveVersions();
 

@@ -434,8 +434,8 @@ public:
 	ItemType& getItemIdByClientID(int spriteId);
 
 	bool loadFromOtb(const FileName& datafile, wxString& error, wxArrayString& warnings);
-	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings);
-	bool loadItemFromGameXml(pugi::xml_node itemNode, int id);
+	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings, int clientVersion = -1);
+	bool loadItemFromGameXml(pugi::xml_node itemNode, int id, int clientVersion = -1);
 	bool loadMetaItem(pugi::xml_node node);
 
 	// typedef std::map<int32_t, ItemType*> ItemMap;

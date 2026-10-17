@@ -19,7 +19,37 @@ description: >-
 
 **Arte/sprites:** repositório privado de assets do consumidor — não implementar pipeline de sprites neste repo público.
 
-Branch: `feat/procedural-generation`
+Branch legada: `feat/procedural-generation`. Para novas entregas, usar a branch da issue/PR correspondente e preservar alterações preexistentes.
+
+## World planner v4
+
+A nova opção `source:world` usa `world_plan`/`world_catalog` (núcleo C++ independente)
+e `world_editor` (staging/brushes/validação/undo). O fluxo v3 abaixo permanece legado;
+não rotear World planner pelo sidecar ou pelos presets de máscara.
+
+Catálogos aceitam `minPerSettlement`/`maxPerSettlement`, `upperFloors` por nível
+e `floorMaterials` com herança. Preservar a seed do plano ao aplicar; validar
+ownership, footprints e endpoints antes de staging. `--editable-inputs` exporta
+PNGs autoráveis e receita separada; a quantização não promete replay idêntico.
+
+Contrato e exemplos: `docs/WORLD_GENERATION.md`. Receitas v4 preservam seed uint32,
+referências relativas (`pathBase:recipe`), clima/relevo/biomas, catálogo e andares.
+Viagens atuais são pares de teleports com chegada adjacente segura; escadas/rampas
+físicas ainda não foram validadas em servidor. Não descrever o roadmap inteiro
+como concluído apenas porque o plano e o OTBM são válidos.
+
+`rme --generate-world` carrega OTB/XML/materials explicitamente e exige uma pasta
+de saída nova. `--verify` usa os codecs reais para releitura/recodificação bit a
+bit. `--town-prefix` é opção do exportador, não adiciona metadados de cidades à
+transação de undo do editor. Limite padrão: 1.048.576 tiles; lote de 64 bits pode
+pedir até 4.194.304 com `--tile-budget`. PNGs exportados são diagnósticos semânticos,
+não renders dos sprites do cliente. DAT é opcional; se fornecido, deve cobrir os
+itens usados. Assets privados continuam fora deste repositório público.
+
+Validação: projeto `tests/` cobre cinco suítes; build principal com
+`RME_ENABLE_WORLD_SELF_TEST=ON` cobre Editor/ActionQueue/OTBM e CLI real com os dados
+públicos 10.98. No Linux, rodar o CTest do app com Xvfb. No Windows, disponibilizar
+as DLLs do wx/vcpkg no PATH; usar `| Out-Host` para aguardar o CLI no PowerShell.
 
 ## Arquitetura v3
 
@@ -71,7 +101,7 @@ Dependência Python opcional: `pip install Pillow` (render `maskRegions` / `mask
 
 ## Receitas
 
-`ProceduralRecipe::Save` / `Load` — version 3 JSON.
+`ProceduralRecipe::Save` / `Load` — grava v4 JSON e mantém compatibilidade com v3.
 
 ## Teste manual v3
 

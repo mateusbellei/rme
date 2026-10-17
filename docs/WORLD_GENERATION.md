@@ -797,3 +797,14 @@ PowerShell, piping the batch command to `Out-Host` waits for completion and show
 progress/errors; inspect `$LASTEXITCODE` afterward. The same pipeline was tested
 with the stock 10.98 profile and verification enabled. The `Out-Host` suffix is
 PowerShell syntax; on Linux use `xvfb-run -a rme ...` as described above.
+
+
+## Authored OTBM constructions
+
+Catalog templates can now bind fixed-orientation authored OTBM chunks via
+`prefab:{file,origin}`. The editor copies their validated ground/items directly,
+while the world planner supplies streets, protected footprints and floor links.
+Use `example_prefab_town_1098.json` for a mixed authored/procedural town.
+See [the prefab guide](WORLD_OTBM_PREFABS.md) for the complete manifest, data limits,
+source fingerprint rules and unsupported metadata. Physical stairs and server
+entities remain separate; this path keeps the existing single undo transaction.

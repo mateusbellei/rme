@@ -262,6 +262,26 @@ def main():
                                     text=True, errors="replace", timeout=10)
             assert failed.returncode == 2, (arguments, failed.stdout, failed.stderr)
             assert not invalid_output.exists()
+        prefab_output = Path(temporary) / "prefab-world"
+        prefab_command = command.copy()
+        prefab_command[2] = str(source / "data/procedural/recipes/example_prefab_town_1098.json")
+        prefab_command[6] = str(prefab_output)
+        generated = subprocess.run(prefab_command, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        authored = json.loads((prefab_output / "generation.json").read_text(encoding="utf-8"))
+        authored_plan = json.loads((prefab_output / "plan.json").read_text(encoding="utf-8"))
+        assert authored["verifiedOTBM"] and authored["prefabBuildings"] == 3
+        assert authored["prefabTiles"] == 378 and authored["furniture"] == 9
+        assert len([b for b in authored_plan["buildings"] if "prefabFingerprint" in b]) == 3
+        replay = prefab_command.copy()
+        replay[2] = str(prefab_output / "recipe.json")
+        replay[6] = str(Path(temporary) / "prefab-replay")
+        generated = subprocess.run(replay, cwd=temporary, capture_output=True,
+                                   text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        assert (Path(replay[6]) / "world.otbm").read_bytes() == (prefab_output / "world.otbm").read_bytes()
+        print("PASS: real 10.98 authored OTBM prefabs, mixed catalogs and byte-identical CLI replay")
         print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
               f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite; "
               "ridged cave entrances, desert/snow architecture, construction minimums and seeded OTBM replay")

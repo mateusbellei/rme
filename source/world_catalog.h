@@ -2,6 +2,7 @@
 #define RME_WORLD_CATALOG_H_
 
 #include <string>
+#include <cstddef>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -20,6 +21,7 @@ namespace WorldGen {
 	struct BlueprintMaterial {
 		std::string floorBrush, wallBrush;
 	};
+	inline constexpr std::size_t MaximumPrefabBytes = 2 * 1024 * 1024;
 	struct Blueprint {
 		std::string id;
 		int weight = 1;
@@ -38,6 +40,10 @@ namespace WorldGen {
 		std::vector<std::vector<std::string>> upperFloors;
 		// Entries start at the base floor. Empty names inherit template bindings.
 		std::vector<BlueprintMaterial> floorMaterials;
+		// Fixed-orientation OTBM region. Digest pins the authored bytes at preview time.
+		std::string prefabPath;
+		int prefabX = 0, prefabY = 0, prefabZ = 7;
+		uint64_t prefabFingerprint = 0;
 	};
 
 	using BlueprintCatalog = std::vector<Blueprint>;
@@ -53,6 +59,7 @@ namespace WorldGen {
 	uint32_t RoleColor(const std::string& role);
 
 	// JSON/file adapter; compiled with the existing json_spirit parser.
+	bool ReadPrefabFile(const std::string& filename, std::string& bytes, uint64_t& fingerprint, std::string& error);
 	bool LoadBlueprintCatalog(const std::string& filename, BlueprintCatalog& catalog, std::string& error);
 
 }

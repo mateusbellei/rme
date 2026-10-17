@@ -109,6 +109,20 @@ int main() {
 		duplicate.push_back(catalog[0]);
 		Check(!WorldGen::ValidateCatalog(duplicate, error), "Duplicate template IDs must fail");
 		Check(!WorldGen::ValidateCatalog({}, error), "Empty catalog must fail");
+		auto prefab = WorldGen::DefaultBlueprints().front();
+		prefab.allowRotation = false;
+		prefab.prefabPath = "authored.otbm";
+		prefab.upperRows = prefab.rows;
+		for (auto& row : prefab.upperRows) for (auto& cell : row) if (cell == '+') cell = '#';
+		Check(WorldGen::ValidateBlueprint(prefab, error), "A fixed prefab binding must accept an ordinary validated footprint");
+		prefab.allowRotation = true;
+		Check(!WorldGen::ValidateBlueprint(prefab, error), "Prefab item orientations cannot rotate implicitly");
+		prefab.allowRotation = false;
+		prefab.floorBrush = "stone";
+		Check(!WorldGen::ValidateBlueprint(prefab, error), "Prefab contents cannot silently combine with generated material overrides");
+		prefab.floorBrush.clear();
+		prefab.prefabZ = 0;
+		Check(!WorldGen::ValidateBlueprint(prefab, error), "Prefab upper floors must stay within source z coordinates");
 		std::cout << "PASS: reusable blueprints, rotations, room connectivity, walls, entrances and vertical landing anchors\n";
 		return 0;
 	} catch (const std::exception& e) {

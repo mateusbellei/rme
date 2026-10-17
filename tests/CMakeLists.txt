@@ -45,6 +45,7 @@ add_library(procedural_integration_compile OBJECT
     ../source/procedural_common.cpp
     ../source/image_mask_generator.cpp
     ../source/procedural_dialog.cpp
+    ../source/world_prefab.cpp
     ../source/world_editor.cpp
     ../source/world_batch.cpp
     ../source/procedural_generator.cpp

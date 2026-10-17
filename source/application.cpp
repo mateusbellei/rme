@@ -29,6 +29,7 @@
 #include "main_menubar.h"
 #include "updater.h"
 #include "artprovider.h"
+#include "ui_theme.h"
 
 #include "materials.h"
 #include "map.h"
@@ -165,6 +166,7 @@ bool Application::OnInit() {
 	ParseCommandLineMap(m_file_to_open);
 
 	g_gui.root = newd MainFrame(__W_RME_APPLICATION_NAME__, wxDefaultPosition, wxSize(700, 500));
+	UiTheme::ApplyToAllWindows();
 	SetTopWindow(g_gui.root);
 	g_gui.SetTitle("");
 
@@ -380,7 +382,7 @@ MainFrame::MainFrame(const wxString& title, const wxPoint& pos, const wxSize& si
 	}
 
 	wxStatusBar* statusbar = CreateStatusBar();
-	statusbar->SetFieldsCount(4);
+	statusbar->SetFieldsCount(5);
 	SetStatusText(wxString("Welcome to ") << __W_RME_APPLICATION_NAME__ << " " << __W_RME_VERSION__);
 
 	// Le sizer

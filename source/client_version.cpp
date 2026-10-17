@@ -408,11 +408,18 @@ ClientVersion* ClientVersion::getLatestVersion() {
 }
 
 FileName ClientVersion::getDataPath() const {
-	wxString basePath = g_gui.GetDataDirectory();
-	if (!wxFileName(basePath).DirExists()) {
-		basePath = g_gui.getFoundDataDirectory();
+	const wxString versionPath = data_path + FileName::GetPathSeparator();
+	wxString basePath = g_gui.getFoundDataDirectory();
+	if (basePath.empty() || !wxFileName(basePath + versionPath + wxString("items.otb")).FileExists()) {
+		basePath = g_gui.GetDataDirectory();
 	}
-	return basePath + data_path + FileName::GetPathSeparator();
+	if (!wxFileName(basePath + versionPath + wxString("items.otb")).FileExists()) {
+		const wxString discovered = g_gui.getFoundDataDirectory();
+		if (!discovered.empty()) {
+			basePath = discovered;
+		}
+	}
+	return basePath + versionPath;
 }
 
 FileName ClientVersion::getLocalDataPath() const {

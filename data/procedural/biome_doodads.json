@@ -1,11 +1,11 @@
-{
+﻿{
   "presets": {
     "forest": {
-      "keywords": ["tree", "bush", "fern", "mushroom", "log", "forest", "jungle"],
+      "keywords": ["tree", "bush", "fern", "mushroom", "log", "forest", "jungle", "bamboo", "training", "wooden", "lantern", "rock"],
       "density": 14
     },
     "desert": {
-      "keywords": ["cactus", "desert", "dead", "sand", "palm"],
+      "keywords": ["cactus", "desert", "dead", "sand", "palm", "dune", "oasis", "rock", "bone"],
       "density": 8
     },
     "coast": {
@@ -17,7 +17,7 @@
       "density": 6
     },
     "city": {
-      "keywords": ["barrel", "crate", "lamp", "bench", "fountain"],
+      "keywords": ["barrel", "crate", "lamp", "bench", "fountain", "sign", "fence"],
       "density": 5
     },
     "ice": {

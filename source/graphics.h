@@ -77,6 +77,10 @@ protected:
 
 class GameSprite : public Sprite {
 public:
+	friend class TextureGarbageCollector;
+	friend class SpritePreloader;
+	friend class ModernSpriteBridge;
+
 	GameSprite();
 	~GameSprite();
 
@@ -109,6 +113,8 @@ protected:
 	TemplateImage* getTemplateImage(int sprite_index, const Outfit& outfit);
 
 	class Image {
+		friend class GraphicManager;
+
 	public:
 		Image();
 		virtual ~Image();
@@ -295,6 +301,7 @@ public:
 
 	// Cleans old & unused textures according to config settings
 	void garbageCollection();
+	void invalidateAllGLTextures();
 	void addSpriteToCleanup(GameSprite* spr);
 
 	wxFileName getMetadataFileName() const {

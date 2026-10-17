@@ -231,6 +231,8 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_TOWNS, 0);
 	Int(ALWAYS_SHOW_ZONES, 1);
 	Int(EXT_HOUSE_SHADER, 1);
+	Int(USE_MODERN_RENDERER, 0);
+	Int(SHOW_FPS, 0);
 
 	section("Version");
 	Int(VERSION_ID, 0);
@@ -324,6 +326,7 @@ void Settings::IO(IOMode mode) {
 	String(PALETTE_DOODAD_STYLE, "large icons");
 	String(PALETTE_ITEM_STYLE, "listbox");
 	String(PALETTE_RAW_STYLE, "listbox");
+	Int(UI_APPEARANCE, 0);
 
 	section("Window");
 	String(PALETTE_LAYOUT, "name=02c30f6048629894000011bc00000002;caption=Palette;state=2099148;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=245;besth=100;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=-1;floath=-1");

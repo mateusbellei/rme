@@ -107,6 +107,7 @@ protected:
 	wxCheckBox* inversed_scroll_chkbox;
 	wxSlider* scroll_speed_slider;
 	wxSlider* zoom_speed_slider;
+	wxChoice* ui_appearance_choice;
 
 	// Client info
 	wxChoice* default_version_choice;

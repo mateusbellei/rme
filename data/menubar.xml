@@ -159,6 +159,9 @@
 		<item name="Ghost loose items" hotkey="G" action="GHOST_ITEMS" help="Ghost items (except ground)."/>
 		<item name="Ghost higher floors" hotkey="Ctrl+L" action="GHOST_HIGHER_FLOORS" help="Ghost floors."/>
 		<item name="Show shade" hotkey="Q" action="SHOW_SHADE" help="Shade lower floors."/>
+		<separator/>
+		<item name="Show FPS" action="SHOW_FPS" help="Show frames per second and frame time in the status bar."/>
+		<item name="Use Modern Renderer" action="USE_MODERN_RENDERER" help="Use the OpenGL 4.5 batched renderer (experimental)."/>
 	</menu>
 	<menu name="Show">
 		<!-- item/zone filters -->

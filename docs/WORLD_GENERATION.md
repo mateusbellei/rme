@@ -808,3 +808,13 @@ Use `example_prefab_town_1098.json` for a mixed authored/procedural town.
 See [the prefab guide](WORLD_OTBM_PREFABS.md) for the complete manifest, data limits,
 source fingerprint rules and unsupported metadata. Physical stairs and server
 entities remain separate; this path keeps the existing single undo transaction.
+
+## Server house ownership and compact output
+
+Batch exports can opt into residential house tiles and matching XML with
+`--town-prefix Frontier --house-prefix Residence --house-rent 250`. House export
+validates public exits, assigns door IDs and verifies OTBM/XML metadata readback.
+It leaves the editor's tile undo transaction unchanged. Spawns/NPCs remain pending.
+Use `--no-previews --no-diagnostics` to omit PNG previews and plan JSON/PPM files
+while retaining the same server bundle bytes and verification.
+See [server export](WORLD_SERVER_EXPORT.md) for ownership rules, limits and replay.

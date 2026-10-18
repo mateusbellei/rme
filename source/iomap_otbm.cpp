@@ -1276,7 +1276,7 @@ bool IOMapOTBM::loadHouses(Map& map, pugi::xml_document& doc) {
 			houseNode.attribute("entryy").as_int(),
 			houseNode.attribute("entryz").as_int()
 		);
-		if (exitPosition.x != 0 && exitPosition.y != 0 && exitPosition.z != 0) {
+		if (exitPosition != Position() && exitPosition.isValid()) {
 			house->setExit(exitPosition);
 		}
 

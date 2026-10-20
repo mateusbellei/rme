@@ -522,6 +522,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	}
 
 	uint32_t id = minID;
+	size_t defaultedAnimationFrames = 0;
 	// loop through all ItemDatabase until we reach the end of file
 	while (id <= maxID) {
 		GameSprite* sType = newd GameSprite();
@@ -640,8 +641,15 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 							error = "Truncated DAT metadata.";
 							return false;
 						}
+						// Some custom clients leave a frame's duration unset (0/0).
+						// Retain the animator's positive default rather than rejecting
+						// the whole client or introducing a zero-duration render loop.
+						if (!min && !max) {
+							++defaultedAnimationFrames;
+							continue;
+						}
 						if (!min || min > max || max > uint32_t(INT_MAX / sType->frames)) {
-							error = "Invalid DAT animation duration.";
+							error = wxString::Format("Invalid DAT animation duration for sprite %u, frame %d.", unsigned(id), i);
 							return false;
 						}
 						FrameDuration* frame_duration = sType->animator->getFrameDuration(i);
@@ -685,6 +693,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		}
 		++id;
 	}
+	if (defaultedAnimationFrames) warnings.push_back(wxString::Format("DAT contains %u animation frames with unset duration (0/0); the editor's default frame duration was used.", unsigned(defaultedAnimationFrames)));
 
 	return true;
 }

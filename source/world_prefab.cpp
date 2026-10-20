@@ -138,7 +138,13 @@ namespace {
                 if (type.sprite) {
                     if (type.sprite->width > 32 || type.sprite->height > 32) { error = "OTBM prefab sprite exceeds its footprint budget."; return false; }
                     for (int dy = 0; dy < type.sprite->height; ++dy) for (int dx = 0; dx < type.sprite->width; ++dx) {
-                        if (x - dx < 0 || y - dy < 0 || WorldGen::BlueprintRowsForFloor(blueprint, level)[y - dy][x - dx] == ' ') { error = "OTBM prefab sprite extends outside its declared footprint."; return false; }
+                        if (x - dx < 0 || y - dy < 0 || WorldGen::BlueprintRowsForFloor(blueprint, level)[y - dy][x - dx] == ' ') {
+                            // Real client walls commonly include a north/west
+                            // overhang. Construction placement reserves a one-cell
+                            // ring around the entire bounding box for this purpose.
+                            const bool wallOverhang = item != tile->ground && type.isWall && WorldGen::BlueprintRowsForFloor(blueprint, level)[y][x] == '#' && dx <= 1 && dy <= 1;
+                            if (!wallOverhang) { error = wxString::Format("OTBM prefab item %u extends outside its footprint or the one-cell wall margin.", unsigned(item->getID())); return false; }
+                        }
                     }
                 }
                 return true;

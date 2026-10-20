@@ -73,7 +73,10 @@ quest scripting are separate authoring steps. The planner inserts its paired
 teleports on the annotated landings; physical stairs remain a separate roadmap.
 
 When DAT metadata is loaded, top-level sprite extents must stay inside the declared
-footprint. Without DAT, physical blocking and coordinates are validated, while
+footprint. Blocking wall items on `#` cells may extend one cell north/west into
+the construction's reserved margin, as ordinary client wall graphics commonly do.
+Grounds and furniture do not receive that exception; larger wall overhangs fail.
+Without DAT, physical blocking and coordinates are validated, while
 sprite extents and visual appearance remain unverified. Preview PNGs show semantic
 categories, not a render of the authored sprites.
 

@@ -227,7 +227,7 @@ namespace {
 		out << "]}";
 	}
 
-	std::string MetadataFixture(uint16_t maximum = 65535) {
+	std::string MetadataFixture(uint16_t maximum = 65535, uint32_t animatedMinimum = 100, uint32_t animatedMaximum = 100, bool animated = false) {
 		std::ostringstream bytes(std::ios::binary);
 		auto put = [&](uint32_t value, int count) { for (int i = 0; i < count; ++i){ bytes.put(char(value >> (8 * i)));
 } };
@@ -244,10 +244,15 @@ namespace {
 			if (side > 1) {
 				put(64, 1);
 			}
+			const int frames = animated && id == 100 ? 2 : 1;
 			for (int field = 0; field < 5; ++field) {
-				put(1, 1); // Layers, patterns x/y/z, frames.
+				put(field == 4 ? frames : 1, 1); // Layers, patterns x/y/z, frames.
 			}
-			for (int pixel = 0; pixel < side * side; ++pixel) {
+			if (frames > 1) {
+				put(1, 1); put(0, 4); put(0, 1); // Async, endless loops, first frame.
+				for (int frame = 0; frame < frames; ++frame) { put(animatedMinimum, 4); put(animatedMaximum, 4); }
+			}
+			for (int pixel = 0; pixel < side * side * frames; ++pixel) {
 				put(0, 4);
 			}
 		}
@@ -405,7 +410,12 @@ static int RunPrefabScenario(const wxString& outputDirectory) {
         Check(WorldEditor::BuildPlan(editor, spec, resolved, plan, error), "Build authored OTBM plan: " + nstr(error));
         Check(!plan.buildings.empty() && plan.buildings.front().rotation == 0, "Prefab catalog must actually place fixed-orientation buildings");
         WorldEditor::ApplicationStats stats;
+        GameSprite wallExtent;
+        wallExtent.width = wallExtent.height = 2;
+        GameSprite* previousWallSprite = g_items[200].sprite;
+        g_items[200].sprite = &wallExtent;
         const bool appliedPrefab = WorldEditor::ApplyPlan(editor, resolved, plan, error, &stats);
+        g_items[200].sprite = previousWallSprite;
         Check(appliedPrefab, "Apply authored multi-floor OTBM: " + nstr(error));
         Check(stats.prefabBuildings == plan.buildings.size() && stats.prefabTiles == plan.buildings.size() * blueprint.rows.size() * blueprint.rows.front().size() * 3, "Count actual prefab buildings and copied tiles");
         for (const auto& building : plan.buildings) for (int floor = 0; floor < building.levels; ++floor) {
@@ -432,6 +442,11 @@ static int RunPrefabScenario(const wxString& outputDirectory) {
         Check(MapHash(editor.map) == generated, "Prefab application must redo exactly");
         editor.actionQueue->undo();
         Check(!WorldEditor::ApplyPlan(editor, resolved, plan, error, nullptr, [](const char* stage, int) { return std::string(stage) != "Loading OTBM construction prefabs"; }) && error == "World generation cancelled." && MapHash(editor.map) == before, "Prefab loading cancellation must preserve target tiles and history");
+        wallExtent.width = 3;
+        g_items[200].sprite = &wallExtent;
+        const bool oversizedWall = WorldEditor::ApplyPlan(editor, resolved, plan, error);
+        g_items[200].sprite = previousWallSprite;
+        Check(!oversizedWall && error.Contains("one-cell wall margin") && MapHash(editor.map) == before, "Wall overhangs larger than the reserved margin must preserve the target map");
         std::ifstream original(directory / "authored.otbm", std::ios::binary);
         const std::string bytes((std::istreambuf_iterator<char>(original)), {}); original.close();
         auto writeBytes = [&](const std::string& value) { std::ofstream(directory / "authored.otbm", std::ios::binary).write(value.data(), std::streamsize(value.size())); };
@@ -989,6 +1004,18 @@ static int RunMetadataScenario(const wxString& outputDirectory) {
 		const wxString filename = outputDirectory + "/batch-client.dat";
 		wxString error;
 		wxArrayString warnings;
+		for (const auto bounds : { std::pair<uint32_t, uint32_t> {0, 0}, {0, 100}, {100, 50}, {100, UINT32_MAX} }) {
+			const auto custom = MetadataFixture(100, bounds.first, bounds.second, true);
+			std::ofstream(std::filesystem::u8path(nstr(filename)), std::ios::binary).write(custom.data(), std::streamsize(custom.size()));
+			g_gui.gfx.clear(); g_gui.gfx.client_version = version; warnings.clear(); error.clear();
+			const bool loaded = g_gui.gfx.loadSpriteMetadata(filename, error, warnings);
+			if (!bounds.first && !bounds.second) {
+				Check(loaded && warnings.size() == 1, "Unset animation durations must load with an explicit fallback warning");
+				auto* sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(100));
+				Check(sprite && sprite->animator && sprite->animator->getFrameDuration(0)->getDuration() > 0 && sprite->animator->getFrameDuration(1)->getDuration() > 0, "Zero durations must never reach the renderer's animator");
+			} else Check(!loaded && error.Contains("sprite 100"), "Inverted, partially zero and overflowing animation ranges must remain rejected with item context");
+		}
+		warnings.clear(); error.clear();
 		for (size_t length : { size_t(0), size_t(4), size_t(10), size_t(12), size_t(15), metadata.size() - 1 }) {
 			std::ofstream(std::filesystem::u8path(nstr(filename)), std::ios::binary).write(metadata.data(), std::streamsize(length));
 			g_gui.gfx.clear();

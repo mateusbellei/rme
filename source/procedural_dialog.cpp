@@ -21,6 +21,7 @@
 #include <wx/progdlg.h>
 #include <wx/stopwatch.h>
 #include <wx/display.h>
+#include <wx/dir.h>
 
 namespace {
 	wxSize DialogSize(wxWindow* parent, int width, int height) {
@@ -76,9 +77,23 @@ enum {
 ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	wxDialog(parent, wxID_ANY, "Procedural Generation", wxDefaultPosition, wxSize(560, 680), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	editor(editor) {
-	wxScrolledWindow* content = new wxScrolledWindow(this, wxID_ANY);
+	content = new wxScrolledWindow(this, wxID_ANY);
 	content->SetScrollRate(0, 16);
 	wxBoxSizer* top = new wxBoxSizer(wxVERTICAL);
+	top->Add(new wxStaticText(content, wxID_ANY, "Choose a recipe, customize your world, then preview and apply."), 0, wxALL, 8);
+	recipeChoice = new wxChoice(content, wxID_ANY);
+	recipeChoice->Append("Choose an active-client recipe...");
+	wxDir recipes(g_gui.GetProceduralDataDirectory() + "recipes");
+	wxString filename;
+	if (recipes.IsOpened() && recipes.GetFirst(&filename, "*.json", wxDIR_FILES)) do { recipeFiles.Add(filename); } while (recipes.GetNext(&filename));
+	recipeFiles.Sort();
+	for (const auto& file : recipeFiles) { wxString label = wxFileName(file).GetName(); label.Replace("_", " "); recipeChoice->Append(label); }
+	recipeChoice->SetSelection(0);
+	top->Add(recipeChoice, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+	recipeSummary = new wxStaticText(content, wxID_ANY, "World planner uses your active client materials. Legacy prompt tools are under Advanced.");
+	top->Add(recipeSummary, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+	advanced = new wxCheckBox(content, wxID_ANY, "Advanced files and legacy generators");
+	top->Add(advanced, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxStaticBoxSizer* sbMode = new wxStaticBoxSizer(wxVERTICAL, content, "Mode");
 	rbImageMask = new wxRadioButton(content, ID_MODE_IMAGE, "Image mask -> biomes", wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
@@ -92,6 +107,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	top->Add(sbMode, 0, wxEXPAND | wxALL, 8);
 
 	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 8, 8);
+	formGrid = grid;
 	grid->AddGrowableCol(1, 1);
 
 	grid->Add(new wxStaticText(content, wxID_ANY, "Image:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -208,7 +224,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	SetMinSize(DialogSize(this, 520, 480));
 	SetSize(DialogSize(this, 560, 680));
 
-	rbImageMask->SetValue(true);
+	rbWorldPlan->SetValue(true);
 	UpdateElevationLabel();
 	{
 		wxCommandEvent modeEvent;
@@ -231,6 +247,8 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_PROMPT);
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_PROMPT_IMAGE);
 	Bind(wxEVT_CHECKBOX, &ProceduralDialog::OnUseSelectionChanged, this, ID_USE_SELECTION);
+	advanced->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) { OnModeChanged(event); });
+	recipeChoice->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { const int index = recipeChoice->GetSelection() - 1; if (index >= 0) LoadRecipe(g_gui.GetProceduralDataDirectory() + "recipes/" + recipeFiles[index]); });
 	Bind(wxEVT_COMBOBOX, &ProceduralDialog::OnPresetChanged, this, ID_PRESET);
 }
 
@@ -274,7 +292,13 @@ void ProceduralDialog::OnUseSelectionChanged(wxCommandEvent& event) {
 }
 
 void ProceduralDialog::OnModeChanged(wxCommandEvent& event) {
+	if (!advanced->GetValue() && !rbWorldPlan->GetValue()) rbWorldPlan->SetValue(true);
 	const bool worldMode = rbWorldPlan->GetValue();
+	for (auto* radio : { rbImageMask, rbTextPrompt, rbPromptWithImage }) radio->Show(advanced->GetValue());
+	auto row = [&](size_t index, bool visible) { formGrid->Show(index * 2, visible); formGrid->Show(index * 2 + 1, visible); };
+	row(0, !worldMode); row(1, advanced->GetValue());
+	for (size_t index : { size_t(2), size_t(3), size_t(4), size_t(5) }) row(index, !worldMode);
+	chkSidecar->Show(!worldMode); chkPlaceWalls->Show(!worldMode);
 	const bool imageMode = rbImageMask->GetValue();
 	const bool promptImageMode = rbPromptWithImage->GetValue();
 	const bool promptMode = rbTextPrompt->GetValue() || promptImageMode;
@@ -297,6 +321,7 @@ void ProceduralDialog::OnModeChanged(wxCommandEvent& event) {
 	} else if (!worldMode && txtLegendPath->GetValue().EndsWith("world_legend.json")) {
 		txtLegendPath->SetValue(g_gui.GetProceduralDataDirectory() + "default_legend.json");
 	}
+	content->Layout(); content->FitInside();
 }
 
 void ProceduralDialog::OnPresetChanged(wxCommandEvent& event) {
@@ -427,6 +452,7 @@ void ProceduralDialog::ApplySpecToDialog(const GenerationSpec& spec) {
 	rbImageMask->SetValue(spec.source == GenerationSource::ImageMask);
 	rbTextPrompt->SetValue(spec.source == GenerationSource::TextPrompt);
 	rbPromptWithImage->SetValue(spec.source == GenerationSource::PromptWithImage);
+	if (spec.source != GenerationSource::WorldPlan) advanced->SetValue(true);
 	{
 		wxCommandEvent modeEvent;
 		OnModeChanged(modeEvent);
@@ -464,13 +490,20 @@ void ProceduralDialog::OnLoadRecipe(wxCommandEvent& event) {
 	if (dlg.ShowModal() != wxID_OK) {
 		return;
 	}
+	LoadRecipe(dlg.GetPath());
+}
+
+bool ProceduralDialog::LoadRecipe(const wxString& path) {
 	GenerationSpec spec;
 	wxString error;
-	if (!ProceduralRecipe::Load(dlg.GetPath(), spec, error)) {
+	if (!ProceduralRecipe::Load(path, spec, error)) {
 		g_gui.PopupDialog(this, "Load failed", error, wxOK | wxICON_ERROR);
-		return;
+		return false;
 	}
 	ApplySpecToDialog(spec);
+	recipeSummary->SetLabel("Recipe: " + wxFileName(path).GetFullName());
+	recipeSummary->SetToolTip(path);
+	return true;
 }
 
 void ProceduralDialog::OnGenerate(wxCommandEvent& event) {

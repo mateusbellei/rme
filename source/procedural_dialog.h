@@ -19,6 +19,7 @@ private:
 	void OnBrowseLegend(wxCommandEvent& event);
 	void OnSaveRecipe(wxCommandEvent& event);
 	void OnLoadRecipe(wxCommandEvent& event);
+	bool LoadRecipe(const wxString& path);
 	void OnGenerate(wxCommandEvent& event);
 	void OnModeChanged(wxCommandEvent& event);
 	void OnUseSelectionChanged(wxCommandEvent& event);
@@ -34,6 +35,12 @@ private:
 
 private:
 	Editor& editor;
+	wxScrolledWindow* content;
+	wxFlexGridSizer* formGrid;
+	wxCheckBox* advanced;
+	wxChoice* recipeChoice;
+	wxArrayString recipeFiles;
+	wxStaticText* recipeSummary;
 
 	wxRadioButton* rbImageMask;
 	wxRadioButton* rbTextPrompt;

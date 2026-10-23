@@ -23,6 +23,8 @@ New-Item -ItemType Directory -Path $target | Out-Null
 Copy-Item -LiteralPath (Join-Path $binary 'rme.exe') -Destination $target
 foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $target }
 Copy-Item -LiteralPath $runtime -Destination (Join-Path $target 'data') -Recurse
+# Settings::load uses this local file instead of shared registry preferences.
+Set-Content -LiteralPath (Join-Path $target 'editor.cfg') -Value '' -Encoding UTF8
 @{
     revision = $Revision
     packagedUtc = [DateTime]::UtcNow.ToString('o')

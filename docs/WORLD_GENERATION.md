@@ -881,6 +881,8 @@ object-only changes; final OTBM bytes include those decorations.
 Use `tools/package_world_runtime.ps1` to copy a compiled Release executable,
 its adjacent DLLs and an explicitly selected runtime data directory into a
 **new** folder. The script also records the source revision and binary SHA256.
-It does not copy DAT/SPR, compiler caches, test executables or change client assets.
+It creates a local `editor.cfg` so another build's registry preferences do not
+redirect the runtime to old data. It does not copy DAT/SPR, compiler caches, test
+executables or change client assets.
 Use that folder's `rme.exe` (or a shortcut pointing to it) for testing. Build trees
 remain developer workspaces and can have different configurations/data.

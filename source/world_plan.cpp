@@ -156,7 +156,7 @@ namespace WorldGen {
 					else if (input && !input->landMask.empty()) {
 						const int mask = input->landMask[size_t(y) * s.width + x];
 						if (mask == 0) cell.elevation = uint16_t(std::min(int(cell.elevation), s.seaLevel - 500));
-						if (mask == 1) cell.elevation = uint16_t(std::max(int(cell.elevation), s.seaLevel + 1000));
+						if (mask == 1) cell.elevation = uint16_t(std::max(int(cell.elevation), s.seaLevel + 100));
 					}
 					const int latitude = std::abs(y * 10000 / (s.height - 1) - 5000) * 2;
 					cell.temperature = uint16_t(Clamp(10500 - latitude * 8 / 10 - std::max(0, int(cell.elevation) - s.seaLevel) * 7 / 10 + (Noise(x, y, s.width, s.height, 4, climateSeed) - 5000) / 5 + s.temperatureBias));

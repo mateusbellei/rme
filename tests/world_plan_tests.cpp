@@ -588,6 +588,9 @@ static void TestIndependentCavesAndShape() {
 		const auto& cell = changed.FindLayer(0)->cells[y * 64 + x];
 		Check(input.landMask[y * 64 + x] ? cell.elevation > settings.seaLevel : cell.terrain == Terrain::Ocean, "Black mask pixels must stay ocean and white pixels must start above sea level");
 	}
+	input.elevation.assign(64 * 64, 0);
+	Check(Build(settings, changed, error, nullptr, &input), "Mask must raise authored ocean into land");
+	Check(changed.FindLayer(0)->cells[16 * 64 + 32].terrain == Terrain::Beach, "Newly painted shores must retain natural beach classification");
 	input.landMask[100] = 2;
 	Check(!Build(settings, changed, error, nullptr, &input) && changed.layers.empty(), "Invalid land mask values must discard the plan");
 }

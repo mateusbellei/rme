@@ -826,7 +826,8 @@ World planner is the default mode. The recipe selector reads the running app's
 its full path in the tooltip. Legacy prompt/image generators and raw legend
 paths are under **Advanced files and legacy generators**. World settings exposes
 PNG and JSON file pickers. Recipes still resolve `pathBase:recipe` assets against
-the recipe file, independently of the launch directory.
+the recipe file, independently of the launch directory. A runtime may provide
+`recipes/starter.json` to preselect its verified starting configuration.
 
 Optional v4 `world` fields:
 
@@ -844,7 +845,7 @@ mask; rivers/lakes may still carve white land. This lets an outline remain fixed
 while changing the master seed to vary relief, climate, towns and caves. The
 mask controls the coastline, not a pixel-perfect final terrain category.
 
-Preview **Export editable inputs** and batch `--editable-inputs` now include
+Preview **Export plan / editable PNGs…** and batch `--editable-inputs` now include
 `*_land.png`, alongside heightmap, biome hints and a linked editable recipe.
 Paint black/white with a hard-edged pencil; disable antialiasing. Transparent
 areas resume procedural generation. Open the exported editable recipe after

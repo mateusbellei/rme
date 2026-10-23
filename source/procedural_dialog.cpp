@@ -250,6 +250,10 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	advanced->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) { OnModeChanged(event); });
 	recipeChoice->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { const int index = recipeChoice->GetSelection() - 1; if (index >= 0) LoadRecipe(g_gui.GetProceduralDataDirectory() + "recipes/" + recipeFiles[index]); });
 	Bind(wxEVT_COMBOBOX, &ProceduralDialog::OnPresetChanged, this, ID_PRESET);
+	const int starter = recipeFiles.Index("starter.json");
+	if (starter != wxNOT_FOUND && LoadRecipe(g_gui.GetProceduralDataDirectory() + "recipes/starter.json")) {
+		recipeChoice->SetSelection(starter + 1);
+	}
 }
 
 void ProceduralDialog::SyncFromSelection() {
@@ -501,6 +505,8 @@ bool ProceduralDialog::LoadRecipe(const wxString& path) {
 		return false;
 	}
 	ApplySpecToDialog(spec);
+	const int index = recipeFiles.Index(wxFileName(path).GetFullName());
+	recipeChoice->SetSelection(index == wxNOT_FOUND ? 0 : index + 1);
 	recipeSummary->SetLabel("Recipe: " + wxFileName(path).GetFullName());
 	recipeSummary->SetToolTip(path);
 	return true;

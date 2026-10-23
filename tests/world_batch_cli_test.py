@@ -171,6 +171,7 @@ def main():
         assert diversity_report["previews"] == []
         assert diversity_report["editableInputs"] == {"heightmap": "inputs_heightmap.png",
                                                        "biomeHints": "inputs_biomes.png",
+                                                       "landMask": "inputs_land.png",
                                                        "recipe": "editable-recipe.json"}
         editable = json.loads((diversity_output / "editable-recipe.json").read_text(encoding="utf-8"))
         assert editable["world"]["heightmap"] == "inputs_heightmap.png"
@@ -258,6 +259,38 @@ def main():
             assert residences and all(b["blueprint"] == biome + "_residence" for b in residences)
             assert regional["settlements"][0]["biome"] == biome
             assert placements["furniture"] > 0 and placements["skippedFurniture"] == 0
+        # Exact profiles vary only objects; terrain/city planning keeps its master seed.
+        object_recipe = json.loads(Path(ridged_command[2]).read_text(encoding="utf-8"))
+        object_recipe["world"].update(objectProfile=str(source / "data/procedural/profiles/1098/objects.json"))
+        object_path = Path(temporary) / "objects-recipe.json"
+        object_command = ridged_command.copy()
+        object_command[2] = str(object_path)
+        object_reports, object_bytes = [], []
+        for seed in (123, 456, 123):
+            object_recipe["world"]["objectSeed"] = seed
+            object_path.write_text(json.dumps(object_recipe), encoding="utf-8")
+            object_command[6] = str(Path(temporary) / f"objects-{len(object_reports)}")
+            generated = subprocess.run(object_command, cwd=temporary, capture_output=True,
+                                       text=True, errors="replace", timeout=60)
+            assert generated.returncode == 0, generated.stdout + generated.stderr
+            folder = Path(object_command[6])
+            result = json.loads((folder / "generation.json").read_text(encoding="utf-8"))
+            assert result["objectSeed"] == seed and result["doodads"] > 0
+            assert result["planFingerprint"] == ridged_report["planFingerprint"]
+            object_reports.append(result)
+            object_bytes.append((folder / "world.otbm").read_bytes())
+        assert object_bytes[0] == object_bytes[2] and object_bytes[0] != object_bytes[1]
+        # A typo in an explicit palette must fail without exporting a partial world.
+        bad_profile = Path(temporary) / "bad-objects.json"
+        for brushes in ([{"name": "missing exact brush"}], [{"name": "green trees", "weight": 0}]):
+            bad_profile.write_text(json.dumps({"version": 1, "biomes": {"forest": {"brushes": brushes}}}), encoding="utf-8")
+            object_recipe["world"]["objectProfile"] = str(bad_profile)
+            object_path.write_text(json.dumps(object_recipe), encoding="utf-8")
+            object_command[6] = str(Path(temporary) / "invalid-objects")
+            generated = subprocess.run(object_command, cwd=temporary, capture_output=True,
+                                       text=True, errors="replace", timeout=60)
+            assert generated.returncode != 0 and not Path(object_command[6]).exists()
+
         # Seed overrides must survive recipe export, including both uint32 boundaries.
         seed_recipe = ridged_recipe.copy()
         seed_recipe["world"] = dict(ridged_recipe["world"])

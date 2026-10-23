@@ -48,6 +48,10 @@ static void TestRecipes() {
 	original.world.wallBrushName = "Stone walls";
 	original.world.catalogPath = "custom-buildings.json";
 	original.world.heightmapPath = "height.png";
+	original.world.landMaskPath = "shape.png";
+	original.world.objectProfilePath = "objects.json";
+	original.world.objectSeed = UINT32_MAX;
+	original.world.settings.caveSeed = 0;
 	original.world.biomeHintsPath = "biomes.png";
 	original.world.protectExisting = false;
 	original.imageMask.legendPath = "custom-world.json";
@@ -67,6 +71,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.relief == WorldGen::ReliefStyle::Ridges && loaded.world.settings.biomeDetail == 67, "Relief and local biome variation must round-trip");
 	Check(loaded.world.connectionItemId == 1387 && loaded.world.wallBrushName == "Stone walls" && !loaded.world.protectExisting, "Client/protection settings must round-trip");
 	Check(loaded.world.catalogPath == original.world.catalogPath, "Construction catalog path must round-trip");
+	Check(loaded.world.landMaskPath == original.world.landMaskPath && loaded.world.objectProfilePath == original.world.objectProfilePath && loaded.world.objectSeed == original.world.objectSeed && loaded.world.settings.caveSeed == original.world.settings.caveSeed, "Shape, object profiles and independent seeds must round-trip");
 	Check(loaded.world.heightmapPath == original.world.heightmapPath && loaded.world.biomeHintsPath == original.world.biomeHintsPath, "World raster paths must round-trip");
 	{
 		std::ifstream input(path, std::ios::binary);
@@ -94,7 +99,7 @@ static void TestRecipes() {
 			 R"({"source":"world","world":{"protectExisting":0}})",
 			 R"({"source":"world","world":{"diverseSettlements":1}})",
 			 R"({"source":"world","world":{"wallBrush":false}})",
-			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"algorithmVersion":99}})", R"({"world":{"heightmap":42}})" }) {
+			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"algorithmVersion":99}})", R"({"world":{"heightmap":42}})", R"({"world":{"objectSeed":-1}})", R"({"world":{"caveSeed":4294967296}})", R"({"world":{"caveSeed":1.5}})", R"({"world":{"landMask":42}})", R"({"world":{"objectProfile":false}})" }) {
 		std::ofstream output(path);
 		output << malformed;
 		output.close();
@@ -127,6 +132,8 @@ static void TestRelativeRecipes() {
 	GenerationSpec spec;
 	spec.source = GenerationSource::WorldPlan;
 	spec.world.heightmapPath = wxPath(source / "assets" / "height.png");
+	spec.world.landMaskPath = wxPath(source / "assets" / "shape.png");
+	spec.world.objectProfilePath = wxPath(source / "assets" / "objects.json");
 	spec.world.biomeHintsPath = wxPath(source / "assets" / "biomes.png");
 	spec.world.catalogPath = wxPath(source / "assets" / "buildings.json");
 	spec.imageMask.legendPath = wxPath(source / "assets" / "legend.json");
@@ -143,7 +150,7 @@ static void TestRelativeRecipes() {
 	std::filesystem::copy_file(recipe, moved / "recipe.json", std::filesystem::copy_options::overwrite_existing);
 	GenerationSpec loaded;
 	Check(ProceduralRecipe::Load(wxPath(moved / "recipe.json"), loaded, error), "Moved recipe must load independently of process working directory");
-	Check(loaded.world.heightmapPath == wxPath(moved / "assets" / "height.png") && loaded.world.biomeHintsPath == wxPath(moved / "assets" / "biomes.png") && loaded.world.catalogPath == wxPath(moved / "assets" / "buildings.json") && loaded.imageMask.legendPath == wxPath(moved / "assets" / "legend.json") && loaded.imageMask.imagePath == wxPath(moved / "assets" / "reference.png"), "Every asset path must resolve against the moved recipe directory");
+	Check(loaded.world.landMaskPath == wxPath(moved / "assets" / "shape.png") && loaded.world.objectProfilePath == wxPath(moved / "assets" / "objects.json") && loaded.world.heightmapPath == wxPath(moved / "assets" / "height.png") && loaded.world.biomeHintsPath == wxPath(moved / "assets" / "biomes.png") && loaded.world.catalogPath == wxPath(moved / "assets" / "buildings.json") && loaded.imageMask.legendPath == wxPath(moved / "assets" / "legend.json") && loaded.imageMask.imagePath == wxPath(moved / "assets" / "reference.png"), "Every asset path must resolve against the moved recipe directory");
 	std::ifstream beforeFile(recipe);
 	const std::string before((std::istreambuf_iterator<char>(beforeFile)), {});
 	beforeFile.close();
@@ -322,6 +329,15 @@ static void TestWorldInputs() {
 	Check(WorldGen::DecodeBiomeHints(image, 4, 4, input, error) && input.biomes[0] == WorldGen::Terrain::Forest && input.biomes[15] == WorldGen::Terrain::Void, "Biome palette must preserve categories and alpha");
 	image.SetRGB(1, 0, 1, 2, 3);
 	Check(!WorldGen::DecodeBiomeHints(image, 1, 1, input, error), "Downsampling cannot conceal unknown source colors");
+	image.SetRGB(0, 0, 0, 0, 0);
+	image.SetRGB(1, 0, 255, 255, 255);
+	image.SetRGB(0, 1, 0, 0, 0);
+	Check(WorldGen::DecodeLandMask(image, 4, 4, input, error), "Black/white mask with transparent procedural pixels must decode");
+	Check(input.landMask[0] == 0 && input.landMask[3] == 1 && input.landMask[15] == -1, "Categorical mask resampling must preserve ocean, land and procedural holes");
+	const auto savedMask = input.landMask;
+	image.SetRGB(0, 0, 128, 128, 128);
+	Check(!WorldGen::DecodeLandMask(image, 1, 1, input, error) && input.landMask == savedMask, "Gray mask pixels must fail even when downsampled away");
+	input.landMask.clear();
 	WorldGen::Settings settings;
 	settings.width = settings.height = 32;
 	settings.riverCount = 0;
@@ -372,12 +388,15 @@ static void TestEditableInputs() {
 	}
 	const auto prefix = std::filesystem::temp_directory_path() / (std::filesystem::path(u8"rme-editable-\u00e7-").native() + std::filesystem::path(std::to_string(wxGetProcessId())).native());
 	const auto utf8 = prefix.u8string();
-	wxString heightPath, biomePath;
-	Check(WorldGen::ExportGeographyInputs(plan, wxString::FromUTF8(std::string(utf8.begin(), utf8.end())), heightPath, biomePath, error), "Editable PNG files must save to Unicode paths");
+	wxString heightPath, biomePath, maskPath;
+	Check(WorldGen::ExportGeographyInputs(plan, wxString::FromUTF8(std::string(utf8.begin(), utf8.end())), heightPath, biomePath, error, &maskPath), "Editable PNG files must save to Unicode paths");
 	wxImage reopened;
 	WorldGen::GeographyInput replay;
 	Check(WorldGen::LoadWorldPNG(heightPath, reopened, error) && WorldGen::DecodeHeightmap(reopened, 32, 32, replay, error), "Saved editable heightmap must reload");
 	Check(WorldGen::LoadWorldPNG(biomePath, reopened, error) && WorldGen::DecodeBiomeHints(reopened, 32, 32, replay, error), "Saved biome alpha/palette must reload");
+	Check(WorldGen::LoadWorldPNG(maskPath, reopened, error) && WorldGen::DecodeLandMask(reopened, 32, 32, replay, error), "Exported coastline PNG must pass strict input decoding");
+	for (size_t i = 0; i < cells.size(); ++i) Check(replay.landMask[i] == (cells[i].terrain == WorldGen::Terrain::Ocean ? 0 : 1), "Exported mask must preserve the planned ocean outline");
+	std::filesystem::remove(std::filesystem::u8path(nstr(maskPath)));
 	Check(decoded.elevation == replay.elevation && decoded.biomes == replay.biomes, "PNG encoding must preserve every editable sample and transparent hole");
 	std::filesystem::remove(std::filesystem::u8path(nstr(heightPath)));
 	std::filesystem::remove(std::filesystem::u8path(nstr(biomePath)));

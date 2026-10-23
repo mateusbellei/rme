@@ -21,6 +21,7 @@
 #include <wx/progdlg.h>
 #include <wx/stopwatch.h>
 #include <wx/display.h>
+#include <wx/dir.h>
 
 namespace {
 	wxSize DialogSize(wxWindow* parent, int width, int height) {
@@ -76,9 +77,23 @@ enum {
 ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	wxDialog(parent, wxID_ANY, "Procedural Generation", wxDefaultPosition, wxSize(560, 680), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
 	editor(editor) {
-	wxScrolledWindow* content = new wxScrolledWindow(this, wxID_ANY);
+	content = new wxScrolledWindow(this, wxID_ANY);
 	content->SetScrollRate(0, 16);
 	wxBoxSizer* top = new wxBoxSizer(wxVERTICAL);
+	top->Add(new wxStaticText(content, wxID_ANY, "Choose a recipe, customize your world, then preview and apply."), 0, wxALL, 8);
+	recipeChoice = new wxChoice(content, wxID_ANY);
+	recipeChoice->Append("Choose an active-client recipe...");
+	wxDir recipes(g_gui.GetProceduralDataDirectory() + "recipes");
+	wxString filename;
+	if (recipes.IsOpened() && recipes.GetFirst(&filename, "*.json", wxDIR_FILES)) do { recipeFiles.Add(filename); } while (recipes.GetNext(&filename));
+	recipeFiles.Sort();
+	for (const auto& file : recipeFiles) { wxString label = wxFileName(file).GetName(); label.Replace("_", " "); recipeChoice->Append(label); }
+	recipeChoice->SetSelection(0);
+	top->Add(recipeChoice, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+	recipeSummary = new wxStaticText(content, wxID_ANY, "World planner uses your active client materials. Legacy prompt tools are under Advanced.");
+	top->Add(recipeSummary, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+	advanced = new wxCheckBox(content, wxID_ANY, "Advanced files and legacy generators");
+	top->Add(advanced, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxStaticBoxSizer* sbMode = new wxStaticBoxSizer(wxVERTICAL, content, "Mode");
 	rbImageMask = new wxRadioButton(content, ID_MODE_IMAGE, "Image mask -> biomes", wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
@@ -92,6 +107,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	top->Add(sbMode, 0, wxEXPAND | wxALL, 8);
 
 	wxFlexGridSizer* grid = new wxFlexGridSizer(0, 2, 8, 8);
+	formGrid = grid;
 	grid->AddGrowableCol(1, 1);
 
 	grid->Add(new wxStaticText(content, wxID_ANY, "Image:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -208,7 +224,7 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	SetMinSize(DialogSize(this, 520, 480));
 	SetSize(DialogSize(this, 560, 680));
 
-	rbImageMask->SetValue(true);
+	rbWorldPlan->SetValue(true);
 	UpdateElevationLabel();
 	{
 		wxCommandEvent modeEvent;
@@ -231,7 +247,13 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_PROMPT);
 	Bind(wxEVT_RADIOBUTTON, &ProceduralDialog::OnModeChanged, this, ID_MODE_PROMPT_IMAGE);
 	Bind(wxEVT_CHECKBOX, &ProceduralDialog::OnUseSelectionChanged, this, ID_USE_SELECTION);
+	advanced->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) { OnModeChanged(event); });
+	recipeChoice->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) { const int index = recipeChoice->GetSelection() - 1; if (index >= 0) LoadRecipe(g_gui.GetProceduralDataDirectory() + "recipes/" + recipeFiles[index]); });
 	Bind(wxEVT_COMBOBOX, &ProceduralDialog::OnPresetChanged, this, ID_PRESET);
+	const int starter = recipeFiles.Index("starter.json");
+	if (starter != wxNOT_FOUND && LoadRecipe(g_gui.GetProceduralDataDirectory() + "recipes/starter.json")) {
+		recipeChoice->SetSelection(starter + 1);
+	}
 }
 
 void ProceduralDialog::SyncFromSelection() {
@@ -274,7 +296,13 @@ void ProceduralDialog::OnUseSelectionChanged(wxCommandEvent& event) {
 }
 
 void ProceduralDialog::OnModeChanged(wxCommandEvent& event) {
+	if (!advanced->GetValue() && !rbWorldPlan->GetValue()) rbWorldPlan->SetValue(true);
 	const bool worldMode = rbWorldPlan->GetValue();
+	for (auto* radio : { rbImageMask, rbTextPrompt, rbPromptWithImage }) radio->Show(advanced->GetValue());
+	auto row = [&](size_t index, bool visible) { formGrid->Show(index * 2, visible); formGrid->Show(index * 2 + 1, visible); };
+	row(0, !worldMode); row(1, advanced->GetValue());
+	for (size_t index : { size_t(2), size_t(3), size_t(4), size_t(5) }) row(index, !worldMode);
+	chkSidecar->Show(!worldMode); chkPlaceWalls->Show(!worldMode);
 	const bool imageMode = rbImageMask->GetValue();
 	const bool promptImageMode = rbPromptWithImage->GetValue();
 	const bool promptMode = rbTextPrompt->GetValue() || promptImageMode;
@@ -297,6 +325,7 @@ void ProceduralDialog::OnModeChanged(wxCommandEvent& event) {
 	} else if (!worldMode && txtLegendPath->GetValue().EndsWith("world_legend.json")) {
 		txtLegendPath->SetValue(g_gui.GetProceduralDataDirectory() + "default_legend.json");
 	}
+	content->Layout(); content->FitInside();
 }
 
 void ProceduralDialog::OnPresetChanged(wxCommandEvent& event) {
@@ -427,6 +456,7 @@ void ProceduralDialog::ApplySpecToDialog(const GenerationSpec& spec) {
 	rbImageMask->SetValue(spec.source == GenerationSource::ImageMask);
 	rbTextPrompt->SetValue(spec.source == GenerationSource::TextPrompt);
 	rbPromptWithImage->SetValue(spec.source == GenerationSource::PromptWithImage);
+	if (spec.source != GenerationSource::WorldPlan) advanced->SetValue(true);
 	{
 		wxCommandEvent modeEvent;
 		OnModeChanged(modeEvent);
@@ -464,13 +494,22 @@ void ProceduralDialog::OnLoadRecipe(wxCommandEvent& event) {
 	if (dlg.ShowModal() != wxID_OK) {
 		return;
 	}
+	LoadRecipe(dlg.GetPath());
+}
+
+bool ProceduralDialog::LoadRecipe(const wxString& path) {
 	GenerationSpec spec;
 	wxString error;
-	if (!ProceduralRecipe::Load(dlg.GetPath(), spec, error)) {
+	if (!ProceduralRecipe::Load(path, spec, error)) {
 		g_gui.PopupDialog(this, "Load failed", error, wxOK | wxICON_ERROR);
-		return;
+		return false;
 	}
 	ApplySpecToDialog(spec);
+	const int index = recipeFiles.Index(wxFileName(path).GetFullName());
+	recipeChoice->SetSelection(index == wxNOT_FOUND ? 0 : index + 1);
+	recipeSummary->SetLabel("Recipe: " + wxFileName(path).GetFullName());
+	recipeSummary->SetToolTip(path);
+	return true;
 }
 
 void ProceduralDialog::OnGenerate(wxCommandEvent& event) {
@@ -563,7 +602,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 			catalog->SetValue(picker.GetPath());
 		}
 	});
-	auto pngPath = [&](const wxString& label, const wxString& initial) {
+	auto assetPath = [&](const wxString& label, const wxString& initial, const wxString& filter) {
 		grid->Add(new wxStaticText(content, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
 		auto* row = new wxBoxSizer(wxHORIZONTAL);
 		auto* path = new wxTextCtrl(content, wxID_ANY, initial);
@@ -571,12 +610,23 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 		row->Add(path, 1, wxRIGHT, 4);
 		row->Add(browse, 0);
 		grid->Add(row, 1, wxEXPAND);
-		browse->Bind(wxEVT_BUTTON, [&, path, label](wxCommandEvent&) {wxFileDialog picker(content,label,"","","PNG (*.png)|*.png",wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK){path->SetValue(picker.GetPath());
+		browse->Bind(wxEVT_BUTTON, [&, path, label, filter](wxCommandEvent&) {wxFileDialog picker(content,label,"","",filter,wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK){path->SetValue(picker.GetPath());
 } });
 		return path;
 	};
-	auto* heightmap = pngPath("Heightmap PNG (optional grayscale):", worldSettings.heightmapPath);
-	auto* biomeHints = pngPath("Biome hints PNG (optional palette):", worldSettings.biomeHintsPath);
+	auto* heightmap = assetPath("Heightmap PNG (optional grayscale):", worldSettings.heightmapPath, "PNG (*.png)|*.png");
+	auto* biomeHints = assetPath("Biome hints PNG (optional palette):", worldSettings.biomeHintsPath, "PNG (*.png)|*.png");
+	auto* landMask = assetPath("Land mask PNG (black ocean / white land):", worldSettings.landMaskPath, "PNG (*.png)|*.png");
+	auto* objects = assetPath("Biome object profile (optional):", worldSettings.objectProfilePath, "JSON (*.json)|*.json");
+	auto seedInput = [&](const wxString& label, const std::optional<uint32_t>& value) {
+		grid->Add(new wxStaticText(content, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
+		auto* control = new wxTextCtrl(content, wxID_ANY, value ? wxString::Format("%u", *value) : wxString());
+		control->SetHint("Blank = master seed");
+		grid->Add(control, 1, wxEXPAND);
+		return control;
+	};
+	auto* caveSeed = seedInput("Cave seed (optional):", settings.caveSeed);
+	auto* objectSeed = seedInput("Object / furniture seed (optional):", worldSettings.objectSeed);
 	layout->Add(grid, 1, wxEXPAND | wxALL, 12);
 	auto* note = new wxStaticText(content, wxID_ANY, "Multi-floor travel uses paired teleports with safe arrival tiles.\nThe legend must match the grounds and brushes of your loaded client.");
 	layout->Add(note, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
@@ -614,6 +664,19 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.catalogPath = catalog->GetValue();
 	candidate.heightmapPath = heightmap->GetValue();
 	candidate.biomeHintsPath = biomeHints->GetValue();
+	candidate.landMaskPath = landMask->GetValue();
+	candidate.objectProfilePath = objects->GetValue();
+	auto parseSeed = [&](wxTextCtrl* control, std::optional<uint32_t>& value) {
+		const wxString text = control->GetValue();
+		if (text.empty()) { value.reset(); return true; }
+		unsigned long long parsed = 0;
+		if (text.find_first_not_of("0123456789") != wxString::npos || !text.ToULongLong(&parsed) || parsed > UINT32_MAX) return false;
+		value = uint32_t(parsed); return true;
+	};
+	if (!parseSeed(caveSeed, candidate.settings.caveSeed) || !parseSeed(objectSeed, candidate.objectSeed)) {
+		g_gui.PopupDialog(this, "Invalid seed", "Use a whole number from 0 to 4294967295, or leave the seed blank. Settings were not changed.", wxOK | wxICON_ERROR);
+		return;
+	}
 	worldSettings = candidate;
 }
 
@@ -798,7 +861,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		}
 		GenerationSpec editable = resolved;
 		editable.world.settings = plan.settings;
-		if (!WorldGen::ExportGeographyInputs(plan, prefix.GetFullPath(), editable.world.heightmapPath, editable.world.biomeHintsPath, error) || !ProceduralRecipe::Save(prefix.GetFullPath() + "_editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
+		if (!WorldGen::ExportGeographyInputs(plan, prefix.GetFullPath(), editable.world.heightmapPath, editable.world.biomeHintsPath, error, &editable.world.landMaskPath) || !ProceduralRecipe::Save(prefix.GetFullPath() + "_editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 			g_gui.PopupDialog(&preview, "Export failed", error, wxOK | wxICON_ERROR);
 			return;
 		}

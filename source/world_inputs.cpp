@@ -47,7 +47,7 @@ namespace WorldGen {
 		biomeHints = std::move(biomes);
 		return true;
 	}
-	bool ExportGeographyInputs(const Plan& plan, const wxString& prefix, wxString& heightmapPath, wxString& biomeHintsPath, wxString& error) {
+	bool ExportGeographyInputs(const Plan& plan, const wxString& prefix, wxString& heightmapPath, wxString& biomeHintsPath, wxString& error, wxString* landMaskPath) {
 		if (prefix.empty() || prefix.find(wxUniChar(0)) != wxString::npos) {
 			error = "Choose a nonempty editable-input filename prefix without NUL.";
 			return false;
@@ -65,6 +65,19 @@ namespace WorldGen {
 		}
 		heightmapPath = heightFile;
 		biomeHintsPath = biomeFile;
+		if (landMaskPath) {
+			wxImage mask(plan.settings.width, plan.settings.height);
+			if (!mask.IsOk()) { error = "Could not allocate editable land mask."; return false; }
+			const auto& cells = plan.FindLayer(0)->cells;
+			for (int y = 0; y < plan.settings.height; ++y) for (int x = 0; x < plan.settings.width; ++x) {
+				const auto value = cells[size_t(y) * plan.settings.width + x].terrain == Terrain::Ocean ? 0 : 255;
+				mask.SetRGB(x, y, value, value, value);
+			}
+			const auto path = prefix + "_land.png";
+			wxTempFileOutputStream stream(path);
+			if (!stream.IsOk() || !encoder.SaveFile(&mask, stream, false) || !stream.Commit()) { error = "Could not finish editable land mask: " + path; return false; }
+			*landMaskPath = path;
+		}
 		return true;
 	}
 	namespace {
@@ -83,6 +96,21 @@ namespace WorldGen {
 			}
 			return true;
 		}
+	}
+	bool DecodeLandMask(const wxImage& image, int width, int height, GeographyInput& input, wxString& error) {
+		if (!CheckImage(image, width, height, error)) return false;
+		for (int y = 0; y < image.GetHeight(); ++y) for (int x = 0; x < image.GetWidth(); ++x) {
+			if (ProceduralMask::IsTransparent(image, x, y)) continue;
+			if (!Opaque(image, x, y, error)) return false;
+			const int value = image.GetRed(x, y);
+			if ((value != 0 && value != 255) || image.GetGreen(x, y) != value || image.GetBlue(x, y) != value) { error = "Land mask must use opaque black (ocean), white (land), or transparent (procedural) pixels."; return false; }
+		}
+		std::vector<int8_t> values(size_t(width) * height, -1);
+		for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x) {
+			const int sx = int(int64_t(x) * image.GetWidth() / width), sy = int(int64_t(y) * image.GetHeight() / height);
+			if (!ProceduralMask::IsTransparent(image, sx, sy)) values[size_t(y) * width + x] = image.GetRed(sx, sy) ? 1 : 0;
+		}
+		input.landMask = std::move(values); return true;
 	}
 	bool DecodeHeightmap(const wxImage& image, int width, int height, GeographyInput& input, wxString& error) {
 		if (!CheckImage(image, width, height, error)) {

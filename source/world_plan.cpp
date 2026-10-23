@@ -150,7 +150,13 @@ namespace WorldGen {
 						cell.elevation = input->elevation[size_t(y) * s.width + x];
 					}
 					if (x == 0 || y == 0 || x == s.width - 1 || y == s.height - 1) {
+						// Keep the mandatory ocean boundary even with an authored shape.
 						cell.elevation = 0;
+					}
+					else if (input && !input->landMask.empty()) {
+						const int mask = input->landMask[size_t(y) * s.width + x];
+						if (mask == 0) cell.elevation = uint16_t(std::min(int(cell.elevation), s.seaLevel - 500));
+						if (mask == 1) cell.elevation = uint16_t(std::max(int(cell.elevation), s.seaLevel + 100));
 					}
 					const int latitude = std::abs(y * 10000 / (s.height - 1) - 5000) * 2;
 					cell.temperature = uint16_t(Clamp(10500 - latitude * 8 / 10 - std::max(0, int(cell.elevation) - s.seaLevel) * 7 / 10 + (Noise(x, y, s.width, s.height, 4, climateSeed) - 5000) / 5 + s.temperatureBias));
@@ -820,7 +826,7 @@ namespace WorldGen {
 				}
 				for (int x = 0; x < s.width; ++x) {
 					auto& c = layer.cells[size_t(y) * s.width + x];
-					c.terrain = Interior({ x, y }, s.width, s.height) && int(Hash(s.seed, x + depth * 7919, y) % 100) >= s.caveFill ? Terrain::CaveFloor : Terrain::CaveWall;
+					c.terrain = Interior({ x, y }, s.width, s.height) && int(Hash(s.caveSeed.value_or(s.seed), x + depth * 7919, y) % 100) >= s.caveFill ? Terrain::CaveFloor : Terrain::CaveWall;
 				}
 			}
 			for (int iteration = 0; iteration < 5; ++iteration) {
@@ -1099,7 +1105,7 @@ namespace WorldGen {
 		}
 		if (input) {
 			const size_t count = size_t(settings.width) * settings.height;
-			if ((!input->elevation.empty() && input->elevation.size() != count) || (!input->biomes.empty() && input->biomes.size() != count)) {
+			if ((!input->landMask.empty() && input->landMask.size() != count) || (!input->elevation.empty() && input->elevation.size() != count) || (!input->biomes.empty() && input->biomes.size() != count)) {
 				error = "World input dimensions do not match the target region.";
 				return false;
 			}
@@ -1109,6 +1115,7 @@ namespace WorldGen {
 					return false;
 				}
 			}
+			for (int value : input->landMask) if (value < -1 || value > 1) { error = "Land mask values must be procedural, ocean or land."; return false; }
 			for (Terrain biome : input->biomes) {
 				if (biome != Terrain::Void && (biome < Terrain::Beach || biome > Terrain::Mountain)) {
 					error = "Biome hints must be dry natural terrain categories.";
@@ -1563,6 +1570,7 @@ namespace WorldGen {
 		add(plan.settings.width);
 		add(plan.settings.height);
 		add(plan.settings.seed);
+		if (plan.settings.caveSeed) { string("cave-seed"); add(*plan.settings.caveSeed); }
 		for (const auto& layer : plan.layers) {
 			add(uint32_t(layer.offsetZ));
 			for (const auto& c : layer.cells) {

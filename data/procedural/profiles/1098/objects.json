@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "biomes": {
+    "forest": {
+      "density": 130,
+      "brushes": [
+        {
+          "name": "green trees",
+          "weight": 4
+        },
+        {
+          "name": "bushes",
+          "weight": 3
+        },
+        {
+          "name": "grass tufts",
+          "weight": 2
+        },
+        {
+          "name": "mossy rocks",
+          "weight": 1
+        }
+      ]
+    },
+    "desert": {
+      "density": 65,
+      "brushes": [
+        {
+          "name": "dead bushes",
+          "weight": 4
+        },
+        {
+          "name": "dead trees",
+          "weight": 1
+        },
+        {
+          "name": "brown rocks",
+          "weight": 2
+        }
+      ]
+    },
+    "ice": {
+      "density": 85,
+      "brushes": [
+        {
+          "name": "snowy trees",
+          "weight": 3
+        },
+        {
+          "name": "small snowy rocks",
+          "weight": 2
+        }
+      ]
+    },
+    "cave": {
+      "density": 75,
+      "brushes": [
+        {
+          "name": "small rocks",
+          "weight": 4
+        },
+        {
+          "name": "blue cave crystal",
+          "weight": 1
+        },
+        {
+          "name": "green cave crystal",
+          "weight": 1
+        }
+      ]
+    },
+    "coast": {
+      "density": 50,
+      "brushes": [
+        {
+          "name": "palm trees",
+          "weight": 3
+        },
+        {
+          "name": "small rocks",
+          "weight": 1
+        }
+      ]
+    }
+  }
+}

@@ -89,7 +89,36 @@ namespace WorldEditor {
 			return true;
 		}
 
-		std::array<std::vector<DoodadBrush*>, 6> DecorationBrushes(ApplicationStats& stats) {
+		bool DecorationBrushes(const GenerationSpec& spec, std::array<std::vector<DoodadBrush*>, 6>& brushes, std::array<int, 6>& density, ApplicationStats& stats, wxString& error) {
+			density.fill(100);
+			if (!spec.world.objectProfilePath.empty()) {
+				json::mValue root; std::string problem;
+				if (!ProceduralJSON::ReadFile(nstr(spec.world.objectProfilePath), 1024 * 1024, root, problem) || root.type() != json::obj_type) { error = "Invalid biome object profile: " + wxString::FromUTF8(problem); return false; }
+				const auto& object = root.get_obj();
+				const auto version = object.find("version"), biomes = object.find("biomes");
+				if (version == object.end() || version->second.type() != json::int_type || version->second.get_int64() != 1 || biomes == object.end() || biomes->second.type() != json::obj_type || biomes->second.get_obj().size() > 5) { error = "Object profiles require version 1 and a biomes object."; return false; }
+				const std::array<std::string, 6> names { "", "forest", "desert", "ice", "cave", "coast" };
+				for (const auto& entry : biomes->second.get_obj()) {
+					const auto found = std::find(names.begin() + 1, names.end(), entry.first);
+					if (found == names.end() || entry.second.type() != json::obj_type) { error = "Unknown biome in object profile."; return false; }
+					const size_t index = size_t(found - names.begin()); const auto& biome = entry.second.get_obj();
+					const auto scale = biome.find("density"), entries = biome.find("brushes");
+					if (scale != biome.end()) {
+						if (scale->second.type() != json::int_type || scale->second.get_int64() < 0 || scale->second.get_int64() > 200) { error = "Biome density must be 0..200 percent."; return false; }
+						density[index] = int(scale->second.get_int64());
+					}
+					if (entries == biome.end() || entries->second.type() != json::array_type || entries->second.get_array().size() > 64) { error = "Biome brushes must be an array of at most 64 weighted names."; return false; }
+					for (const auto& value : entries->second.get_array()) {
+						if (value.type() != json::obj_type) { error = "Invalid weighted object brush."; return false; }
+						const auto& item = value.get_obj(); const auto name = item.find("name"), weight = item.find("weight");
+						if (name == item.end() || name->second.type() != json::str_type || name->second.get_str().empty() || name->second.get_str().size() > 128 || name->second.get_str().find('\0') != std::string::npos || (weight != item.end() && (weight->second.type() != json::int_type || weight->second.get_int64() < 1 || weight->second.get_int64() > 100))) { error = "Object brushes need a bounded exact name and weight 1..100."; return false; }
+						Brush* brush = g_brushes.getBrush(name->second.get_str());
+						if (!brush || !brush->isDoodad()) { error = "Missing exact doodad brush: " + wxString::FromUTF8(name->second.get_str()); return false; }
+						brushes[index].insert(brushes[index].end(), weight == item.end() ? 1 : size_t(weight->second.get_int64()), brush->asDoodad());
+					}
+				}
+				return true;
+			}
 			std::array<std::vector<std::string>, 6> keywords;
 			keywords[1] = { "tree", "bush", "fern", "mushroom", "log" };
 			keywords[2] = { "cactus", "desert", "dead", "palm", "rock" };
@@ -125,13 +154,12 @@ namespace WorldEditor {
 				stats.warnings.push_back("Biome decoration settings could not be read; built-in keyword groups were used.");
 			}
 
-			std::array<std::vector<DoodadBrush*>, 6> brushes;
 			for (int i = 1; i <= 5; ++i) {
 				if (!keywords[i].empty()) {
 					brushes[i] = ProceduralCommon::FindDoodadBrushes(keywords[i]);
 				}
 			}
-			return brushes;
+			return true;
 		}
 
 		struct DoodadSample {
@@ -223,6 +251,7 @@ namespace WorldEditor {
 		}
 
 		bool Furnish(const GenerationSpec& spec, const WorldGen::Plan& plan, BaseMap& scratch, std::set<Position>& blocking, ApplicationStats& stats, const WorldGen::ProgressCallback& progress, wxString& error) {
+			const uint32_t objectSeed = spec.world.objectSeed.value_or(spec.seed);
 			std::set<wxString> warnings;
 			for (const auto& building : plan.buildings) {
 				if (!Update(progress, "Furnishing construction templates", 75, error)) {
@@ -270,7 +299,7 @@ namespace WorldEditor {
 						DoodadSample sample;
 						wxString reason;
 						std::string clearance;
-						const bool sampled = found && found->isDoodad() && SampleDoodad(*found->asDoodad(), scratch, PositionFor(spec, point, offsetZ), CellSeed(spec.seed, point.x, point.y, offsetZ, 21), CellSeed(spec.seed, point.x, point.y, offsetZ, 22), CellSeed(spec.seed, point.x, point.y, offsetZ, 23), sample, reason);
+						const bool sampled = found && found->isDoodad() && SampleDoodad(*found->asDoodad(), scratch, PositionFor(spec, point, offsetZ), CellSeed(objectSeed, point.x, point.y, offsetZ, 21), CellSeed(objectSeed, point.x, point.y, offsetZ, 22), CellSeed(objectSeed, point.x, point.y, offsetZ, 23), sample, reason);
 						if (!sampled || !WorldGen::CanPlaceDecoration(grid, { object.x, object.y }, sample.footprint, &clearance)) {
 							if (!found || !found->isDoodad()) {
 								reason = "missing doodad brush";
@@ -300,7 +329,10 @@ namespace WorldEditor {
 			if (!spec.doodads.enabled || spec.doodads.density <= 0) {
 				return true;
 			}
-			const auto brushes = DecorationBrushes(stats);
+			std::array<std::vector<DoodadBrush*>, 6> brushes;
+			std::array<int, 6> densityScale;
+			if (!DecorationBrushes(spec, brushes, densityScale, stats, error)) return false;
+			const uint32_t objectSeed = spec.world.objectSeed.value_or(spec.seed);
 			std::array<bool, 6> used {};
 			for (const auto& layer : plan.layers) {
 				WorldGen::DecorationGrid grid;
@@ -334,19 +366,19 @@ namespace WorldEditor {
 						if (!habitat || grid.reserved[index] || !grid.walkable[index] || grid.occupied[index] || brushes[habitat].empty()) {
 							continue;
 						}
-						const uint32_t choice = CellSeed(spec.seed, x, y, layer.offsetZ, 11);
+						const uint32_t choice = CellSeed(objectSeed, x, y, layer.offsetZ, 11);
 						const auto terrain = layer.cells[index].terrain;
 						const int factor = terrain == WorldGen::Terrain::Forest ? 180 : (terrain == WorldGen::Terrain::Grass ? 40 : (habitat == 4 ? 60 : 80));
-						const int patch = 60 + int(CellSeed(spec.seed, x / 12, y / 12, layer.offsetZ, 12) % 81);
-						const int density = std::min(80, std::clamp(spec.doodads.density, 0, 100) * factor * patch / 10000);
+						const int patch = 60 + int(CellSeed(objectSeed, x / 12, y / 12, layer.offsetZ, 12) % 81);
+						const int density = std::min(80, std::clamp(spec.doodads.density, 0, 100) * factor * patch * densityScale[habitat] / 1000000);
 						if (choice % 100 >= uint32_t(density)) {
 							continue;
 						}
-						DoodadBrush* brush = brushes[habitat][CellSeed(spec.seed, x, y, layer.offsetZ, 13) % brushes[habitat].size()];
+						DoodadBrush* brush = brushes[habitat][CellSeed(objectSeed, x, y, layer.offsetZ, 13) % brushes[habitat].size()];
 						DoodadSample sample;
 						wxString reason;
 						const auto anchor = PositionFor(spec, { x, y }, layer.offsetZ);
-						if (!SampleDoodad(*brush, scratch, anchor, CellSeed(spec.seed, x, y, layer.offsetZ, 14), CellSeed(spec.seed, x, y, layer.offsetZ, 15), CellSeed(spec.seed, x, y, layer.offsetZ, 16), sample, reason) || !WorldGen::CanPlaceDecoration(grid, { x, y }, sample.footprint)) {
+						if (!SampleDoodad(*brush, scratch, anchor, CellSeed(objectSeed, x, y, layer.offsetZ, 14), CellSeed(objectSeed, x, y, layer.offsetZ, 15), CellSeed(objectSeed, x, y, layer.offsetZ, 16), sample, reason) || !WorldGen::CanPlaceDecoration(grid, { x, y }, sample.footprint)) {
 							++stats.skippedDoodads;
 							continue;
 						}
@@ -742,8 +774,8 @@ namespace WorldEditor {
 			catalog = WorldGen::DefaultBlueprints();
 		}
 		WorldGen::GeographyInput input;
-		for (int type = 0; type < 2; ++type) {
-			const wxString path = type == 0 ? spec.world.heightmapPath : spec.world.biomeHintsPath;
+		for (int type = 0; type < 3; ++type) {
+			const wxString path = type == 0 ? spec.world.heightmapPath : (type == 1 ? spec.world.biomeHintsPath : spec.world.landMaskPath);
 			if (path.empty()) {
 				continue;
 			}
@@ -751,7 +783,7 @@ namespace WorldEditor {
 			if (!WorldGen::LoadWorldPNG(path, image, error)) {
 				return false;
 			}
-			if (!(type == 0 ? WorldGen::DecodeHeightmap(image, settings.width, settings.height, input, error) : WorldGen::DecodeBiomeHints(image, settings.width, settings.height, input, error))) {
+			if (!(type == 0 ? WorldGen::DecodeHeightmap(image, settings.width, settings.height, input, error) : (type == 1 ? WorldGen::DecodeBiomeHints(image, settings.width, settings.height, input, error) : WorldGen::DecodeLandMask(image, settings.width, settings.height, input, error)))) {
 				return false;
 			}
 		}

@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <optional>
 #include "world_catalog.h"
 
 // Client-independent planning. No map, brush registry, GUI or global RNG access.
@@ -92,6 +93,7 @@ namespace WorldGen {
 	struct Settings {
 		int width = 256, height = 256;
 		uint32_t seed = 1337;
+		std::optional<uint32_t> caveSeed;
 		LandShape shape = LandShape::Continent;
 		int seaLevel = 4200;
 		int coastRoughness = 55;
@@ -115,6 +117,7 @@ namespace WorldGen {
 	// 65535/ Void preserve procedural terrain. Biome hints apply only on dry land;
 	// drainage and subsequent settlement construction retain precedence.
 	struct GeographyInput {
+		std::vector<int8_t> landMask; // -1 procedural, 0 ocean, 1 dry land.
 		std::vector<uint16_t> elevation;
 		std::vector<Terrain> biomes;
 	};

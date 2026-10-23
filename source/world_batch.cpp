@@ -460,11 +460,12 @@ namespace WorldBatch {
 		if (options.exportEditableInputs) {
 			GenerationSpec editable = resolved;
 			editable.world.settings = plan.settings;
-			if (!WorldGen::ExportGeographyInputs(plan, output + "inputs", editable.world.heightmapPath, editable.world.biomeHintsPath, error) || !ProceduralRecipe::Save(output + "editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
+			if (!WorldGen::ExportGeographyInputs(plan, output + "inputs", editable.world.heightmapPath, editable.world.biomeHintsPath, error, &editable.world.landMaskPath) || !ProceduralRecipe::Save(output + "editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 				return false;
 			}
 			editableInputs["heightmap"] = "inputs_heightmap.png";
 			editableInputs["biomeHints"] = "inputs_biomes.png";
+			editableInputs["landMask"] = "inputs_land.png";
 			editableInputs["recipe"] = "editable-recipe.json";
 		}
 		if (!ProceduralRecipe::Save(output + "recipe.json", resolved, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
@@ -484,6 +485,8 @@ namespace WorldBatch {
 		report["houseRent"] = options.houseRent;
 		report["algorithmVersion"] = int(WorldGen::AlgorithmVersion);
 		report["seed"] = json::mValue(uint64_t(resolved.seed));
+		report["caveSeed"] = json::mValue(uint64_t(resolved.world.settings.caveSeed.value_or(resolved.seed)));
+		report["objectSeed"] = json::mValue(uint64_t(resolved.world.objectSeed.value_or(resolved.seed)));
 		report["planFingerprint"] = std::to_string(prepared.fingerprint);
 		report["tiles"] = json::mValue(uint64_t(prepared.application.changedTiles));
 		report["doodads"] = json::mValue(uint64_t(prepared.application.doodads));

@@ -29,3 +29,5 @@ ID 0 selects one automatically; travel arrives beside the return portal.
 These connections are teleports, not physical stair sprites.
 
 Project-specific recipes (private IP, themed prompts) belong in the **consumer's private assets repository**, not in this public RME fork.
+
+`example_custom_continent_1098.json` adds independent cave/object seeds and a weighted exact-name object palette for public 10.98. See `docs/WORLD_GENERATION.md` for PNG land masks and custom-client palette requirements.

@@ -90,6 +90,9 @@ struct GenerationWorld {
 	wxString catalogPath;
 	wxString heightmapPath;
 	wxString biomeHintsPath;
+	wxString landMaskPath;
+	wxString objectProfilePath;
+	std::optional<uint32_t> objectSeed;
 };
 
 struct GenerationSpec {

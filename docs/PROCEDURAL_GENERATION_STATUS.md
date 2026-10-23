@@ -1,5 +1,18 @@
 # Procedural generation: audit and next deliveries
 
+## Server export continuation (2026-10-18)
+
+The continuation based on the prefab branch adds optional residential OTBM house
+tiles, native XML rental/town/exit records and per-house door IDs to isolated batch
+exports. Verification restores house XML onto decoded OTBM tiles. Compact exports
+can omit uncompressed PPM/plan diagnostics independently of PNG previews, preserving
+identical server artifacts. See [server export](WORLD_SERVER_EXPORT.md).
+A local x64 run verified the maximum 2048x2048 surface: 4,194,304 tiles, four towns,
+52 houses, 2682.1 MiB peak working set and 33.43 MiB compact output. Extra populated
+floors at that surface size would exceed the supported tile budget.
+This remains a feature branch until its PR is integrated; spawns/NPCs, physical
+stairs, arbitrary prefab rotation and real-client/server QA are still pending.
+
 Audit: 2026-10-15. Tracking: https://github.com/mateusbellei/rme/issues/5
 
 ## OTBM prefab continuation (2026-10-17)

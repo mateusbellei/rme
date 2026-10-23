@@ -5,8 +5,10 @@
 namespace WorldBatch {
 	struct Options {
 		wxString recipe, itemsOtb, itemsXml, materials, outputDirectory;
-		wxString dataDirectory, clientDat, townPrefix;
+		wxString dataDirectory, clientDat, townPrefix, housePrefix;
+		int houseRent = 0;
 		bool exportPreviews = true;
+		bool exportDiagnostics = true;
 		bool exportEditableInputs = false;
 		bool verifyOutput = false;
 		size_t tileBudget = WorldEditor::DefaultTileBudget;
@@ -14,7 +16,7 @@ namespace WorldBatch {
 	};
 	struct Result {
 		uint64_t fingerprint = 0;
-		size_t towns = 0;
+		size_t towns = 0, houses = 0;
 		bool verified = false;
 		WorldEditor::ApplicationStats application;
 		std::vector<wxString> warnings;

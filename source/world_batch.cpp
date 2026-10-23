@@ -13,6 +13,8 @@
 #include "settings.h"
 #include "json.h"
 #include "town.h"
+#include "house.h"
+#include "complexitem.h"
 #include <wx/file.h>
 #include <wx/imagpng.h>
 #include <wx/wfstream.h>
@@ -38,6 +40,7 @@ namespace WorldBatch {
 			bool Houses(Map& map, pugi::xml_document& doc) {
 				return saveHouses(map, doc);
 			}
+			bool ReadHouses(Map& map, pugi::xml_document& doc) { return loadHouses(map, doc); }
 		};
 		struct SignatureSetting {
 			int previous = g_settings.getInteger(Config::CHECK_SIGNATURES);
@@ -106,6 +109,57 @@ namespace WorldBatch {
 			}
 			return true;
 		}
+		bool RegisterHouses(Map& map, const GenerationSpec& spec, const WorldGen::Plan& plan, const Options& options, json::mArray& records, std::vector<wxString>& warnings, wxString& error) {
+			if (options.housePrefix.empty()) return true;
+			for (size_t index = 0; index < plan.buildings.size(); ++index) {
+				const auto& building = plan.buildings[index];
+				const auto blueprint = WorldGen::RotateBlueprint(plan.catalog[building.blueprint], building.rotation);
+				if (blueprint.role != "residential") continue;
+				const auto [doorX, doorY] = WorldGen::FindBlueprintSymbol(blueprint.rows, '+');
+				const int dx = doorX == 0 ? -1 : (doorX == building.width - 1 ? 1 : 0);
+				const int dy = dx ? 0 : (doorY == 0 ? -1 : (doorY == building.height - 1 ? 1 : 0));
+				const WorldGen::Point outside { building.entrance.x + dx, building.entrance.y + dy };
+				const Position exit(spec.region.originX + outside.x, spec.region.originY + outside.y, spec.region.z);
+				const Tile* exitTile = map.getTile(exit);
+				auto safe = [](const Item* item) { const auto& type = g_items[item->getID()]; return !type.unpassable && !type.isTeleport() && !type.isFloorChange(); };
+				if (!plan.Contains(outside) || !WorldGen::IsWalkable(plan.FindLayer(0)->cells[plan.Index(outside)]) || !exitTile || !exitTile->ground || exitTile->getHouseID() || !safe(exitTile->ground) || !std::all_of(exitTile->items.begin(), exitTile->items.end(), safe)) {
+					error = "Generated house needs a safe public exit directly outside its entrance."; return false;
+				}
+				auto house = std::make_unique<House>(map);
+				house->setID(uint32_t(records.size() + 1));
+				house->name = nstr(options.housePrefix) + " " + std::to_string(records.size() + 1);
+				house->townid = uint32_t(building.settlement + 1);
+				house->rent = options.houseRent;
+				if (!map.towns.getTown(house->townid)) { error = "Generated house has no registered town."; return false; }
+				size_t tiles = 0;
+				unsigned doors = 0;
+				for (int level = 0; level < building.levels; ++level) {
+					const auto& rows = WorldGen::BlueprintRowsForFloor(blueprint, level);
+					for (int y = 0; y < building.height; ++y) for (int x = 0; x < building.width; ++x) {
+						if (rows[y][x] == ' ' || (level && rows[y][x] == ',')) continue;
+						Tile* tile = map.getTile(spec.region.originX + building.origin.x + x, spec.region.originY + building.origin.y + y, spec.region.z - level);
+						if (!tile || !tile->ground || tile->getHouseID()) { error = "Generated house contains missing or already owned tiles."; return false; }
+						for (Item* item : tile->items) if (auto* door = dynamic_cast<Door*>(item)) {
+							if (++doors > 255) { error = "Generated house exceeds 255 addressable doors."; return false; }
+							door->setDoorID(uint8_t(doors));
+						}
+						house->addTile(tile); ++tiles;
+					}
+				}
+				house->setExit(exit);
+				json::mObject record;
+				record["id"] = int(house->getID()); record["name"] = house->name;
+				record["townId"] = int(house->townid); record["rent"] = house->rent;
+				record["building"] = int(index); record["tiles"] = int(tiles);
+				record["size"] = int(house->size()); record["doors"] = int(doors);
+				json::mArray position; position.push_back(exit.x); position.push_back(exit.y); position.push_back(exit.z);
+				record["entryPosition"] = position; records.push_back(record);
+				map.houses.addHouse(house.release());
+			}
+			if (records.empty()) { error = "House export requires at least one placed template with role residential."; return false; }
+			if (std::any_of(records.begin(), records.end(), [](const json::mValue& value) { return value.get_obj().at("doors").get_int() == 0; })) warnings.push_back("Some generated houses have no door items. House ownership is exported, but lockable entrances must be authored separately.");
+			return true;
+		}
 		bool Write(const wxString& filename, const void* bytes, size_t size, wxString& error) {
 			wxTempFile file(filename);
 			if (!file.IsOpened() || !file.Write(bytes, size) || !file.Commit()) {
@@ -142,6 +196,11 @@ namespace WorldBatch {
 		if (options.townPrefix.find(wxUniChar(0)) != wxString::npos || prefix.size() > 64 || (!options.townPrefix.empty() && visiblePrefix.empty()) || std::any_of(prefix.begin(), prefix.end(), [](unsigned char c) { return c < 32 || c == 127; })) {
 			error = "Town prefix must contain 1..64 printable UTF-8 bytes, or be empty to omit town records.";
 			return false;
+		}
+		const auto housePrefix = options.housePrefix.utf8_string();
+		wxString visibleHousePrefix = options.housePrefix; visibleHousePrefix.Trim(true).Trim(false);
+		if (options.houseRent < 0 || (options.houseRent && options.housePrefix.empty()) || (!options.housePrefix.empty() && (options.townPrefix.empty() || visibleHousePrefix.empty() || housePrefix.size() > 64 || options.housePrefix.find(wxUniChar(0)) != wxString::npos || std::any_of(housePrefix.begin(), housePrefix.end(), [](unsigned char c) { return c < 32 || c == 127; })))) {
+			error = "House export requires --town-prefix, a printable 1..64 byte house prefix and nonnegative rent."; return false;
 		}
 		if (!options.tileBudget || options.tileBudget > WorldEditor::MaximumTileBudget) {
 			error = wxString::Format("World tile budget must be between 1 and %llu for this build.", static_cast<unsigned long long>(WorldEditor::MaximumTileBudget));
@@ -274,6 +333,9 @@ namespace WorldBatch {
 			return false;
 		}
 		prepared.towns = townRecords.size();
+		json::mArray houseRecords;
+		if (!RegisterHouses(editor.map, resolved, plan, options, houseRecords, prepared.warnings, error)) return false;
+		prepared.houses = houseRecords.size();
 		for (const auto& warning : warnings) {
 			prepared.warnings.push_back(warning);
 		}
@@ -340,6 +402,13 @@ namespace WorldBatch {
 				error = "OTBM verification failed: the production reader/writer could not reopen the generated world.";
 				return false;
 			}
+			pugi::xml_document savedHouses, restoredHouses;
+			if (!savedHouses.load_file((output + "world-houses.xml").wc_str()) || !codec.ReadHouses(reopened.map, savedHouses) || !codec.Houses(reopened.map, restoredHouses) || reopened.map.houses.count() != prepared.houses) {
+				error = "House verification failed while restoring XML metadata to OTBM house tiles."; return false;
+			}
+			std::ostringstream expectedHouses, actualHouses;
+			houses.save(expectedHouses); restoredHouses.save(actualHouses);
+			if (expectedHouses.str() != actualHouses.str()) { error = "House metadata changed during OTBM/XML readback."; return false; }
 			if (replay.getSize() != memory.getSize() || std::memcmp(replay.getMemory(), memory.getMemory(), memory.getSize()) != 0) {
 				size_t difference = 0;
 				while (difference < std::min(replay.getSize(), memory.getSize()) && replay.getMemory()[difference] == memory.getMemory()[difference]) {
@@ -366,7 +435,7 @@ namespace WorldBatch {
 			prepared.verified = true;
 		}
 		std::string diagnosticError;
-		if (!WorldGen::ExportDiagnostics(plan, nstr((output + "plan")), diagnosticError)) {
+		if (options.exportDiagnostics && !WorldGen::ExportDiagnostics(plan, nstr((output + "plan")), diagnosticError)) {
 			error = wxString::FromUTF8(diagnosticError);
 			return false;
 		}
@@ -406,9 +475,13 @@ namespace WorldBatch {
 		report["tileBudget"] = json::mValue(uint64_t(options.tileBudget));
 		report["verifiedOTBM"] = prepared.verified;
 		report["previews"] = previews;
+		report["diagnosticsExported"] = options.exportDiagnostics;
 		report["editableInputs"] = editableInputs;
 		report["towns"] = townRecords;
 		report["townPrefix"] = nstr(options.townPrefix);
+		report["houses"] = houseRecords;
+		report["housePrefix"] = nstr(options.housePrefix);
+		report["houseRent"] = options.houseRent;
 		report["algorithmVersion"] = int(WorldGen::AlgorithmVersion);
 		report["seed"] = json::mValue(uint64_t(resolved.seed));
 		report["planFingerprint"] = std::to_string(prepared.fingerprint);
@@ -443,7 +516,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--editable-inputs] [--town-prefix NAME] [--tile-budget MAX_TILES] [--seed UINT32] [--verify]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--no-diagnostics] [--editable-inputs] [--town-prefix NAME] [--house-prefix NAME] [--house-rent UINT31] [--tile-budget MAX_TILES] [--seed UINT32] [--verify]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -458,6 +531,7 @@ namespace WorldBatch {
 		options.itemsXml = args[2];
 		options.materials = args[3];
 		options.outputDirectory = args[4];
+		bool housePrefixSet = false, houseRentSet = false;
 		for (size_t i = 5; i < args.size(); ++i) {
 			if (args[i] == "--editable-inputs") {
 				options.exportEditableInputs = true;
@@ -471,6 +545,10 @@ namespace WorldBatch {
 				options.exportPreviews = false;
 				continue;
 			}
+			if (args[i] == "--no-diagnostics") {
+				options.exportDiagnostics = false;
+				continue;
+			}
 			if (i + 1 >= args.size()) {
 				std::cerr << usage << '\n';
 				return 2;
@@ -481,6 +559,14 @@ namespace WorldBatch {
 				options.clientDat = args[i + 1];
 			} else if (args[i] == "--town-prefix") {
 				options.townPrefix = args[i + 1];
+			} else if (args[i] == "--house-prefix") {
+				if (housePrefixSet || args[i + 1].empty()) { std::cerr << "Specify one nonempty house prefix.\n"; return 2; }
+				options.housePrefix = args[i + 1]; housePrefixSet = true;
+			} else if (args[i] == "--house-rent") {
+				unsigned long long rent = 0;
+				const auto& value = args[i + 1];
+				if (houseRentSet || value.empty() || value.find_first_not_of("0123456789") != wxString::npos || !value.ToULongLong(&rent) || rent > INT32_MAX) { std::cerr << "House rent must be one decimal integer in 0..2147483647.\n"; return 2; }
+				options.houseRent = int(rent); houseRentSet = true;
 			} else if (args[i] == "--seed") {
 				const auto& value = args[i + 1];
 				unsigned long long seed = 0;
@@ -503,6 +589,7 @@ namespace WorldBatch {
 			++i;
 		}
 		Result result;
+		if (houseRentSet && !housePrefixSet) { std::cerr << "--house-rent requires --house-prefix.\n"; return 2; }
 		wxString error;
 		std::string last;
 		auto progress = [&](const char* stage, int) {if(last!=stage){std::cout<<stage<<'\n';last=stage;}return true; };
@@ -515,7 +602,7 @@ namespace WorldBatch {
 			std::cerr << "World generation failed: " << exception.what() << '\n';
 			return 1;
 		}
-		std::cout << "World saved: " << result.application.changedTiles << " tiles; " << result.towns << " towns; plan=" << result.fingerprint << '\n';
+		std::cout << "World saved: " << result.application.changedTiles << " tiles; " << result.towns << " towns; " << result.houses << " houses; plan=" << result.fingerprint << '\n';
 		for (const auto& warning : result.warnings) {
 			std::cerr << "Warning: " << nstr(warning) << '\n';
 		}

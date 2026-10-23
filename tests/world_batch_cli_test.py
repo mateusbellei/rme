@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 
 
 def rgb_png(path, rows):
@@ -24,6 +25,27 @@ def flat_biome_png(path, rgb):
     rgb_png(path, [[rgb] * 8] * 8)
 
 
+def otbm_nodes(data):
+    """Yield decoded node payloads and ancestor headers from a writer fixture."""
+    assert data[:4] == b"OTBM"
+    stack = []
+    cursor = 4
+    while cursor < len(data):
+        value = data[cursor]
+        cursor += 1
+        if value == 0xfe:
+            stack.append(bytearray())
+        elif value == 0xff:
+            node = bytes(stack.pop())
+            yield node, stack
+        else:
+            if value == 0xfd:
+                value = data[cursor]
+                cursor += 1
+            stack[-1].append(value)
+    assert not stack
+
+
 def main():
     executable, source, build = map(Path, sys.argv[1:])
     source = source.resolve()
@@ -35,7 +57,8 @@ def main():
                    str(source / "data/1098/items_original1098.otb"),
                    str(source / "data/1098/items_original1098.xml"),
                    str(source / "data/1098/materials.xml"), str(output),
-                   "--data-dir", str(source / "data"), "--town-prefix", "Frontier", "--verify"]
+                   "--data-dir", str(source / "data"), "--town-prefix", "Frontier", "--verify",
+                   "--house-prefix", "Home", "--house-rent", "250"]
         # Run outside the checkout: only explicit arguments / recipe-relative paths apply.
         generated = subprocess.run(command, cwd=temporary, capture_output=True, text=True,
                                    errors="replace", timeout=60)
@@ -47,6 +70,7 @@ def main():
         assert report["tileBudget"] == 1048576
         assert report["seed"] == plan["settings"]["seed"]
         assert report["verifiedOTBM"] is True
+        assert report["diagnosticsExported"] is True
         assert report["editableInputs"] == {}
         assert report["townPrefix"] == "Frontier" and len(report["towns"]) == 2
         assert [town["name"] for town in report["towns"]] == ["Frontier 1", "Frontier 2"]
@@ -67,7 +91,20 @@ def main():
             assert Path(filename).name == filename
             assert (output / filename).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
         assert "preview_z7_roles.png" in report["previews"]
-        assert len(report["warnings"]) == 1 and "No client DAT supplied" in report["warnings"][0]
+        residences = [i for i, b in enumerate(plan["buildings"]) if b["role"] == "residential"]
+        assert [h["building"] for h in report["houses"]] == residences
+        assert all(h["townId"] == plan["buildings"][h["building"]]["settlement"] + 1
+                   and h["rent"] == 250 and h["size"] > 0 for h in report["houses"])
+        assert any("No client DAT supplied" in w for w in report["warnings"])
+        assert any("no door items" in w for w in report["warnings"])
+        house_nodes = ET.parse(output / "world-houses.xml").getroot().findall("house")
+        assert len(house_nodes) == len(residences)
+        for node, house in zip(house_nodes, report["houses"]):
+            assert int(node.attrib["houseid"]) == house["id"]
+            assert int(node.attrib["townid"]) == house["townId"]
+            assert int(node.attrib["size"]) == house["size"]
+            assert int(node.attrib["rent"]) == 250
+            assert [int(node.attrib[a]) for a in ("entryx", "entryy", "entryz")] == house["entryPosition"]
         mapfile = output / "world.otbm"
         assert mapfile.read_bytes()[:4] == b"OTBM"
         before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in output.iterdir()}
@@ -231,6 +268,9 @@ def main():
         seed_path.write_text(json.dumps(seed_recipe), encoding="utf-8")
         recipe_hash = hashlib.sha256(seed_path.read_bytes()).digest()
         seed_command = ridged_command.copy()
+        for option in ("--house-prefix", "--house-rent"):
+            at = seed_command.index(option)
+            del seed_command[at:at + 2]
         seed_command[2] = str(seed_path)
         fingerprints = []
         for seed in (0, 4294967295):
@@ -274,6 +314,21 @@ def main():
         assert authored["verifiedOTBM"] and authored["prefabBuildings"] == 3
         assert authored["prefabTiles"] == 378 and authored["furniture"] == 9
         assert len([b for b in authored_plan["buildings"] if "prefabFingerprint" in b]) == 3
+        assert len(authored["houses"]) == 3
+        assert all(h["tiles"] == 126 and h["doors"] == 1 and h["rent"] == 250 for h in authored["houses"])
+        assert not any("no door items" in w for w in authored["warnings"])
+        house_tiles, house_doors = {}, {}
+        for node, parents in otbm_nodes((prefab_output / "world.otbm").read_bytes()):
+            if node[0] == 14:  # OTBM_HOUSETILE: local x/y, uint32 house ID.
+                house_id = struct.unpack_from("<I", node, 3)[0]
+                house_tiles[house_id] = house_tiles.get(house_id, 0) + 1
+            if node[:3] == b"\x06\x6e\x18":  # Public open door, server ID 6254.
+                assert parents[-1][0] == 14
+                house_id = struct.unpack_from("<I", parents[-1], 3)[0]
+                assert node[3:] == b"\x0e\x01"  # House-door attribute, per-house ID 1.
+                house_doors[house_id] = house_doors.get(house_id, 0) + 1
+        assert house_tiles == {h["id"]: h["tiles"] for h in authored["houses"]}
+        assert house_doors == {h["id"]: 1 for h in authored["houses"]}
         replay = prefab_command.copy()
         replay[2] = str(prefab_output / "recipe.json")
         replay[6] = str(Path(temporary) / "prefab-replay")
@@ -281,6 +336,67 @@ def main():
                                    text=True, errors="replace", timeout=60)
         assert generated.returncode == 0, generated.stdout + generated.stderr
         assert (Path(replay[6]) / "world.otbm").read_bytes() == (prefab_output / "world.otbm").read_bytes()
+        assert (Path(replay[6]) / "world-houses.xml").read_bytes() == (prefab_output / "world-houses.xml").read_bytes()
+        compact = prefab_command + ["--no-diagnostics", "--no-previews"]
+        compact[6] = str(Path(temporary) / "compact-server-world")
+        generated = subprocess.run(compact, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        compact_dir = Path(compact[6])
+        compact_report = json.loads((compact_dir / "generation.json").read_text(encoding="utf-8"))
+        assert compact_report["diagnosticsExported"] is False and compact_report["previews"] == []
+        assert not (compact_dir / "plan.json").exists()
+        assert not list(compact_dir.glob("*.ppm")) and not list(compact_dir.glob("*.png"))
+        for artifact in ("world.otbm", "world-houses.xml", "world-spawns.xml", "recipe.json"):
+            # Recipe-relative paths differ between folders; compare only server bytes.
+            if artifact != "recipe.json":
+                assert (compact_dir / artifact).read_bytes() == (prefab_output / artifact).read_bytes()
+            else:
+                assert (compact_dir / artifact).exists()
+        full_bytes = sum(p.stat().st_size for p in prefab_output.iterdir())
+        compact_bytes = sum(p.stat().st_size for p in compact_dir.iterdir())
+        assert compact_bytes < full_bytes
+        print(f"PASS: compact server bundle {compact_bytes} vs {full_bytes} bytes, identical OTBM/XML")
+        # Metadata is opt-in: the same plan without housing must retain ordinary tiles.
+        plain = prefab_command.copy()
+        plain[6] = str(Path(temporary) / "prefab-without-houses")
+        del plain[-4:]
+        generated = subprocess.run(plain, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        plain_report = json.loads((Path(plain[6]) / "generation.json").read_text(encoding="utf-8"))
+        assert plain_report["houses"] == [] and plain_report["planFingerprint"] == authored["planFingerprint"]
+        assert ET.parse(Path(plain[6]) / "world-houses.xml").getroot().findall("house") == []
+        assert (Path(plain[6]) / "world.otbm").read_bytes() != (prefab_output / "world.otbm").read_bytes()
+        # Ground-level houses must restore XML exits even when z == 0.
+        ground_recipe = json.loads((source / "data/procedural/recipes/example_furnished_city_1098.json").read_text(encoding="utf-8"))
+        ground_recipe["legend"] = str(source / "data/procedural/world_legend.json")
+        ground_recipe["world"].update(catalog=str(source / "data/procedural/profiles/1098/buildings.json"),
+                                       settlements=1, buildings=4, buildingLevels=1, caveDepth=0)
+        ground_recipe["region"].update(width=256, height=256, z=0)
+        ground_path = Path(temporary) / "ground-houses.json"
+        ground_path.write_text(json.dumps(ground_recipe), encoding="utf-8")
+        ground = prefab_command.copy()
+        ground[2], ground[6] = str(ground_path), str(Path(temporary) / "ground-houses")
+        generated = subprocess.run(ground, cwd=temporary, capture_output=True, text=True,
+                                   errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        ground_report = json.loads((Path(ground[6]) / "generation.json").read_text(encoding="utf-8"))
+        assert ground_report["houses"] and all(h["entryPosition"][2] == 0 for h in ground_report["houses"])
+        # Reject invalid options without creating an output directory.
+        invalid = plain.copy()
+        invalid[6] = str(Path(temporary) / "invalid-houses")
+        for extra, code in [(["--house-rent", "-1"], 2), (["--house-rent", "2147483648"], 2),
+                            (["--house-rent", "0"], 2), (["--house-prefix", ""], 2),
+                            (["--house-prefix", "Home", "--house-rent", "1.5"], 2),
+                            (["--house-prefix", "Home", "--town-prefix", ""], 1),
+                            (["--house-prefix", "  "], 1),
+                            (["--house-prefix", "Home", "--house-prefix", "Other"], 2)]:
+            generated = subprocess.run(invalid + extra, cwd=temporary, capture_output=True,
+                                       text=True, errors="replace", timeout=10)
+            assert generated.returncode == code, generated.stdout + generated.stderr
+            assert not Path(invalid[6]).exists()
+        print("PASS: residential house ownership, town IDs, rent, door IDs, XML readback, opt-in and z=0 exits")
         print("PASS: real 10.98 authored OTBM prefabs, mixed catalogs and byte-identical CLI replay")
         print(f"PASS: external CLI, recipe-relative assets, bundled 10.98 materials, "
               f"{report['tiles']} tiles, {report['furniture']} furniture, no-overwrite; "

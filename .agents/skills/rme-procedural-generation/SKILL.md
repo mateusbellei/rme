@@ -53,6 +53,13 @@ as DLLs do wx/vcpkg no PATH; usar `| Out-Host` para aguardar o CLI no PowerShell
 
 ## Authored OTBM prefabs
 
+Batch server metadata: `--house-prefix` requires registered towns and explicitly
+residential templates. Assign all occupied floors, safe public exits and unique
+per-house door IDs. Keep metadata out of the editor undo transaction; verify both
+OTBM ownership and reloaded house XML. Lockable doors are not inferred. Optional
+`--no-diagnostics` omits plan JSON/PPMs; `--no-previews` independently omits PNGs.
+Defaults retain diagnostics. See `docs/WORLD_SERVER_EXPORT.md`.
+
 `world_prefab` resolves `prefab:{file,origin}` relative to the catalog, pins its
 bytes in the plan fingerprint and loads bounded standalone chunks before staging.
 Require `rotate:false` and explicit upper layouts. Preserve decoded item IDs/stacks

@@ -186,6 +186,16 @@ namespace WorldGen {
 				}
 			}
 		}
+		if (!b.prefabPath.empty() && (b.allowRotation || b.prefabPath.size() > 32768 || b.prefabPath.find('\0') != std::string::npos || b.prefabX < 0 || b.prefabY < 0 || b.prefabZ < b.maxLevels - 1 || b.prefabZ > 15 || b.prefabX > 65535 - int(b.rows.front().size()) || b.prefabY > 65535 - int(b.rows.size()) || !b.objects.empty() || !b.floorBrush.empty() || !b.wallBrush.empty() || !b.floorMaterials.empty())) {
+			error = "OTBM prefabs require fixed rotation, a bounded origin and no generated furniture/material overrides.";
+			return false;
+		}
+		if (!b.prefabPath.empty() && b.maxLevels > 1) {
+			if (b.upperRows.empty() && b.upperFloors.empty()) { error = "Multi-floor OTBM prefabs require explicit upperRows or upperFloors."; return false; }
+			for (int level = 1; level < b.maxLevels; ++level) for (const auto& row : BlueprintRowsForFloor(b, level)) {
+				if (row.find_first_of("+,") != std::string::npos) { error = "Prefab upper floors must explicitly use walls or void instead of base entrances/courtyards."; return false; }
+			}
+		}
 		if (b.objects.size() > 128) {
 			error = "Blueprint is limited to 128 furniture objects.";
 			return false;

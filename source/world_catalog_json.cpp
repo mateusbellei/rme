@@ -8,6 +8,25 @@
 #include <filesystem>
 
 namespace WorldGen {
+	bool ReadPrefabFile(const std::string& filename, std::string& bytes, uint64_t& fingerprint, std::string& error) {
+		error.clear();
+		if (filename.empty() || filename.size() > 32768 || filename.find('\0') != std::string::npos) {
+			error = "Invalid OTBM prefab filename."; return false;
+		}
+		std::ifstream input(std::filesystem::u8path(filename), std::ios::binary | std::ios::ate);
+		const auto length = input ? input.tellg() : std::streampos(-1);
+		if (length < std::streamoff(24) || length > std::streamoff(MaximumPrefabBytes)) {
+			error = "OTBM prefabs must be readable files of 24 bytes to 2 MiB: " + filename; return false;
+		}
+		std::string read(size_t(length), '\0'); input.seekg(0);
+		if (!input.read(read.data(), std::streamsize(read.size())) || (read.compare(0, 4, "OTBM") != 0 && read.compare(0, 4, std::string(4, '\0')) != 0)) {
+			error = "Invalid OTBM prefab signature: " + filename; return false;
+		}
+		uint64_t hash = 1469598103934665603ull;
+		for (unsigned char value : read) { hash ^= value; hash *= 1099511628211ull; }
+		fingerprint = hash; bytes = std::move(read); return true;
+	}
+
 	bool LoadBlueprintCatalog(const std::string& filename, BlueprintCatalog& catalog, std::string& error) {
 		error.clear();
 		json::mValue root;
@@ -184,6 +203,27 @@ namespace WorldGen {
 					}
 					blueprint.objects.push_back(std::move(prop));
 				}
+			}
+			const auto prefab = entry.find("prefab");
+			if (prefab != entry.end()) {
+				if (prefab->second.type() != json::obj_type) { error = "prefab must be an object with file and origin."; return false; }
+				const auto& binding = prefab->second.get_obj();
+				const auto file = binding.find("file"), origin = binding.find("origin");
+				if (file == binding.end() || file->second.type() != json::str_type || file->second.get_str().empty() || file->second.get_str().size() > 32768 || file->second.get_str().find('\0') != std::string::npos || origin == binding.end() || origin->second.type() != json::array_type || origin->second.get_array().size() != 3) { error = "prefab requires a nonempty file and integer origin [x,y,z]."; return false; }
+				int* coordinates[] = {&blueprint.prefabX, &blueprint.prefabY, &blueprint.prefabZ};
+				for (int i = 0; i < 3; ++i) {
+					const auto& value = origin->second.get_array()[i];
+					if (value.type() != json::int_type || value.get_int64() < 0 || value.get_int64() > (i == 2 ? 15 : 65535)) { error = "prefab origin is outside map coordinates."; return false; }
+					*coordinates[i] = int(value.get_int64());
+				}
+				try {
+					auto path = std::filesystem::u8path(file->second.get_str());
+					if (path.is_relative()) path = std::filesystem::u8path(filename).parent_path() / path;
+					auto utf8 = std::filesystem::absolute(path).lexically_normal().u8string();
+					blueprint.prefabPath.assign(utf8.begin(), utf8.end());
+				} catch (const std::filesystem::filesystem_error&) { error = "Cannot resolve the OTBM prefab path."; return false; }
+				std::string bytes;
+				if (!ReadPrefabFile(blueprint.prefabPath, bytes, blueprint.prefabFingerprint, error)) return false;
 			}
 			parsed.push_back(std::move(blueprint));
 		}

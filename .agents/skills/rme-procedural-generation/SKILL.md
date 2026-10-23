@@ -51,6 +51,17 @@ Validação: projeto `tests/` cobre cinco suítes; build principal com
 públicos 10.98. No Linux, rodar o CTest do app com Xvfb. No Windows, disponibilizar
 as DLLs do wx/vcpkg no PATH; usar `| Out-Host` para aguardar o CLI no PowerShell.
 
+## Authored OTBM prefabs
+
+`world_prefab` resolves `prefab:{file,origin}` relative to the catalog, pins its
+bytes in the plan fingerprint and loads bounded standalone chunks before staging.
+Require `rotate:false` and explicit upper layouts. Preserve decoded item IDs/stacks
+and attributes; do not randomize, borderize or wallize imported cells. Validate
+coordinates before the legacy reader and reject server/script/travel metadata,
+including nested Action IDs. Ordinary containers remain supported. Floor travel
+still comes from the planner's paired teleports. Report prefab instance/tile counts
+separately from generated furniture. Contract: `docs/WORLD_OTBM_PREFABS.md`.
+
 ## Arquitetura v3
 
 ```

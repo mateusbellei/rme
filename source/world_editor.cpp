@@ -15,6 +15,7 @@
 #include "gui.h"
 #include "world_decoration.h"
 #include "world_inputs.h"
+#include "world_prefab.h"
 #include "doodad_brush.h"
 
 #include <array>
@@ -416,7 +417,7 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool ResolveMaterials(const GenerationSpec& spec, const WorldGen::Plan& plan, std::array<Material, kTerrainCount>& materials, WallBrush*& wall, int& teleportId, wxString& error) {
+		bool ResolveMaterials(const GenerationSpec& spec, const WorldGen::Plan& plan, const WorldPrefab::Library& prefabs, std::array<Material, kTerrainCount>& materials, WallBrush*& wall, int& teleportId, wxString& error) {
 			const wxString path = spec.imageMask.legendPath.empty() ? g_gui.GetProceduralDataDirectory() + "world_legend.json" : spec.imageMask.legendPath;
 			LegendMapping legend;
 			if (!ProceduralCommon::LoadLegend(path, legend, error)) {
@@ -426,14 +427,13 @@ namespace WorldEditor {
 			std::array<bool, kTerrainCount> used {};
 			bool needsWalls = false;
 			for (const auto& layer : plan.layers) {
-				for (const auto& cell : layer.cells) {
-					if (cell.terrain == WorldGen::Terrain::Void) {
-						continue;
-					}
-					used[size_t(cell.terrain)] = true;
+				for (size_t i = 0; i < layer.cells.size(); ++i) {
+					const auto& cell = layer.cells[i];
+					if (cell.terrain != WorldGen::Terrain::Void && !prefabs.Covers(plan, int(i % plan.settings.width), int(i / plan.settings.width), layer.offsetZ)) used[size_t(cell.terrain)] = true;
 				}
 			}
 			for (const auto& building : plan.buildings) {
+				if (!plan.catalog[building.blueprint].prefabPath.empty()) continue;
 				for (int level = 0; level < building.levels; ++level) {
 					needsWalls = needsWalls || WorldGen::BlueprintMaterialForFloor(plan.catalog[building.blueprint], level).wallBrush.empty();
 				}
@@ -491,6 +491,7 @@ namespace WorldEditor {
 					continue;
 				}
 				const auto& blueprint = plan.catalog[i];
+				if (!blueprint.prefabPath.empty()) continue;
 				for (int level = 0; level < usedLevels[i]; ++level) {
 					const auto binding = WorldGen::BlueprintMaterialForFloor(blueprint, level);
 					for (int type = 0; type < 2; ++type) {
@@ -514,15 +515,9 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, const std::vector<BuildingMaterials>& buildingMaterials, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
-			std::vector<int> owners(size_t(spec.region.width) * spec.region.height, -1);
-			for (const auto& building : plan.buildings) {
-				for (int y = building.origin.y; y < building.origin.y + building.height; ++y) {
-					for (int x = building.origin.x; x < building.origin.x + building.width; ++x) {
-						owners[size_t(y) * spec.region.width + x] = building.blueprint;
-					}
-				}
-			}
+		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, const std::vector<BuildingMaterials>& buildingMaterials, const WorldPrefab::Library& prefabs, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
+			std::set<Position> decorativeBlocking;
+			for (const auto& building : plan.buildings) if (!plan.catalog[building.blueprint].prefabPath.empty()) ++stats.prefabBuildings;
 
 			// Copy context, including untouched void cells and the outer ring. Borders see
 			// final neighbors without ever exposing a partly generated map to the editor.
@@ -558,8 +553,17 @@ namespace WorldEditor {
 							continue;
 						}
 						const auto pos = PositionFor(spec, { x, y }, layer.offsetZ);
+						if (Tile* authored = prefabs.TileAt(plan, x, y, layer.offsetZ)) {
+							Tile* tile = authored->deepCopy(scratch);
+							tile->setLocation(scratch.createTileL(pos));
+							scratch.setTile(pos, tile, true);
+							if (WorldGen::IsWalkable(cell) && !TileWalkable(tile)) decorativeBlocking.insert(pos);
+							++stats.prefabTiles;
+							continue;
+						}
 						Tile* tile = scratch.allocator(scratch.createTileL(pos));
-						const int owner = owners[size_t(y) * spec.region.width + x];
+						const int building = prefabs.owners[size_t(y) * spec.region.width + x];
+						const int owner = building < 0 ? -1 : plan.buildings[building].blueprint;
 						const BuildingMaterial* style = owner >= 0 && layer.offsetZ <= 0 ? &buildingMaterials[owner][size_t(-layer.offsetZ)] : nullptr;
 						const auto& material = style && cell.terrain == WorldGen::Terrain::BuildingFloor && style->floor.brush ? style->floor : materials[size_t(cell.terrain)];
 						WallBrush* selectedWall = style && style->wall ? style->wall : wall;
@@ -592,6 +596,7 @@ namespace WorldEditor {
 						if (cell.terrain == WorldGen::Terrain::Void) {
 							continue;
 						}
+						if (prefabs.Covers(plan, x, y, layer.offsetZ)) continue;
 						Tile* tile = scratch.getTile(PositionFor(spec, { x, y }, layer.offsetZ));
 						ScopedMTRandom random(CellSeed(spec.seed, x, y, layer.offsetZ, 3));
 						if (spec.pipeline.borderizeAfter) {
@@ -613,7 +618,6 @@ namespace WorldEditor {
 				up->setDestination(upperArrival);
 				scratch.getTile(lower)->addItem(up);
 			}
-			std::set<Position> decorativeBlocking;
 			if (!Decorate(spec, plan, scratch, decorativeBlocking, stats, progress, error) || !Furnish(spec, plan, scratch, decorativeBlocking, stats, progress, error)) {
 				return false;
 			}
@@ -674,7 +678,7 @@ namespace WorldEditor {
 							error = wxString::Format("World barrier at %d,%d,%d is walkable in the active client. Choose a blocking ground for water, mountains or cave rock.", pos.x, pos.y, pos.z);
 							return false;
 						}
-						if ((cell.flags & WorldGen::Wall) && (!tile->hasWall() || !blocked)) {
+						if ((cell.flags & WorldGen::Wall) && ((!prefabs.Covers(plan, x, y, layer.offsetZ) && !tile->hasWall()) || !blocked)) {
 							error = wxString::Format("The selected building wall brush does not produce a blocking wall at %d,%d,%d.", pos.x, pos.y, pos.z);
 							return false;
 						}
@@ -792,10 +796,12 @@ namespace WorldEditor {
 		if (!CheckTarget(editor, resolved, plan, tileBudget, error)) {
 			return false;
 		}
+		WorldPrefab::Library prefabs;
+		if (!WorldPrefab::Load(plan, prefabs, error, progress)) return false;
 		std::array<Material, kTerrainCount> materials {};
 		WallBrush* wall = nullptr;
 		int teleportId = 0;
-		if (!ResolveMaterials(resolved, plan, materials, wall, teleportId, error)) {
+		if (!ResolveMaterials(resolved, plan, prefabs, materials, wall, teleportId, error)) {
 			return false;
 		}
 		BaseMap scratch;
@@ -804,7 +810,7 @@ namespace WorldEditor {
 		if (!ResolveBuildingMaterials(plan, buildingMaterials, error)) {
 			return false;
 		}
-		if (!BuildScratch(editor, resolved, plan, materials, buildingMaterials, wall, teleportId, scratch, error, result, progress)) {
+		if (!BuildScratch(editor, resolved, plan, materials, buildingMaterials, prefabs, wall, teleportId, scratch, error, result, progress)) {
 			return false;
 		}
 		if (!Update(progress, "Applying world as one undo operation", 95, error)) {
@@ -840,6 +846,7 @@ namespace WorldEditor {
 		}
 		g_gui.RefreshView();
 		wxString status = wxString::Format("World generated: %u tiles, %u doodads, %u furniture (%u optional placements skipped).", unsigned(result.changedTiles), unsigned(result.doodads), unsigned(result.furniture), unsigned(result.skippedDoodads + result.skippedFurniture));
+		if (result.prefabTiles) status << wxString::Format(" %u authored OTBM tiles in %u buildings.", unsigned(result.prefabTiles), unsigned(result.prefabBuildings));
 		if (!result.warnings.empty()) {
 			status << " " << result.warnings.front();
 		}

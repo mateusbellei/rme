@@ -2,6 +2,15 @@
 
 Audit: 2026-10-15. Tracking: https://github.com/mateusbellei/rme/issues/5
 
+## OTBM prefab continuation (2026-10-17)
+
+PRs #4, #6 and #7 are integrated into main. This continuation adds fixed-orientation
+OTBM prefab catalog bindings, bounded loading, source fingerprint checks and copying
+of authored multi-floor items into the existing world transaction. It is a separate
+feature branch until its PR is integrated. See [the prefab guide](WORLD_OTBM_PREFABS.md).
+Rotation/remapping, physical stairs and server entity generation remain open. The
+sections below retain the earlier audit and delivery history.
+
 ## World planner update (2026-10-16, draft PR #7)
 
 The original audit below describes the legacy v3 pipeline. The new opt-in

@@ -22,6 +22,7 @@ Este repositório é **público**. Não incluir IPs, temas, receitas ou paths de
 | Procedural v3 (image/prompt/recipe) | Beta legado |
 | World planner v4 (continentes, cidades, cavernas) | Opt-in (PR #7) — `docs/WORLD_GENERATION.md` |
 | Exportação OTBM em lote / verificação | Opt-in (PR #7) — `--generate-world`, `--verify` |
+| Authored OTBM prefabs (orientação fixa) | Opt-in — `docs/WORLD_OTBM_PREFABS.md` |
 | Auto-borders runtime | Maduro |
 | Data Editor → Borders | Beta |
 | Data Editor → Grounds/Tilesets | Placeholder |

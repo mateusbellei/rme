@@ -132,6 +132,8 @@ namespace WorldGen {
 				String(out, plan.catalog[building.blueprint].id);
 				out << ",\"role\":";
 				String(out, BlueprintRole(plan.catalog[building.blueprint]));
+				const auto& blueprint = plan.catalog[building.blueprint];
+				if (!blueprint.prefabPath.empty()) out << ",\"prefabFingerprint\":\"" << blueprint.prefabFingerprint << "\"";
 				out << '}';
 			}
 			out << "],\n  \"verticalLinks\": [";

@@ -818,3 +818,68 @@ It leaves the editor's tile undo transaction unchanged. Spawns/NPCs remain pendi
 Use `--no-previews --no-diagnostics` to omit PNG previews and plan JSON/PPM files
 while retaining the same server bundle bytes and verification.
 See [server export](WORLD_SERVER_EXPORT.md) for ownership rules, limits and replay.
+
+## Guided workflow, independent seeds and editable coastlines
+
+World planner is the default mode. The recipe selector reads the running app's
+`data/procedural/recipes` directory; the summary shows the loaded recipe, with
+its full path in the tooltip. Legacy prompt/image generators and raw legend
+paths are under **Advanced files and legacy generators**. World settings exposes
+PNG and JSON file pickers. Recipes still resolve `pathBase:recipe` assets against
+the recipe file, independently of the launch directory.
+
+Optional v4 `world` fields:
+
+| Field | Meaning |
+|---|---|
+| `caveSeed` | uint32 cave topology seed; absent inherits the master seed. Each depth still has its own salt. |
+| `objectSeed` | uint32 furniture and biome decoration seed; absent inherits the master seed. Does not alter geography, settlements or building footprints. |
+| `landMask` | PNG: opaque black forces ocean, opaque white raises land above sea level, transparent leaves procedural geography. |
+| `objectProfile` | Exact weighted brush palette, resolved relative to the recipe. |
+
+The land mask is categorically resized by nearest neighbor. Gray/color pixels
+and partial alpha are rejected, including source pixels omitted by downsampling.
+The mandatory outer ocean ring remains. Apply heightmap first, then the land
+mask; rivers/lakes may still carve white land. This lets an outline remain fixed
+while changing the master seed to vary relief, climate, towns and caves. The
+mask controls the coastline, not a pixel-perfect final terrain category.
+
+Preview **Export editable inputs** and batch `--editable-inputs` now include
+`*_land.png`, alongside heightmap, biome hints and a linked editable recipe.
+Paint black/white with a hard-edged pencil; disable antialiasing. Transparent
+areas resume procedural generation. Open the exported editable recipe after
+saving your PNG edits. This export starts from the semantic world plan; it does
+not reverse-engineer arbitrary hand-edited OTBM maps or preserve their objects.
+For exact unchanged replay use `recipe.json`, unchanged assets/profile and seeds.
+
+Example object profile (version 1):
+
+```json
+{"version":1,"biomes":{"forest":{"density":130,"brushes":[
+  {"name":"green trees","weight":4},{"name":"bushes","weight":2}
+]}}}
+```
+
+Supported habitat keys: `forest`, `desert`, `ice`, `cave`, `coast`. Density scales
+the global doodad percentage (0..200%); brush weights are 1..100. Up to 64 entries
+per habitat, 1 MiB per profile. Omitted habitats and empty arrays place no objects.
+Names must exactly match loaded doodad brushes: misspellings fail before applying
+or exporting a partial map, rather than silently selecting unrelated objects.
+Existing footprint, collision and travel-route checks still apply. Without an
+explicit profile the legacy keyword selection remains available.
+
+`example_custom_continent_1098.json` combines independent seeds with
+`profiles/1098/objects.json`, a varied palette for the **public 10.98 client**.
+Custom merged clients must supply their own verified palette/material bindings;
+the same version label does not establish compatible item graphics. Generation
+reports record effective master/cave/object seeds. The plan fingerprint excludes
+object-only changes; final OTBM bytes include those decorations.
+
+## One Windows runtime folder
+
+Use `tools/package_world_runtime.ps1` to copy a compiled Release executable,
+its adjacent DLLs and an explicitly selected runtime data directory into a
+**new** folder. The script also records the source revision and binary SHA256.
+It does not copy DAT/SPR, compiler caches, test executables or change client assets.
+Use that folder's `rme.exe` (or a shortcut pointing to it) for testing. Build trees
+remain developer workspaces and can have different configurations/data.

@@ -562,8 +562,39 @@ static void TestCancellation() {
 	Check(Fingerprint(altered) != Fingerprint(observed), "Fingerprint must include construction quotas");
 }
 
+static void TestIndependentCavesAndShape() {
+	Settings settings;
+	settings.width = settings.height = 64;
+	settings.settlementCount = settings.riverCount = 0;
+	settings.caveDepth = 2;
+	Plan original, changed, replay;
+	std::string error;
+	Check(Build(settings, original, error), "Independent cave fixture must build");
+	settings.caveSeed = 98765;
+	Check(Build(settings, changed, error) && Build(settings, replay, error), "Independent caves must build deterministically");
+	Check(Fingerprint(changed) == Fingerprint(replay) && Fingerprint(original) != Fingerprint(changed), "Cave seed must change a reproducible world");
+	bool different = false;
+	for (size_t i = 0; i < original.FindLayer(0)->cells.size(); ++i) {
+		Check(original.FindLayer(0)->cells[i].elevation == changed.FindLayer(0)->cells[i].elevation, "Cave seed must preserve surface geography");
+		different |= original.FindLayer(1)->cells[i].terrain != changed.FindLayer(1)->cells[i].terrain;
+	}
+	Check(different && Validate(changed).valid, "Independent caves must vary actual tiles and preserve connectivity");
+	settings.caveDepth = 0;
+	GeographyInput input;
+	input.landMask.assign(64 * 64, 0);
+	for (int y = 16; y < 48; ++y) for (int x = 16; x < 48; ++x) input.landMask[y * 64 + x] = 1;
+	Check(Build(settings, changed, error, nullptr, &input), "Painted island must build");
+	for (int y = 0; y < 64; ++y) for (int x = 0; x < 64; ++x) {
+		const auto& cell = changed.FindLayer(0)->cells[y * 64 + x];
+		Check(input.landMask[y * 64 + x] ? cell.elevation > settings.seaLevel : cell.terrain == Terrain::Ocean, "Black mask pixels must stay ocean and white pixels must start above sea level");
+	}
+	input.landMask[100] = 2;
+	Check(!Build(settings, changed, error, nullptr, &input) && changed.layers.empty(), "Invalid land mask values must discard the plan");
+}
+
 int main() {
 	try {
+		TestIndependentCavesAndShape();
 		TestClimateAndCoast();
 		TestReliefAndBiomeDetail();
 		TestCityBlocks();

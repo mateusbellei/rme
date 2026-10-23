@@ -192,6 +192,10 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["catalog"] = json::mValue(filename(spec.world.catalogPath));
 	world["heightmap"] = json::mValue(filename(spec.world.heightmapPath));
 	world["biomeHints"] = json::mValue(filename(spec.world.biomeHintsPath));
+	world["landMask"] = json::mValue(filename(spec.world.landMaskPath));
+	world["objectProfile"] = json::mValue(filename(spec.world.objectProfilePath));
+	if (spec.world.objectSeed) world["objectSeed"] = json::mValue(uint64_t(*spec.world.objectSeed));
+	if (spec.world.settings.caveSeed) world["caveSeed"] = json::mValue(uint64_t(*spec.world.settings.caveSeed));
 	root["world"] = world;
 
 	if (!validPaths) {
@@ -491,7 +495,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			}
 			spec.world.catalogPath = wxString::FromUTF8(catalog->second.get_str());
 		}
-		for (const auto& field : { std::pair { "heightmap", &spec.world.heightmapPath }, std::pair { "biomeHints", &spec.world.biomeHintsPath } }) {
+		for (const auto& field : { std::pair { "heightmap", &spec.world.heightmapPath }, std::pair { "biomeHints", &spec.world.biomeHintsPath }, std::pair { "landMask", &spec.world.landMaskPath }, std::pair { "objectProfile", &spec.world.objectProfilePath } }) {
 			const auto value = world.find(field.first);
 			if (value == world.end()) {
 				continue;
@@ -503,6 +507,12 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			*field.second = wxString::FromUTF8(value->second.get_str());
 		}
 		const auto wall = world.find("wallBrush");
+		for (const auto& field : { std::pair {"objectSeed", &spec.world.objectSeed}, std::pair {"caveSeed", &spec.world.settings.caveSeed} }) {
+			const auto value = world.find(field.first);
+			if (value == world.end()) continue;
+			if (value->second.type() != json::int_type || value->second.get_int64() < 0 || value->second.get_int64() > UINT32_MAX) { error = "Layer seeds must be unsigned 32-bit integers."; return false; }
+			*field.second = uint32_t(value->second.get_int64());
+		}
 		if (wall != world.end()) {
 			if (wall->second.type() != json::str_type) {
 				error = "World wallBrush must be a string.";
@@ -544,7 +554,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		error = "Could not resolve recipe directory.";
 		return false;
 	}
-	for (wxString* value : { &spec.imageMask.imagePath, &spec.imageMask.legendPath, &spec.world.catalogPath, &spec.world.heightmapPath, &spec.world.biomeHintsPath }) {
+	for (wxString* value : { &spec.imageMask.imagePath, &spec.imageMask.legendPath, &spec.world.catalogPath, &spec.world.heightmapPath, &spec.world.biomeHintsPath, &spec.world.landMaskPath, &spec.world.objectProfilePath }) {
 		const std::string bytes = nstr((*value));
 		if (value->find(wxUniChar(0)) != wxString::npos || bytes.size() > 32768 || bytes.find('\0') != std::string::npos) {
 			error = "Recipe paths must be valid strings of at most 32768 bytes.";

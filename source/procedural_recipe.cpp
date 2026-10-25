@@ -196,6 +196,13 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["objectProfile"] = json::mValue(filename(spec.world.objectProfilePath));
 	if (spec.world.objectSeed) world["objectSeed"] = json::mValue(uint64_t(*spec.world.objectSeed));
 	if (spec.world.settings.caveSeed) world["caveSeed"] = json::mValue(uint64_t(*spec.world.settings.caveSeed));
+	if (!spec.world.settings.settlementAnchors.empty()) {
+		json::mArray anchors;
+		for (auto p : spec.world.settings.settlementAnchors) {
+			json::mObject point; point["x"] = p.x; point["y"] = p.y; anchors.push_back(point);
+		}
+		world["settlementAnchors"] = anchors;
+	}
 	root["world"] = world;
 
 	if (!validPaths) {
@@ -478,6 +485,20 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 				return false;
 			}
 			spec.world.settings.shape = shape->second.get_str() == "archipelago" ? WorldGen::LandShape::Archipelago : WorldGen::LandShape::Continent;
+		}
+		const auto anchors = world.find("settlementAnchors");
+		if (anchors != world.end()) {
+			if (anchors->second.type() != json::array_type || anchors->second.get_array().size() > 32) { error = "Settlement anchors must be an array of at most 32 centers."; return false; }
+			for (const auto& anchor : anchors->second.get_array()) {
+				if (anchor.type() != json::obj_type) { error = "Settlement anchor must be an x/y object."; return false; }
+				WorldGen::Point p;
+				for (auto field : { std::pair {"x", &p.x}, std::pair {"y", &p.y} }) {
+					const auto value = anchor.get_obj().find(field.first);
+					if (value == anchor.get_obj().end() || value->second.type() != json::int_type || value->second.get_int64() < 0 || value->second.get_int64() > 4095) { error = "Anchor coordinates must be integers 0..4095 local to the target region."; return false; }
+					*field.second = int(value->second.get_int64());
+				}
+				spec.world.settings.settlementAnchors.push_back(p);
+			}
 		}
 		const auto protect = world.find("protectExisting");
 		if (protect != world.end()) {

@@ -595,8 +595,50 @@ static void TestIndependentCavesAndShape() {
 	Check(!Build(settings, changed, error, nullptr, &input) && changed.layers.empty(), "Invalid land mask values must discard the plan");
 }
 
+static void TestSettlementAnchors() {
+	Settings settings;
+	settings.width = settings.height = 96;
+	settings.settlementCount = 2;
+	settings.settlementAnchors = { {24, 48}, {72, 48} };
+	settings.diverseSettlements = true;
+	settings.riverCount = 0;
+	GeographyInput input;
+	input.elevation.assign(96 * 96, 6000);
+	input.biomes.assign(96 * 96, Terrain::Grass);
+	Plan plan, varied;
+	std::string error;
+	Check(Build(settings, plan, error, nullptr, &input), "Anchored settlements must build on authored land");
+	++settings.seed;
+	Check(Build(settings, varied, error, nullptr, &input), "Changing seed must preserve valid anchored sites");
+	for (size_t i = 0; i < 2; ++i) {
+		Check(plan.settlements[i].center == settings.settlementAnchors[i] && varied.settlements[i].center == settings.settlementAnchors[i], "Anchor coordinates and ordering must override automatic scoring and biome diversity");
+	}
+	Check(Validate(plan).valid && Validate(varied).valid && Fingerprint(plan) != Fingerprint(varied), "Anchored worlds must vary deterministically and retain navigation invariants");
+	for (int y = 44; y <= 52; ++y) for (int x = 20; x <= 28; ++x) input.elevation[y * 96 + x] = 2000;
+	Check(!Build(settings, varied, error, nullptr, &input) && varied.layers.empty() && error.find("anchor 1") != std::string::npos, "An underwater anchor must fail explicitly without relocating the city or retaining a partial plan");
+	auto catalog = DefaultBlueprints();
+	catalog.resize(2);
+	catalog[0].minPerSettlement = 4;
+	catalog[1].minPerSettlement = catalog[1].maxPerSettlement = 1;
+	catalog[1].minimumPriority = 100;
+	input.elevation.assign(96 * 96, 6000);
+	Check(Build(settings, varied, error, &catalog, &input), "Prioritized civic centers must build");
+	for (const auto& town : varied.settlements) Check(varied.buildings[town.buildings.front()].blueprint == 1, "Required high-priority civic building must precede residential minima in each town");
+	auto changed = varied; changed.catalog[1].minimumPriority = 99;
+	Check(Fingerprint(changed) != Fingerprint(varied), "Plan identity must include authored minimum priorities");
+	catalog[1].minimumPriority = -1;
+	Check(!ValidateBlueprint(catalog[1], error), "Negative minimum priorities must fail");
+	settings.settlementAnchors[1] = {25,48};
+	Check(!ValidateSettings(settings, error), "Overlapping anchor sites must fail before generation");
+	settings.settlementAnchors.pop_back();
+	Check(!ValidateSettings(settings, error), "Partial anchor lists must not silently change town counts");
+	settings.settlementCount = 1; settings.settlementAnchors[0] = {-1,48};
+	Check(!ValidateSettings(settings, error), "Anchor coordinates must be checked before indexing raster data");
+}
+
 int main() {
 	try {
+		TestSettlementAnchors();
 		TestIndependentCavesAndShape();
 		TestClimateAndCoast();
 		TestReliefAndBiomeDetail();

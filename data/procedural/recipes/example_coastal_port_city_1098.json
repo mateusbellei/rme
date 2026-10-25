@@ -1,0 +1,52 @@
+{
+  "version": 4,
+  "source": "world",
+  "pathBase": "recipe",
+  "seed": 197707,
+  "region": {
+    "originX": 0,
+    "originY": 0,
+    "width": 512,
+    "height": 512,
+    "z": 7
+  },
+  "legend": "../world_legend.json",
+  "world": {
+    "shape": "continent",
+    "seaLevel": 4200,
+    "rivers": 0,
+    "settlements": 1,
+    "buildings": 48,
+    "buildingLevels": 3,
+    "caveDepth": 1,
+    "layout": "blocks",
+    "roadWidth": 3,
+    "protectExisting": true,
+    "wallBrush": "stone",
+    "caveSeed": 2086102672,
+    "objectSeed": 80448178,
+    "temperatureBias": 300,
+    "moistureBias": -300,
+    "settlementAnchors": [
+      {
+        "x": 301,
+        "y": 261
+      }
+    ],
+    "heightmap": "../scenarios/coastal_port/height.png",
+    "biomeHints": "../scenarios/coastal_port/biomes.png",
+    "landMask": "../scenarios/coastal_port/land.png",
+    "catalog": "../profiles/1098/city_buildings.json",
+    "objectProfile": "../profiles/1098/objects.json"
+  },
+  "useSelection": false,
+  "pipeline": {
+    "borderize": true,
+    "randomize": true,
+    "walls": true
+  },
+  "doodads": {
+    "enabled": true,
+    "density": 8
+  }
+}

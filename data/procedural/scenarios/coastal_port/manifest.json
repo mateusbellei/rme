@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "compiler": "world_scenario/v1",
+  "seed": 197707,
+  "size": 512,
+  "profileSHA256": "27b48ecf7fbde4e1a5a15cb4dbdf7c26e3fb77229af518dec8d037e15d28a900",
+  "settlements": [
+    {
+      "x": 301,
+      "y": 261
+    }
+  ],
+  "regions": [
+    {
+      "name": "Bay city",
+      "center": [
+        0.59,
+        0.51
+      ]
+    },
+    {
+      "name": "Western bay",
+      "center": [
+        0.15,
+        0.53
+      ]
+    }
+  ],
+  "assets": {
+    "legend": "06760d6fbbd643e7d9a39f7b0a6bd5f1100931b580a89e9cabc62edb3f827449",
+    "catalog": "5c58622d5f428f898069a6b28f2ea7b817161cfefb47cdf91a1b7722bf02f0d4",
+    "objects": "b7a19d7f51195ede9eff2c98c0b852789dc878fca6b81636bd39306e8d294e14"
+  },
+  "files": {
+    "height.png": "cc6ed6dc39f79d0209dac57aa749d3d7abd7aa36d0d2cd7126d02c6ce5fd1d9e",
+    "biomes.png": "c5acbd4f7dfc149ef224c7bf8fa7df43ab5244b91baed539fc577a0299deb850",
+    "land.png": "a1a6585abed9e9d22a68474ac0e329a9e889e6f0e3f845b0fd2499cdfd322da6",
+    "recipe.json": "42580e5036559c9d91ef1e0935f0ca98e43528f89cc8559063408a78c98abdc7"
+  },
+  "hashNormalization": "UTF-8/LF JSON; binary PNG bytes"
+}

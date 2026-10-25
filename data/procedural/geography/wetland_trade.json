@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "background": {
+    "elevation": 2600
+  },
+  "settlements": [
+    [
+      0.52,
+      0.5
+    ]
+  ],
+  "world": {
+    "buildings": 40,
+    "buildingLevels": 3,
+    "caveDepth": 1,
+    "moistureBias": 3500,
+    "temperatureBias": 700
+  },
+  "doodadDensity": 12,
+  "zones": [
+    {
+      "shape": "ellipse",
+      "center": [
+        0.5,
+        0.5
+      ],
+      "radius": [
+        0.49,
+        0.46
+      ],
+      "elevation": 4700,
+      "biome": "forest",
+      "noise": 450,
+      "feather": 0.18,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.15,
+        0.2
+      ],
+      "radius": [
+        0.13,
+        0.12
+      ],
+      "elevation": 3100,
+      "biome": null,
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.79,
+        0.18
+      ],
+      "radius": [
+        0.13,
+        0.1
+      ],
+      "elevation": 3100,
+      "biome": null,
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.84,
+        0.69
+      ],
+      "radius": [
+        0.13,
+        0.19
+      ],
+      "elevation": 3100,
+      "biome": null,
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.25,
+        0.8
+      ],
+      "radius": [
+        0.19,
+        0.09
+      ],
+      "elevation": 3100,
+      "biome": null,
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.52,
+        0.5
+      ],
+      "radius": [
+        0.26,
+        0.25
+      ],
+      "elevation": 5500,
+      "biome": "forest",
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.52,
+        0.5
+      ],
+      "radius": [
+        0.48,
+        0.025
+      ],
+      "elevation": 5300,
+      "biome": "forest",
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.52,
+        0.5
+      ],
+      "radius": [
+        0.022,
+        0.45
+      ],
+      "elevation": 5300,
+      "biome": "forest",
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.025
+    }
+  ],
+  "regions": [
+    {
+      "name": "Merchant city on dry platforms",
+      "center": [
+        0.52,
+        0.5
+      ]
+    },
+    {
+      "name": "Wetlands",
+      "center": [
+        0.18,
+        0.66
+      ]
+    }
+  ]
+}

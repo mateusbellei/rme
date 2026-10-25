@@ -886,3 +886,7 @@ redirect the runtime to old data. It does not copy DAT/SPR, compiler caches, tes
 executables or change client assets.
 Use that folder's `rme.exe` (or a shortcut pointing to it) for testing. Build trees
 remain developer workspaces and can have different configurations/data.
+
+## Original city geography studies
+
+See [CITY_GEOGRAPHY_STUDY.md](CITY_GEOGRAPHY_STUDY.md) for coastal/wetland profiles, fixed settlement centers, civic minimum priorities and the scenario compiler. These are executable first-pass studies, not complete copies of official cities or finished NPC/service systems.

@@ -36,6 +36,7 @@ namespace WorldGen {
 		std::string role;
 		int maxPerSettlement = 0; // Zero means unlimited.
 		int minPerSettlement = 0; // Required in each generated settlement of an allowed biome.
+		int minimumPriority = 0; // Higher required groups get first access to central lots.
 		// Optional explicit rows for levels 1..maxLevels-1; exclusive with upperRows.
 		std::vector<std::vector<std::string>> upperFloors;
 		// Entries start at the base floor. Empty names inherit template bindings.

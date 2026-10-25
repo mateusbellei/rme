@@ -58,3 +58,5 @@ cmake-build-debug/
 
 # Notepad++
 *.bak
+# Python scenario compiler
+__pycache__/

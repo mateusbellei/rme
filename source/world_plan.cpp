@@ -551,32 +551,38 @@ namespace WorldGen {
 				int score, index;
 			};
 			std::vector<Candidate> candidates;
-			for (int y = margin; y < s.height - margin; y += 3) {
-				control.Row(y, s.height);
-				for (int x = margin; x < s.width - margin; x += 3) {
-					const int index = y * s.width + x;
-					if (!DryBuildable(cells[index])) {
-						continue;
+			auto candidateAt = [&](int x, int y, int priority) {
+				const int index = y * s.width + x;
+				if (!DryBuildable(cells[index])) return false;
+				int low = 10000, high = 0, clear = 0;
+				for (int dy = -4; dy <= 4; ++dy) for (int dx = -4; dx <= 4; ++dx) {
+					const Cell& cell = cells[size_t(y + dy) * s.width + x + dx];
+					clear += DryBuildable(cell);
+					low = std::min(low, int(cell.elevation)); high = std::max(high, int(cell.elevation));
+				}
+				if (clear < 81 || high - low > 1300) return false;
+				const int score = priority ? priority : 10000 - (high - low) * 3 + cells[index].moisture / 4 + int(Hash(s.seed, index, 19) % 500) + cityFitness(x, y);
+				candidates.push_back({ score, index });
+				return true;
+			};
+			if (!s.settlementAnchors.empty()) {
+				for (size_t i = 0; i < s.settlementAnchors.size(); ++i) {
+					control.Poll();
+					const auto p = s.settlementAnchors[i];
+					if (!candidateAt(p.x, p.y, 1000000 - int(i))) {
+						error = "Settlement anchor " + std::to_string(i + 1) + " needs a dry, buildable 9x9 plaza with elevation range at most 1300.";
+						return false;
 					}
-					int low = 10000, high = 0, clear = 0;
-					for (int dy = -4; dy <= 4; ++dy) {
-						for (int dx = -4; dx <= 4; ++dx) {
-							const Cell& c = cells[size_t(y + dy) * s.width + x + dx];
-							clear += DryBuildable(c);
-							low = std::min(low, int(c.elevation));
-							high = std::max(high, int(c.elevation));
-						}
-					}
-					if (clear < 81 || high - low > 1300) {
-						continue;
-					}
-					const int score = 10000 - (high - low) * 3 + cells[index].moisture / 4 + int(Hash(s.seed, index, 19) % 500) + cityFitness(x, y);
-					candidates.push_back({ score, index });
+				}
+			} else {
+				for (int y = margin; y < s.height - margin; y += 3) {
+					control.Row(y, s.height);
+					for (int x = margin; x < s.width - margin; x += 3) candidateAt(x, y, 0);
 				}
 			}
 			std::sort(candidates.begin(), candidates.end(), [](Candidate a, Candidate b) { return a.score != b.score ? a.score > b.score : a.index < b.index; });
 			const int spacing = std::max(20, std::min(s.width, s.height) / 4);
-			for (int pass = 0; pass < (s.diverseSettlements ? 2 : 1); ++pass) {
+			for (int pass = 0; pass < (s.diverseSettlements && s.settlementAnchors.empty() ? 2 : 1); ++pass) {
 				for (Candidate candidate : candidates) {
 					if (int(plan.settlements.size()) >= s.settlementCount) {
 						break;
@@ -584,7 +590,7 @@ namespace WorldGen {
 					const Point center { candidate.index % s.width, candidate.index / s.width };
 					// The first pass chooses the fittest separated site of each habitat;
 					// the second fills remaining places using the original fitness order.
-					if (s.diverseSettlements && pass == 0 && std::any_of(plan.settlements.begin(), plan.settlements.end(), [&](const Settlement& town) { return town.biome == cells[candidate.index].terrain; })) {
+					if (s.diverseSettlements && s.settlementAnchors.empty() && pass == 0 && std::any_of(plan.settlements.begin(), plan.settlements.end(), [&](const Settlement& town) { return town.biome == cells[candidate.index].terrain; })) {
 						continue;
 					}
 					bool near = false;
@@ -682,13 +688,13 @@ namespace WorldGen {
 
 					std::vector<int> eligible;
 					int totalWeight = 0;
-					bool unmetMinimum = false;
+					int minimumPriority = -1;
 					for (size_t i = 0; i < plan.catalog.size(); ++i) {
-						unmetMinimum = unmetMinimum || (allowed(plan.catalog[i]) && templateCounts[i] < plan.catalog[i].minPerSettlement);
+						if (allowed(plan.catalog[i]) && templateCounts[i] < plan.catalog[i].minPerSettlement) minimumPriority = std::max(minimumPriority, plan.catalog[i].minimumPriority);
 					}
 					for (int i = 0; i < int(plan.catalog.size()); ++i) {
 						const auto& candidate = plan.catalog[i];
-						if ((!candidate.maxPerSettlement || templateCounts[i] < candidate.maxPerSettlement) && allowed(candidate) && (!unmetMinimum || templateCounts[i] < candidate.minPerSettlement)) {
+						if ((!candidate.maxPerSettlement || templateCounts[i] < candidate.maxPerSettlement) && allowed(candidate) && (minimumPriority < 0 || (templateCounts[i] < candidate.minPerSettlement && candidate.minimumPriority == minimumPriority))) {
 							eligible.push_back(i);
 							totalWeight += candidate.weight;
 						}
@@ -1091,6 +1097,19 @@ namespace WorldGen {
 			error = "World settings are outside supported ranges.";
 			return false;
 		}
+		if (!s.settlementAnchors.empty() && s.settlementAnchors.size() != size_t(s.settlementCount)) {
+			error = "Settlement anchors must be empty or provide exactly one center per settlement."; return false;
+		}
+		const int spacing = std::max(20, std::min(s.width, s.height) / 4);
+		for (size_t i = 0; i < s.settlementAnchors.size(); ++i) {
+			const auto p = s.settlementAnchors[i];
+			if (p.x < 8 || p.y < 8 || p.x >= s.width - 8 || p.y >= s.height - 8) {
+				error = "Settlement anchor must stay at least eight cells inside the target region."; return false;
+			}
+			for (size_t j = 0; j < i; ++j) if (std::abs(p.x - s.settlementAnchors[j].x) + std::abs(p.y - s.settlementAnchors[j].y) < spacing) {
+				error = "Settlement anchors violate the minimum settlement spacing."; return false;
+			}
+		}
 		if (int64_t(s.width) * s.height * (s.buildingLevels + s.caveDepth) > int64_t(kMaxCells) * 2) {
 			error = "World layers exceed the 8,388,608-cell planning budget. Reduce dimensions or floors.";
 			return false;
@@ -1490,6 +1509,7 @@ namespace WorldGen {
 					string(material.wallBrush);
 				}
 			}
+			if (blueprint.minimumPriority) { string("minimum-priority"); add(uint32_t(blueprint.minimumPriority)); }
 			if (blueprint.minPerSettlement) {
 				string("construction-minimum");
 				add(uint32_t(blueprint.minPerSettlement));
@@ -1570,6 +1590,10 @@ namespace WorldGen {
 		add(plan.settings.width);
 		add(plan.settings.height);
 		add(plan.settings.seed);
+		if (!plan.settings.settlementAnchors.empty()) {
+			string("settlement-anchors"); add(uint32_t(plan.settings.settlementAnchors.size()));
+			for (auto p : plan.settings.settlementAnchors) { add(uint32_t(p.x)); add(uint32_t(p.y)); }
+		}
 		if (plan.settings.caveSeed) { string("cave-seed"); add(*plan.settings.caveSeed); }
 		for (const auto& layer : plan.layers) {
 			add(uint32_t(layer.offsetZ));

@@ -103,6 +103,8 @@ namespace WorldGen {
 		int riverWidth = 3;
 		int riverCount = 8;
 		int settlementCount = 3;
+		// Optional complete ordered set of centers, local to the target region.
+		std::vector<Point> settlementAnchors;
 		bool diverseSettlements = false;
 		int buildingsPerSettlement = 8;
 		int buildingLevels = 1;

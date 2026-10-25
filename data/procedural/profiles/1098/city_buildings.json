@@ -1,0 +1,991 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "town_house",
+      "role": "residential",
+      "weight": 8,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "###########",
+        "#a.......b#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#####+#####"
+      ],
+      "upperRows": [
+        "###########",
+        "#a.......b#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "###########"
+      ],
+      "minPerSettlement": 12,
+      "maxPerSettlement": 0,
+      "objects": [
+        {
+          "x": 3,
+          "y": 3,
+          "floor": 0,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 7,
+          "y": 3,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 5,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "floor": 1,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 7,
+          "y": 3,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 5,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "floor": 2,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 7,
+          "y": 3,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 5,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 0
+    },
+    {
+      "id": "courtyard_home",
+      "role": "residential",
+      "weight": 4,
+      "maxLevels": 2,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "minPerSettlement": 4,
+      "maxPerSettlement": 0,
+      "objects": [
+        {
+          "x": 3,
+          "y": 3,
+          "floor": 0,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 3,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "floor": 1,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 3,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 0
+    },
+    {
+      "id": "temple",
+      "role": "civic",
+      "weight": 1,
+      "maxLevels": 2,
+      "rotate": true,
+      "rows": [
+        "###############",
+        "#a...........b#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.#####.#####.#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#######+#######"
+      ],
+      "upperRows": [
+        "###############",
+        "#a...........b#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.#####.#####.#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1,
+      "objects": [
+        {
+          "x": 7,
+          "y": 2,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 7,
+          "y": 2,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 100
+    },
+    {
+      "id": "depot_hall",
+      "role": "storage",
+      "weight": 1,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "###############",
+        "#a...........b#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.#####.#####.#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#######+#######"
+      ],
+      "upperRows": [
+        "###############",
+        "#a...........b#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.#####.#####.#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "#.............#",
+        "###############"
+      ],
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1,
+      "objects": [
+        {
+          "x": 7,
+          "y": 2,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 12,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 7,
+          "y": 2,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 12,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 7,
+          "y": 2,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 12,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 100
+    },
+    {
+      "id": "market_hall",
+      "role": "commercial",
+      "weight": 1,
+      "maxLevels": 2,
+      "rotate": true,
+      "rows": [
+        "#################",
+        "#a.............b#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#.######.######.#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "########+########"
+      ],
+      "upperRows": [
+        "#################",
+        "#a.............b#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#.######.######.#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#...............#",
+        "#################"
+      ],
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1,
+      "objects": [
+        {
+          "x": 8,
+          "y": 2,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 8,
+          "y": 2,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 100
+    },
+    {
+      "id": "bank_hall",
+      "role": "financial",
+      "weight": 1,
+      "maxLevels": 2,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#.####.####.#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#.####.####.#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1,
+      "objects": [
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 8,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 8,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 100
+    },
+    {
+      "id": "tavern_inn",
+      "role": "commercial",
+      "weight": 1,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#.####.####.#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#.####.####.#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "minPerSettlement": 1,
+      "maxPerSettlement": 2,
+      "objects": [
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 100
+    },
+    {
+      "id": "guard_hall",
+      "role": "military",
+      "weight": 1,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "###########",
+        "#a.......b#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.###.###.#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#####+#####"
+      ],
+      "upperRows": [
+        "###########",
+        "#a.......b#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.###.###.#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "###########"
+      ],
+      "minPerSettlement": 1,
+      "maxPerSettlement": 2,
+      "objects": [
+        {
+          "x": 5,
+          "y": 2,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 5,
+          "y": 2,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 5,
+          "y": 2,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 10,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 100
+    },
+    {
+      "id": "guild_library",
+      "role": "civic",
+      "weight": 1,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#.####.####.#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#a.........b#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#.####.####.#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1,
+      "objects": [
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 12,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 12,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 2,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 12,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "minimumPriority": 100
+    }
+  ]
+}

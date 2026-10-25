@@ -72,7 +72,8 @@ python tools/world_scenario.py data/procedural/geography/coastal_port.json build
 
 Output must be a new directory. The compiler emits grayscale height, categorical
 biome hints, black/white land mask, a recipe with relative asset paths and a
-manifest with seed/profile/asset/output hashes. It uses only the standard library
+manifest with seed/profile/asset/output hashes (JSON uses UTF-8/LF normalization
+to stay verifiable across Windows/Git line-ending conversion). It uses only the standard library
 and reads no DAT/SPR or reference artwork. Supported zone shapes are ellipses,
 rectangles, polygons and stroked paths, in normalized 0..1 coordinates. Optional
 `warp` is 0..0.06; flat settlement terraces should remain unwarped. The water level

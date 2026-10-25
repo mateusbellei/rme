@@ -13,6 +13,16 @@ def main():
     spec = importlib.util.spec_from_file_location("world_scenario", source / "tools/world_scenario.py")
     scenario = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(scenario)
+    # Bundled scenarios remain verifiable on LF and CRLF checkouts.
+    for name in ("coastal_port", "wetland_trade"):
+        folder = source / "data/procedural/scenarios" / name
+        manifest = json.loads((folder / "manifest.json").read_text())
+        recipe = json.loads((folder / "recipe.json").read_text())
+        for file, checksum in manifest["files"].items():
+            assert scenario.digest(file, (folder / file).read_bytes()) == checksum, (name, file)
+        for asset, file in (("legend", recipe["legend"]), ("catalog", recipe["world"]["catalog"]), ("objects", recipe["world"]["objectProfile"])):
+            assert scenario.digest(file, (folder / file).read_bytes()) == manifest["assets"][asset], (name, asset)
+    assert scenario.digest("test.json", b"{}\r\n") == scenario.digest("test.json", b"{}\n")
     with tempfile.TemporaryDirectory(prefix="scenario-", dir=build) as directory:
         root = Path(directory).resolve()
         assert root.parent == build

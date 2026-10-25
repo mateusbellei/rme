@@ -16,6 +16,13 @@ PALETTE = {"beach": (255, 215, 0), "grass": (0, 255, 0),
            "snow": (240, 248, 255), "mountain": (101, 67, 33)}
 
 
+def digest(name, data):
+    # Git/Windows may translate JSON line endings. Hash the same UTF-8/LF content.
+    if str(name).endswith(".json"):
+        data = data.decode("utf-8-sig").replace("\r\n", "\n").encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+
 def integer(value, low, high):
     if type(value) is not int or not low <= value <= high:
         raise ValueError(f"Expected integer {low}..{high}")
@@ -217,10 +224,11 @@ def compile_scenario(profile_path, output, size, seed, legend, catalog, objects=
     files = rasterize(profile, seed, size)
     files["recipe.json"] = (json.dumps(recipe, indent=2) + "\n").encode()
     manifest = dict(version=1, compiler="world_scenario/v1", seed=seed, size=size,
-                    profileSHA256=hashlib.sha256(profile_path.read_bytes()).hexdigest(),
+                    profileSHA256=digest(profile_path, profile_path.read_bytes()),
+                    hashNormalization="UTF-8/LF JSON; binary PNG bytes",
                     settlements=anchors, regions=profile.get("regions", []),
-                    assets={name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in (("legend", legend), ("catalog", catalog), ("objects", objects)) if path},
-                    files={name: hashlib.sha256(data).hexdigest() for name, data in files.items()})
+                    assets={name: digest(path, path.read_bytes()) for name, path in (("legend", legend), ("catalog", catalog), ("objects", objects)) if path},
+                    files={name: digest(name, data) for name, data in files.items()})
     files["manifest.json"] = (json.dumps(manifest, indent=2) + "\n").encode()
     output.mkdir(parents=True, exist_ok=False)
     for name, data in files.items():

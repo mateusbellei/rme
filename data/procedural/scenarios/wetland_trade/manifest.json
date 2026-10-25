@@ -3,7 +3,7 @@
   "compiler": "world_scenario/v1",
   "seed": 198903,
   "size": 512,
-  "profileSHA256": "49508d06021d1510986ae3cbd136e7e87163ffb804373dbcf3d4910e338e96c8",
+  "profileSHA256": "3824f78a60e12236787852b6bdbf238e9fdf43bdc9ac50bbbf88b20d4487d5cf",
   "settlements": [
     {
       "x": 266,
@@ -28,13 +28,14 @@
   ],
   "assets": {
     "legend": "06760d6fbbd643e7d9a39f7b0a6bd5f1100931b580a89e9cabc62edb3f827449",
-    "catalog": "7645fe35efabfa6757f87c222ca99d15d2f10a0e2d9603df550f5bdf29f68d83",
-    "objects": "1f97686351b86e164290f4854090dc3139f0b23156c4daa59e650dbbbea8acdf"
+    "catalog": "5c58622d5f428f898069a6b28f2ea7b817161cfefb47cdf91a1b7722bf02f0d4",
+    "objects": "b7a19d7f51195ede9eff2c98c0b852789dc878fca6b81636bd39306e8d294e14"
   },
   "files": {
     "height.png": "b7d463fd822d719f8de8b535be119d9bfaab5a2c0668dee4ff3efeb8ed41ee81",
     "biomes.png": "2a8d09ad1a40095fd64ad86cc89143da9b17ca2fc5cf66f087a999f91ce2f48a",
     "land.png": "fc8809be0011af031f364822837aa8f8bbac98dfd827c7cfeacad7bf0568da13",
     "recipe.json": "eebef8a344800dab493b128b7d30c6c95b20dbcb60fffe70e94ba4e6fbb96bcc"
-  }
+  },
+  "hashNormalization": "UTF-8/LF JSON; binary PNG bytes"
 }

@@ -103,7 +103,7 @@ namespace WorldGen {
 				bool firstTemplate = true;
 				for (size_t i = 0; i < plan.catalog.size(); ++i) {
 					const auto& blueprint = plan.catalog[i];
-					if (!blueprint.biomes.empty() && std::find(blueprint.biomes.begin(), blueprint.biomes.end(), TerrainName(town.biome)) == blueprint.biomes.end()) {
+					if (!BlueprintAllowedInSettlement(blueprint, int(townIndex) + 1, TerrainName(town.biome))) {
 						continue;
 					}
 					if (!firstTemplate) out << ',';

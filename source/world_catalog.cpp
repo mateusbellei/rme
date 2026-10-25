@@ -219,6 +219,13 @@ namespace WorldGen {
 				}
 			}
 		}
+		std::set<int> settlementIds;
+		for (int ordinal : b.settlements) {
+			if (ordinal < 1 || ordinal > 32 || !settlementIds.insert(ordinal).second) {
+				error = "Template settlements must be distinct one-based ordinals in 1..32.";
+				return false;
+			}
+		}
 		for (const auto& biome : b.biomes) {
 			if (biome != "grass" && biome != "forest" && biome != "desert" && biome != "snow" && biome != "beach") {
 				error = "Unknown allowed blueprint biome.";
@@ -226,6 +233,11 @@ namespace WorldGen {
 			}
 		}
 		return true;
+	}
+
+	bool BlueprintAllowedInSettlement(const Blueprint& b, int ordinal, const std::string& biome) {
+		return (b.settlements.empty() || std::find(b.settlements.begin(), b.settlements.end(), ordinal) != b.settlements.end()) &&
+			(b.biomes.empty() || std::find(b.biomes.begin(), b.biomes.end(), biome) != b.biomes.end());
 	}
 
 	bool ValidateCatalog(const BlueprintCatalog& catalog, std::string& error) {

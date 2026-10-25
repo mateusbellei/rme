@@ -90,6 +90,18 @@ namespace WorldGen {
 				return false;
 			}
 			const auto upperFloors = entry.find("upperFloors");
+			const auto settlements = entry.find("settlements");
+			if (settlements != entry.end()) {
+				if (settlements->second.type() != json::array_type || settlements->second.get_array().size() > 32) {
+					error = "Template settlements must be an array of at most 32 ordinals."; return false;
+				}
+				for (const auto& ordinal : settlements->second.get_array()) {
+					if (ordinal.type() != json::int_type || ordinal.get_int64() < 1 || ordinal.get_int64() > 32) {
+						error = "Template settlements must contain integers in 1..32."; return false;
+					}
+					blueprint.settlements.push_back(int(ordinal.get_int64()));
+				}
+			}
 			if (upperFloors != entry.end()) {
 				if (upperFloors->second.type() != json::array_type || upperFloors->second.get_array().empty() || upperFloors->second.get_array().size() > 3) {
 					error = "upperFloors must be an array of 1..3 bounded row arrays.";

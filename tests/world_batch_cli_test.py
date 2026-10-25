@@ -259,9 +259,31 @@ def main():
             assert residences and all(b["blueprint"] == biome + "_residence" for b in residences)
             assert regional["settlements"][0]["biome"] == biome
             assert placements["furniture"] > 0 and placements["skippedFurniture"] == 0
+        # Town ordinals must survive the JSON adapter and filter construction diagnostics.
+        regional_recipe = json.loads((source / "data/procedural/recipes/example_furnished_city_1098.json").read_text(encoding="utf-8"))
+        regional_catalog = {"version": 1, "templates": []}
+        residence = json.loads((source / "data/procedural/profiles/1098/buildings.json").read_text(encoding="utf-8"))["templates"][0]
+        for ordinal in (1, 2):
+            template = dict(residence, id=f"town_{ordinal}_residence", settlements=[ordinal], minPerSettlement=4)
+            regional_catalog["templates"].append(template)
+        regional_catalog_path = Path(temporary) / "regional-catalog.json"
+        regional_catalog_path.write_text(json.dumps(regional_catalog), encoding="utf-8")
+        regional_recipe["legend"] = str(source / "data/procedural/world_legend.json")
+        regional_recipe["world"].update(catalog=str(regional_catalog_path), buildings=4, caveDepth=0)
+        regional_path = Path(temporary) / "regional-recipe.json"
+        regional_path.write_text(json.dumps(regional_recipe), encoding="utf-8")
+        regional_command = command.copy()
+        regional_command[2], regional_command[6] = str(regional_path), str(Path(temporary) / "regional-towns")
+        generated = subprocess.run(regional_command, cwd=temporary, capture_output=True, text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        regional_plan = json.loads((Path(regional_command[6]) / "plan.json").read_text(encoding="utf-8"))
+        for town, settlement in enumerate(regional_plan["settlements"], 1):
+            assert [entry["blueprint"] for entry in settlement["constructionMix"]] == [f"town_{town}_residence"]
+        assert len(regional_plan["buildings"]) == 8
+        assert all(building["blueprint"] == f"town_{building['settlement'] + 1}_residence" for building in regional_plan["buildings"])
         # Exact profiles vary only objects; terrain/city planning keeps its master seed.
         object_recipe = json.loads(Path(ridged_command[2]).read_text(encoding="utf-8"))
-        object_recipe["world"].update(objectProfile=str(source / "data/procedural/profiles/1098/objects.json"))
+        object_recipe["world"].update(objectProfile=str(source / "data/procedural/profiles/1098/objects_rich.json"))
         object_path = Path(temporary) / "objects-recipe.json"
         object_command = ridged_command.copy()
         object_command[2] = str(object_path)

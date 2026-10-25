@@ -636,8 +636,31 @@ static void TestSettlementAnchors() {
 	Check(!ValidateSettings(settings, error), "Anchor coordinates must be checked before indexing raster data");
 }
 
+static void TestRegionalArchitecture() {
+	Settings settings;
+	settings.width = settings.height = 128;
+	settings.settlementCount = 2; settings.buildingsPerSettlement = 4;
+	settings.settlementAnchors = {{32, 64}, {96, 64}};
+	settings.riverCount = settings.caveDepth = 0;
+	settings.settlementLayout = SettlementLayout::Blocks;
+	GeographyInput input;
+	input.elevation.assign(128 * 128, 6000);
+	input.biomes.assign(128 * 128, Terrain::Grass);
+	auto catalog = DefaultBlueprints(); catalog.resize(2);
+	for (int i = 0; i < 2; ++i) { catalog[i].settlements = {i + 1}; catalog[i].minPerSettlement = 4; catalog[i].maxPerSettlement = 4; }
+	Plan plan, replay;
+	std::string error;
+	Check(Build(settings, plan, error, &catalog, &input), error.c_str());
+	Check(plan.buildings.size() == 8 && Validate(plan).valid, "Two towns of the same biome must satisfy independent architecture quotas");
+	for (const auto& building : plan.buildings) Check(building.blueprint == building.settlement, "Regional architecture cannot leak into another town");
+	Check(Build(settings, replay, error, &catalog, &input) && Fingerprint(replay) == Fingerprint(plan), "Regional architecture must replay deterministically");
+	replay.catalog[0].settlements = {2};
+	Check(Fingerprint(replay) != Fingerprint(plan) && !Validate(replay).valid, "Identity and plan validation must enforce settlement bindings");
+}
+
 int main() {
 	try {
+		TestRegionalArchitecture();
 		TestSettlementAnchors();
 		TestIndependentCavesAndShape();
 		TestClimateAndCoast();

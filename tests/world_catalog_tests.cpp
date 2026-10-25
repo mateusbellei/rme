@@ -13,6 +13,15 @@ int main() {
 	try {
 		std::string error;
 		const auto& catalog = WorldGen::DefaultBlueprints();
+		auto regional = catalog.front();
+		regional.settlements = {1, 3}; regional.biomes = {"grass"};
+		Check(WorldGen::ValidateBlueprint(regional, error), "Regional ordinals must validate");
+		Check(WorldGen::BlueprintAllowedInSettlement(regional, 3, "grass") && !WorldGen::BlueprintAllowedInSettlement(regional, 2, "grass") && !WorldGen::BlueprintAllowedInSettlement(regional, 1, "desert"), "Town and biome filters must intersect");
+		Check(WorldGen::RotateBlueprint(regional, 1).settlements == regional.settlements, "Rotating architecture must retain town bindings");
+		for (const auto& ordinals : {std::vector<int>{0}, std::vector<int>{33}, std::vector<int>{1, 1}}) {
+			regional.settlements = ordinals;
+			Check(!WorldGen::ValidateBlueprint(regional, error), "Invalid or duplicate town ordinals must fail");
+		}
 		Check(WorldGen::ValidateCatalog(catalog, error), error.c_str());
 		for (const auto& blueprint : catalog) {
 			for (int rotation = 0; rotation < 4; ++rotation) {

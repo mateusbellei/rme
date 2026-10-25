@@ -30,6 +30,8 @@ namespace WorldGen {
 		std::vector<std::string> rows;
 		std::vector<std::string> upperRows;
 		std::vector<std::string> biomes;
+		// Optional one-based settlement ordinals, in anchor/generated town order.
+		std::vector<int> settlements;
 		std::vector<BlueprintProp> objects;
 		// Exact client brush bindings; empty values inherit the world legend/settings.
 		std::string floorBrush, wallBrush;
@@ -50,6 +52,7 @@ namespace WorldGen {
 	using BlueprintCatalog = std::vector<Blueprint>;
 
 	bool ValidateBlueprint(const Blueprint& blueprint, std::string& error);
+	bool BlueprintAllowedInSettlement(const Blueprint& blueprint, int ordinal, const std::string& biome);
 	bool ValidateCatalog(const BlueprintCatalog& catalog, std::string& error);
 	Blueprint RotateBlueprint(const Blueprint& blueprint, int quarterTurns);
 	const std::vector<std::string>& BlueprintRowsForFloor(const Blueprint& blueprint, int level);

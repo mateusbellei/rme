@@ -476,7 +476,7 @@ namespace WorldGen {
 			uint32_t serial = 0;
 		};
 
-		std::vector<LotSlot> SettlementLots(const Plan& plan, const Settlement& town) {
+		std::vector<LotSlot> SettlementLots(const Plan& plan, const Settlement& town, int ordinal) {
 			std::vector<LotSlot> lots;
 			const auto& s = plan.settings;
 			if (s.settlementLayout == SettlementLayout::Organic) {
@@ -490,7 +490,7 @@ namespace WorldGen {
 			}
 			int largest = 5;
 			for (const auto& b : plan.catalog) {
-				if (b.biomes.empty() || std::find(b.biomes.begin(), b.biomes.end(), TerrainName(town.biome)) != b.biomes.end()) {
+				if (BlueprintAllowedInSettlement(b, ordinal, TerrainName(town.biome))) {
 					largest = std::max(largest, std::max(int(b.rows.size()), int(b.rows.front().size())));
 				}
 			}
@@ -651,7 +651,7 @@ namespace WorldGen {
 				auto& town = plan.settlements[t];
 				std::vector<int> templateCounts(plan.catalog.size(), 0);
 				auto allowed = [&](const Blueprint& candidate) {
-					return candidate.biomes.empty() || std::find(candidate.biomes.begin(), candidate.biomes.end(), TerrainName(town.biome)) != candidate.biomes.end();
+					return BlueprintAllowedInSettlement(candidate, t + 1, TerrainName(town.biome));
 				};
 				int required = 0;
 				for (const auto& candidate : plan.catalog) {
@@ -664,7 +664,7 @@ namespace WorldGen {
 					return false;
 				}
 				// Organic radial lots or compact street blocks, always connected to the plaza.
-				for (const auto& slot : SettlementLots(plan, town)) {
+				for (const auto& slot : SettlementLots(plan, town, t + 1)) {
 					if (int(town.buildings.size()) >= s.buildingsPerSettlement) {
 						break;
 					}
@@ -1426,8 +1426,8 @@ namespace WorldGen {
 			if (building.width != int(rotated.rows.front().size()) || building.height != int(rotated.rows.size()) || building.levels > blueprint.maxLevels || (!blueprint.allowRotation && building.rotation != 0) || !(building.entrance == Point { building.origin.x + doorX, building.origin.y + doorY })) {
 				fail("Construction dimensions, height, rotation or entrance do not match its template.");
 			}
-			if (!blueprint.biomes.empty() && std::find(blueprint.biomes.begin(), blueprint.biomes.end(), TerrainName(plan.settlements[building.settlement].biome)) == blueprint.biomes.end()) {
-				fail("Construction template is not allowed in its settlement biome.");
+			if (!BlueprintAllowedInSettlement(blueprint, building.settlement + 1, TerrainName(plan.settlements[building.settlement].biome))) {
+				fail("Construction template is not allowed in its settlement or biome.");
 			}
 			++templateCounts[building.settlement][building.blueprint];
 			if (blueprint.maxPerSettlement && templateCounts[building.settlement][building.blueprint] > blueprint.maxPerSettlement) {
@@ -1441,8 +1441,7 @@ namespace WorldGen {
 		for (size_t t = 0; t < plan.settlements.size(); ++t) {
 			for (size_t i = 0; i < plan.catalog.size(); ++i) {
 				const auto& blueprint = plan.catalog[i];
-				const auto& biomes = blueprint.biomes;
-				if ((biomes.empty() || std::find(biomes.begin(), biomes.end(), TerrainName(plan.settlements[t].biome)) != biomes.end()) && templateCounts[t][i] < blueprint.minPerSettlement) {
+				if (BlueprintAllowedInSettlement(blueprint, int(t) + 1, TerrainName(plan.settlements[t].biome)) && templateCounts[t][i] < blueprint.minPerSettlement) {
 					fail("A settlement is missing its required construction minimum: " + blueprint.id + ".");
 				}
 			}
@@ -1509,6 +1508,7 @@ namespace WorldGen {
 					string(material.wallBrush);
 				}
 			}
+			if (!blueprint.settlements.empty()) { string("settlement-ordinals"); add(uint32_t(blueprint.settlements.size())); for (int ordinal : blueprint.settlements) add(uint32_t(ordinal)); }
 			if (blueprint.minimumPriority) { string("minimum-priority"); add(uint32_t(blueprint.minimumPriority)); }
 			if (blueprint.minPerSettlement) {
 				string("construction-minimum");

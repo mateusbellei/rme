@@ -367,13 +367,27 @@ static int RunPrefabScenario(const wxString& outputDirectory) {
         }
         auto writeCatalog = [&](const std::filesystem::path& path) {
             std::ofstream out(path, std::ios::binary);
-            out << R"({"version":1,"templates":[{"id":"authored_house","maxLevels":3,"rotate":false,"minPerSettlement":1,"rows":[)";
+            out << R"({"version":1,"templates":[{"id":"authored_house","settlements":[1],"maxLevels":3,"rotate":false,"minPerSettlement":1,"rows":[)";
             for (size_t y = 0; y < blueprint.rows.size(); ++y) { if (y) out << ','; out << '"' << blueprint.rows[y] << '"'; }
             out << R"(],"upperRows":[)";
             for (size_t y = 0; y < blueprint.upperRows.size(); ++y) { if (y) out << ','; out << '"' << blueprint.upperRows[y] << '"'; }
             out << R"(],"prefab":{"file":"authored.otbm","origin":[40,50,7]}}]})";
         };
         writeCatalog(directory / "catalog.json");
+        {
+            WorldGen::BlueprintCatalog parsed;
+            std::string reason;
+            Check(WorldGen::LoadBlueprintCatalog(nstr((outputDirectory + "/catalog.json")), parsed, reason) && parsed.front().settlements == std::vector<int>{1}, "JSON catalog must retain settlement bindings");
+            std::ifstream input(directory / "catalog.json");
+            const std::string original((std::istreambuf_iterator<char>(input)), {});
+            for (const auto& invalid : {"[0]", "[33]", "[1,1]", "[1.5]", "[\"1\"]", "1"}) {
+                std::string bytes = original;
+                const auto position = bytes.find("\"settlements\":[1]");
+                bytes.replace(position, std::string("\"settlements\":[1]").size(), std::string("\"settlements\":") + invalid);
+                { std::ofstream file(directory / "bad-catalog.json"); file << bytes; }
+                Check(!WorldGen::LoadBlueprintCatalog(nstr((outputDirectory + "/bad-catalog.json")), parsed, reason), "Malformed settlement bindings must fail JSON loading");
+            }
+        }
         // No BuildingFloor mapping or wall brush is needed for an authored building.
         {
             std::ofstream out(directory / "legend.json"); out << "{\"entries\":[";

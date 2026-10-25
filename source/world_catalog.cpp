@@ -140,7 +140,7 @@ namespace WorldGen {
 			error = "Blueprint id, weight or maximum floor count is invalid.";
 			return false;
 		}
-		if (b.maxPerSettlement < 0 || b.maxPerSettlement > 64 || b.minPerSettlement < 0 || b.minPerSettlement > 64 || (b.maxPerSettlement && b.minPerSettlement > b.maxPerSettlement) || b.role.size() > 32 || b.role.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos) {
+		if (b.minimumPriority < 0 || b.minimumPriority > 1000 || b.maxPerSettlement < 0 || b.maxPerSettlement > 64 || b.minPerSettlement < 0 || b.minPerSettlement > 64 || (b.maxPerSettlement && b.minPerSettlement > b.maxPerSettlement) || b.role.size() > 32 || b.role.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos) {
 			error = "Blueprint role or per-settlement limit is invalid.";
 			return false;
 		}

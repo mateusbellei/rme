@@ -572,6 +572,13 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	grid->Add(riverWidth, 1, wxEXPAND);
 	auto* rivers = spin("River sources:", 0, 64, settings.riverCount);
 	auto* towns = spin("Settlements:", 0, 32, settings.settlementCount);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Authored settlement centers:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* fixedCenters = new wxCheckBox(content, wxID_ANY, "Keep recipe anchors (uncheck for automatic sites)");
+	fixedCenters->SetValue(!settings.settlementAnchors.empty());
+	fixedCenters->Enable(!settings.settlementAnchors.empty());
+	grid->Add(fixedCenters, 0, wxEXPAND);
+	towns->Enable(settings.settlementAnchors.empty());
+	fixedCenters->Bind(wxEVT_CHECKBOX, [=](wxCommandEvent&) { towns->Enable(!fixedCenters->GetValue()); });
 	grid->Add(new wxStaticText(content, wxID_ANY, "Settlement habitats:"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* diverseSettlements = new wxCheckBox(content, wxID_ANY, "Prefer different biomes");
 	diverseSettlements->SetValue(settings.diverseSettlements);
@@ -652,6 +659,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.riverWidth = 1 + 2 * riverWidth->GetSelection();
 	candidate.settings.riverCount = rivers->GetValue();
 	candidate.settings.settlementCount = towns->GetValue();
+	if (!fixedCenters->GetValue()) candidate.settings.settlementAnchors.clear();
 	candidate.settings.diverseSettlements = diverseSettlements->GetValue();
 	candidate.settings.buildingsPerSettlement = buildings->GetValue();
 	candidate.settings.buildingLevels = floors->GetValue();

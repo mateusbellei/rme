@@ -36,6 +36,7 @@ static void TestRecipes() {
 	original.world.settings.riverWidth = 5;
 	original.world.settings.riverCount = 6;
 	original.world.settings.settlementCount = 4;
+	original.world.settings.settlementAnchors = {{20,20},{80,20},{20,70},{80,70}};
 	original.world.settings.diverseSettlements = true;
 	original.world.settings.buildingsPerSettlement = 5;
 	original.world.settings.buildingLevels = 3;
@@ -59,6 +60,7 @@ static void TestRecipes() {
 	Check(ProceduralRecipe::Save(file, original, error), "World recipe must save");
 	GenerationSpec loaded;
 	Check(ProceduralRecipe::Load(file, loaded, error), "World recipe must load");
+	Check(loaded.world.settings.settlementAnchors == original.world.settings.settlementAnchors, "Authored city anchors must round-trip in order");
 	Check(loaded.source == original.source && loaded.seed == original.seed, "Full uint32 seed and world source must round-trip");
 	Check(loaded.region.originX == 200 && loaded.region.originY == 300 && loaded.region.width == 128 && loaded.region.height == 96, "Target origin and dimensions must round-trip");
 	Check(loaded.world.settings.shape == original.world.settings.shape && loaded.world.settings.seaLevel == 4000 && loaded.world.settings.riverCount == 6, "World geography must round-trip");
@@ -99,7 +101,7 @@ static void TestRecipes() {
 			 R"({"source":"world","world":{"protectExisting":0}})",
 			 R"({"source":"world","world":{"diverseSettlements":1}})",
 			 R"({"source":"world","world":{"wallBrush":false}})",
-			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"algorithmVersion":99}})", R"({"world":{"heightmap":42}})", R"({"world":{"objectSeed":-1}})", R"({"world":{"caveSeed":4294967296}})", R"({"world":{"caveSeed":1.5}})", R"({"world":{"landMask":42}})", R"({"world":{"objectProfile":false}})" }) {
+			 R"({"region":{"width":4294967296}})", R"({"world":null})", R"({"world":{"algorithmVersion":99}})", R"({"world":{"heightmap":42}})", R"({"world":{"objectSeed":-1}})", R"({"world":{"caveSeed":4294967296}})", R"({"world":{"caveSeed":1.5}})", R"({"world":{"landMask":42}})", R"({"world":{"objectProfile":false}})", R"({"world":{"settlementAnchors":{}}})", R"({"world":{"settlements":1,"settlementAnchors":[{"x":1.5,"y":12}]}})", R"({"source":"world","world":{"settlements":1,"settlementAnchors":[{"x":5000,"y":12}]}})", R"({"world":{"settlementAnchors":[{"x":12}]}})" }) {
 		std::ofstream output(path);
 		output << malformed;
 		output.close();

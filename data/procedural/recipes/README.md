@@ -31,3 +31,5 @@ These connections are teleports, not physical stair sprites.
 Project-specific recipes (private IP, themed prompts) belong in the **consumer's private assets repository**, not in this public RME fork.
 
 `example_custom_continent_1098.json` adds independent cave/object seeds and a weighted exact-name object palette for public 10.98. See `docs/WORLD_GENERATION.md` for PNG land masks and custom-client palette requirements.
+
+`example_coastal_port_city_1098.json` and `example_wetland_trade_city_1098.json` load original geographic studies with fixed city centers and central service minima. They need the new settlement-anchor build; see `docs/CITY_GEOGRAPHY_STUDY.md`.

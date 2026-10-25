@@ -55,6 +55,9 @@ if(RME_ENABLE_WORLD_SELF_TEST)
     add_test(NAME procedural_world_batch_cli COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/world_batch_cli_test.py"
         "$<TARGET_FILE:rme>" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME procedural_scenario_profiles COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/world_scenario_test.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 if(MSVC)
     target_compile_options(rme PRIVATE /W3 /bigobj /Zc:strictStrings-)

@@ -291,6 +291,26 @@ def main():
                                        text=True, errors="replace", timeout=60)
             assert generated.returncode != 0 and not Path(object_command[6]).exists()
 
+        # Original geography studies must realize their complete civic/residential mix.
+        for scenario, buildings in (("coastal_port", 48), ("wetland_trade", 40)):
+            city_command = command.copy()
+            city_command[2] = str(source / "data/procedural/scenarios" / scenario / "recipe.json")
+            city_command[6] = str(Path(temporary) / scenario)
+            city_command.append("--no-previews")
+            generated = subprocess.run(city_command, cwd=temporary, capture_output=True,
+                                       text=True, errors="replace", timeout=60)
+            assert generated.returncode == 0, generated.stdout + generated.stderr
+            folder = Path(city_command[6])
+            city = json.loads((folder / "plan.json").read_text(encoding="utf-8"))
+            result = json.loads((folder / "generation.json").read_text(encoding="utf-8"))
+            recipe = json.loads((folder / "recipe.json").read_text(encoding="utf-8"))
+            assert len(city["buildings"]) == buildings and result["verifiedOTBM"]
+            anchor = recipe["world"]["settlementAnchors"][0]
+            assert city["settlements"][0]["center"][:2] == [anchor["x"], anchor["y"]]
+            assert {"temple", "depot_hall", "bank_hall", "market_hall", "tavern_inn",
+                    "guard_hall", "guild_library", "town_house"} <= {b["blueprint"] for b in city["buildings"]}
+            assert result["furniture"] > 250 and result["skippedFurniture"] == 0
+
         # Seed overrides must survive recipe export, including both uint32 boundaries.
         seed_recipe = ridged_recipe.copy()
         seed_recipe["world"] = dict(ridged_recipe["world"])

@@ -1,0 +1,52 @@
+{
+  "version": 4,
+  "source": "world",
+  "pathBase": "recipe",
+  "seed": 198903,
+  "region": {
+    "originX": 0,
+    "originY": 0,
+    "width": 512,
+    "height": 512,
+    "z": 7
+  },
+  "legend": "../world_legend.json",
+  "world": {
+    "shape": "continent",
+    "seaLevel": 4200,
+    "rivers": 0,
+    "settlements": 1,
+    "buildings": 40,
+    "buildingLevels": 3,
+    "caveDepth": 1,
+    "layout": "blocks",
+    "roadWidth": 3,
+    "protectExisting": true,
+    "wallBrush": "stone",
+    "caveSeed": 249254987,
+    "objectSeed": 1156112844,
+    "moistureBias": 3500,
+    "temperatureBias": 700,
+    "settlementAnchors": [
+      {
+        "x": 266,
+        "y": 256
+      }
+    ],
+    "heightmap": "../scenarios/wetland_trade/height.png",
+    "biomeHints": "../scenarios/wetland_trade/biomes.png",
+    "landMask": "../scenarios/wetland_trade/land.png",
+    "catalog": "../profiles/1098/city_buildings.json",
+    "objectProfile": "../profiles/1098/objects.json"
+  },
+  "useSelection": false,
+  "pipeline": {
+    "borderize": true,
+    "randomize": true,
+    "walls": true
+  },
+  "doodads": {
+    "enabled": true,
+    "density": 12
+  }
+}

@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "background": {
+    "elevation": 2000
+  },
+  "settlements": [
+    [
+      0.59,
+      0.51
+    ]
+  ],
+  "world": {
+    "buildings": 48,
+    "buildingLevels": 3,
+    "caveDepth": 1,
+    "temperatureBias": 300,
+    "moistureBias": -300
+  },
+  "zones": [
+    {
+      "shape": "ellipse",
+      "center": [
+        0.67,
+        0.52
+      ],
+      "radius": [
+        0.58,
+        0.46
+      ],
+      "elevation": 6000,
+      "biome": "grass",
+      "noise": 250,
+      "feather": 0.13,
+      "warp": 0.022
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.08,
+        0.53
+      ],
+      "radius": [
+        0.28,
+        0.23
+      ],
+      "elevation": 2200,
+      "biome": null,
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.022
+    },
+    {
+      "shape": "path",
+      "points": [
+        [
+          0.01,
+          0.18
+        ],
+        [
+          0.33,
+          0.22
+        ],
+        [
+          0.58,
+          0.16
+        ],
+        [
+          0.98,
+          0.19
+        ]
+      ],
+      "width": 0.018,
+      "elevation": 3500
+    },
+    {
+      "shape": "path",
+      "points": [
+        [
+          0.01,
+          0.85
+        ],
+        [
+          0.3,
+          0.79
+        ],
+        [
+          0.56,
+          0.86
+        ],
+        [
+          0.99,
+          0.8
+        ]
+      ],
+      "width": 0.018,
+      "elevation": 3500
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.59,
+        0.51
+      ],
+      "radius": [
+        0.27,
+        0.27
+      ],
+      "elevation": 6500,
+      "biome": "grass",
+      "noise": 0,
+      "feather": 0,
+      "warp": 0.022
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.9,
+        0.35
+      ],
+      "radius": [
+        0.08,
+        0.13
+      ],
+      "elevation": 8000,
+      "biome": "mountain",
+      "noise": 250,
+      "feather": 0.2,
+      "warp": 0.022
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.23,
+        0.47
+      ],
+      "radius": [
+        0.035,
+        0.06
+      ],
+      "elevation": 5500,
+      "biome": "grass",
+      "noise": 0,
+      "feather": 0.15,
+      "warp": 0.022
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.76,
+        0.2
+      ],
+      "radius": [
+        0.08,
+        0.07
+      ],
+      "elevation": 6300,
+      "biome": "forest",
+      "noise": 150,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.82,
+        0.73
+      ],
+      "radius": [
+        0.08,
+        0.07
+      ],
+      "elevation": 6300,
+      "biome": "forest",
+      "noise": 150,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.47,
+        0.72
+      ],
+      "radius": [
+        0.08,
+        0.07
+      ],
+      "elevation": 6300,
+      "biome": "forest",
+      "noise": 150,
+      "warp": 0.025
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.41,
+        0.31
+      ],
+      "radius": [
+        0.08,
+        0.07
+      ],
+      "elevation": 6300,
+      "biome": "forest",
+      "noise": 150,
+      "warp": 0.025
+    }
+  ],
+  "regions": [
+    {
+      "name": "Bay city",
+      "center": [
+        0.59,
+        0.51
+      ]
+    },
+    {
+      "name": "Western bay",
+      "center": [
+        0.15,
+        0.53
+      ]
+    }
+  ]
+}

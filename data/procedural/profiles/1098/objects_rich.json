@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "biomes": {
+    "forest": {
+      "density": 145,
+      "brushes": [
+        {
+          "name": "green trees",
+          "weight": 7
+        },
+        {
+          "name": "trees",
+          "weight": 2
+        },
+        {
+          "name": "bushes",
+          "weight": 4
+        },
+        {
+          "name": "blueberry bushes",
+          "weight": 2
+        },
+        {
+          "name": "grass tufts",
+          "weight": 6
+        },
+        {
+          "name": "flowers",
+          "weight": 2
+        },
+        {
+          "name": "yellow flowers",
+          "weight": 1
+        },
+        {
+          "name": "tree stubs",
+          "weight": 1
+        },
+        {
+          "name": "small mushrooms",
+          "weight": 2
+        },
+        {
+          "name": "mossy rocks",
+          "weight": 2
+        },
+        {
+          "name": "small rocks",
+          "weight": 1
+        },
+        {
+          "name": "bamboo plant",
+          "weight": 1
+        }
+      ]
+    },
+    "desert": {
+      "density": 85,
+      "brushes": [
+        {
+          "name": "dead bushes",
+          "weight": 5
+        },
+        {
+          "name": "dead trees",
+          "weight": 2
+        },
+        {
+          "name": "brown rocks",
+          "weight": 3
+        },
+        {
+          "name": "small rocks",
+          "weight": 2
+        },
+        {
+          "name": "weird shaped stones",
+          "weight": 1
+        },
+        {
+          "name": "broken palm trees",
+          "weight": 1
+        }
+      ]
+    },
+    "ice": {
+      "density": 100,
+      "brushes": [
+        {
+          "name": "snowy trees",
+          "weight": 4
+        },
+        {
+          "name": "snowy alive trees",
+          "weight": 2
+        },
+        {
+          "name": "snowy dead trees",
+          "weight": 1
+        },
+        {
+          "name": "small snowy rocks",
+          "weight": 3
+        },
+        {
+          "name": "snowy rocks",
+          "weight": 1
+        }
+      ]
+    },
+    "cave": {
+      "density": 85,
+      "brushes": [
+        {
+          "name": "small rocks",
+          "weight": 5
+        },
+        {
+          "name": "gray rocks",
+          "weight": 2
+        },
+        {
+          "name": "brown rocks",
+          "weight": 1
+        },
+        {
+          "name": "small mushrooms",
+          "weight": 1
+        },
+        {
+          "name": "blue cave crystal",
+          "weight": 1
+        },
+        {
+          "name": "green cave crystal",
+          "weight": 1
+        }
+      ]
+    },
+    "coast": {
+      "density": 80,
+      "brushes": [
+        {
+          "name": "palm trees",
+          "weight": 4
+        },
+        {
+          "name": "broken palm trees",
+          "weight": 1
+        },
+        {
+          "name": "grass tufts",
+          "weight": 3
+        },
+        {
+          "name": "small rocks",
+          "weight": 3
+        },
+        {
+          "name": "brown rocks",
+          "weight": 1
+        },
+        {
+          "name": "dead bushes",
+          "weight": 1
+        }
+      ]
+    }
+  }
+}

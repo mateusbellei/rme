@@ -359,7 +359,7 @@ def main():
         print("PASS: separate roofs, client windows, physical stair items, mountain layers, invalid travel rejection and byte-identical replay")
         # Exact profiles vary only objects; terrain/city planning keeps its master seed.
         object_recipe = json.loads(Path(ridged_command[2]).read_text(encoding="utf-8"))
-        object_recipe["world"].update(objectProfile=str(source / "data/procedural/profiles/1098/objects_rich.json"))
+        object_recipe["world"].update(objectProfile=str(source / "data/procedural/profiles/1098/objects_ecology.json"))
         object_path = Path(temporary) / "objects-recipe.json"
         object_command = ridged_command.copy()
         object_command[2] = str(object_path)
@@ -374,10 +374,36 @@ def main():
             folder = Path(object_command[6])
             result = json.loads((folder / "generation.json").read_text(encoding="utf-8"))
             assert result["objectSeed"] == seed and result["doodads"] > 0
+            assert sum(result["objectBrushUsage"].values()) == result["doodads"]
+            assert result["objectPatchUsage"] and sum(result["objectPatchUsage"].values()) <= result["doodads"]
+            assert result["objectBrushRejected"] == {}
             assert result["planFingerprint"] == ridged_report["planFingerprint"]
             object_reports.append(result)
             object_bytes.append((folder / "world.otbm").read_bytes())
         assert object_bytes[0] == object_bytes[2] and object_bytes[0] != object_bytes[1]
+        # Patch constraints must affect actual placement, including shoreline distance.
+        constraint_profile = Path(temporary) / "constrained-objects.json"
+        for limit in (0, 5):
+            constraint_profile.write_text(json.dumps({"version":1,"biomes":{"forest":{"density":150,"brushes":[],"baseWeight":0,"patches":[{"id":"bank","maxWaterDistance":limit,"brushes":[{"name":"grass tufts"}]}]}}}), encoding="utf-8")
+            object_recipe["world"]["objectProfile"] = str(constraint_profile)
+            object_path.write_text(json.dumps(object_recipe), encoding="utf-8")
+            object_command[6] = str(Path(temporary) / f"shore-{limit}")
+            generated = subprocess.run(object_command, cwd=temporary, capture_output=True, text=True, errors="replace", timeout=60)
+            assert generated.returncode == 0, generated.stdout + generated.stderr
+            constrained = json.loads((Path(object_command[6]) / "generation.json").read_text())
+            assert constrained["planFingerprint"] == ridged_report["planFingerprint"]
+            if limit == 0:
+                assert constrained["doodads"] == 0 and constrained["objectPatchUsage"] == {}
+            else:
+                assert constrained["doodads"] > 0 and set(constrained["objectBrushUsage"]) == {"grass tufts"}
+        # Malformed patch groups fail atomically, even when another palette is usable.
+        for invalid in ({"id":"bad","weight":0}, {"id":"bad","minElevation":9000,"maxElevation":1000},
+                        {"id":"bad","maxWaterDistance":33}, {"id":"bad","minMoisture":False}, {"id":"base"}):
+            invalid["brushes"] = [{"name":"grass tufts"}]
+            constraint_profile.write_text(json.dumps({"version":1,"biomes":{"forest":{"brushes":[{"name":"green trees"}],"patches":[invalid]}}}), encoding="utf-8")
+            object_command[6] = str(Path(temporary) / "invalid-patch")
+            generated = subprocess.run(object_command, cwd=temporary, capture_output=True, text=True, errors="replace", timeout=60)
+            assert generated.returncode == 1 and not Path(object_command[6]).exists()
         # A typo in an explicit palette must fail without exporting a partial world.
         bad_profile = Path(temporary) / "bad-objects.json"
         for brushes in ([{"name": "missing exact brush"}], [{"name": "green trees", "weight": 0}]):

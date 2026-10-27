@@ -86,11 +86,22 @@ def read_profile(path):
     limits = {"buildings": (0,64), "buildingLevels": (1,4), "caveDepth": (0,8),
               "caveEntrances": (1,16), "caveFill": (20,65), "roadWidth": (1,4),
               "rivers": (0,64), "temperatureBias": (-5000,5000), "moistureBias": (-5000,5000),
-              "biomeDetail": (0,100)}
+              "biomeDetail": (0,100), "mountainLevels": (0,4), "streetVariation": (0,60)}
     for key, value in profile.get("world", {}).items():
         if key == "layout":
             if value not in ("blocks", "organic"):
                 raise ValueError("Unknown settlement layout")
+        elif key == "stairItems":
+            if not isinstance(value, list) or len(value) != 5:
+                raise ValueError("stairItems requires five directional IDs")
+            for item in value:
+                integer(item, 0, 65535)
+        elif key == "physicalStairs":
+            if type(value) is not bool:
+                raise ValueError("physicalStairs must be boolean")
+        elif key == "highlandBrush":
+            if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 128 or "\0" in value:
+                raise ValueError("Invalid exact highland ground brush")
         elif key in limits:
             integer(value, *limits[key])
         else:

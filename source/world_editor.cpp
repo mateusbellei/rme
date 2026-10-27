@@ -19,6 +19,7 @@
 #include "doodad_brush.h"
 
 #include <array>
+#include <deque>
 #include <memory>
 #include <set>
 #include <filesystem>
@@ -89,8 +90,27 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool DecorationBrushes(const GenerationSpec& spec, std::array<std::vector<DoodadBrush*>, 7>& brushes, std::array<int, 7>& density, ApplicationStats& stats, wxString& error) {
+		struct ObjectPatch {
+			std::string id;
+			int weight=1, density=100, minElevation=0, maxElevation=10000, minMoisture=0, maxMoisture=10000, maxWaterDistance=-1;
+			std::vector<DoodadBrush*> brushes;
+		};
+		constexpr const char* ObjectHabitats[] = {"none","forest","desert","ice","cave","coast","highland"};
+		bool ReadObjectPalette(const json::mValue& value, std::vector<DoodadBrush*>& brushes, wxString& error) {
+			if(value.type()!=json::array_type || value.get_array().size()>64) {error="Object brushes must be an array of at most 64 weighted names.";return false;}
+			for(const auto& entry:value.get_array()) {
+				if(entry.type()!=json::obj_type) {error="Invalid weighted object brush.";return false;}
+				const auto& fields=entry.get_obj();const auto name=fields.find("name"),weight=fields.find("weight");
+				if(name==fields.end() || name->second.type()!=json::str_type || name->second.get_str().empty() || name->second.get_str().size()>128 || name->second.get_str().find('\0')!=std::string::npos || (weight!=fields.end() && (weight->second.type()!=json::int_type || weight->second.get_int64()<1 || weight->second.get_int64()>100))) {error="Object brushes need an exact name and integer weight 1..100.";return false;}
+				Brush* brush=g_brushes.getBrush(name->second.get_str());
+				if(!brush || !brush->isDoodad()) {error="Missing exact doodad brush: "+wxString::FromUTF8(name->second.get_str());return false;}
+				brushes.insert(brushes.end(),weight==fields.end()?1:size_t(weight->second.get_int64()),brush->asDoodad());
+			}
+			return true;
+		}
+		bool DecorationBrushes(const GenerationSpec& spec, std::array<std::vector<DoodadBrush*>, 7>& brushes, std::array<int, 7>& density, std::array<std::vector<ObjectPatch>,7>& patches, std::array<int,7>& patchSizes, std::array<int,7>& baseWeights, ApplicationStats& stats, wxString& error) {
 			density.fill(100);
+			patchSizes.fill(16);baseWeights.fill(100);
 			if (!spec.world.objectProfilePath.empty()) {
 				json::mValue root; std::string problem;
 				if (!ProceduralJSON::ReadFile(nstr(spec.world.objectProfilePath), 1024 * 1024, root, problem) || root.type() != json::obj_type) { error = "Invalid biome object profile: " + wxString::FromUTF8(problem); return false; }
@@ -107,14 +127,28 @@ namespace WorldEditor {
 						if (scale->second.type() != json::int_type || scale->second.get_int64() < 0 || scale->second.get_int64() > 200) { error = "Biome density must be 0..200 percent."; return false; }
 						density[index] = int(scale->second.get_int64());
 					}
-					if (entries == biome.end() || entries->second.type() != json::array_type || entries->second.get_array().size() > 64) { error = "Biome brushes must be an array of at most 64 weighted names."; return false; }
-					for (const auto& value : entries->second.get_array()) {
-						if (value.type() != json::obj_type) { error = "Invalid weighted object brush."; return false; }
-						const auto& item = value.get_obj(); const auto name = item.find("name"), weight = item.find("weight");
-						if (name == item.end() || name->second.type() != json::str_type || name->second.get_str().empty() || name->second.get_str().size() > 128 || name->second.get_str().find('\0') != std::string::npos || (weight != item.end() && (weight->second.type() != json::int_type || weight->second.get_int64() < 1 || weight->second.get_int64() > 100))) { error = "Object brushes need a bounded exact name and weight 1..100."; return false; }
-						Brush* brush = g_brushes.getBrush(name->second.get_str());
-						if (!brush || !brush->isDoodad()) { error = "Missing exact doodad brush: " + wxString::FromUTF8(name->second.get_str()); return false; }
-						brushes[index].insert(brushes[index].end(), weight == item.end() ? 1 : size_t(weight->second.get_int64()), brush->asDoodad());
+					if(entries==biome.end() || !ReadObjectPalette(entries->second,brushes[index],error)) {if(error.empty())error="Biome needs a brushes array.";return false;}
+					auto integer = [&](const json::mObject& fields,const char* key,int& target,int low,int high) {
+						const auto field=fields.find(key);if(field==fields.end())return true;
+						if(field->second.type()!=json::int_type || field->second.get_int64()<low || field->second.get_int64()>high) {error="Invalid ecology field: "+wxString::FromUTF8(key);return false;}
+						target=int(field->second.get_int64());return true;
+					};
+					if(!integer(biome,"patchSize",patchSizes[index],8,64) || !integer(biome,"baseWeight",baseWeights[index],0,100))return false;
+					const auto groups=biome.find("patches");
+					if(groups!=biome.end()) {
+						if(groups->second.type()!=json::array_type || groups->second.get_array().size()>8) {error="A biome accepts at most eight ecology patches.";return false;}
+						std::set<std::string> ids;
+						for(const auto& group:groups->second.get_array()) {
+							if(group.type()!=json::obj_type) {error="Ecology patches must be objects.";return false;}
+							const auto& fields=group.get_obj();const auto id=fields.find("id"),palette=fields.find("brushes");ObjectPatch patch;
+							if(id==fields.end() || id->second.type()!=json::str_type) {error="Ecology patch needs an id.";return false;}
+							patch.id=id->second.get_str();
+							if(patch.id.empty() || patch.id.size()>40 || patch.id=="base" || patch.id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-")!=std::string::npos || !ids.insert(patch.id).second) {error="Ecology patch IDs must be unique bounded identifiers.";return false;}
+							if(!integer(fields,"weight",patch.weight,1,100) || !integer(fields,"density",patch.density,0,200) || !integer(fields,"minElevation",patch.minElevation,0,10000) || !integer(fields,"maxElevation",patch.maxElevation,0,10000) || !integer(fields,"minMoisture",patch.minMoisture,0,10000) || !integer(fields,"maxMoisture",patch.maxMoisture,0,10000) || !integer(fields,"maxWaterDistance",patch.maxWaterDistance,0,32))return false;
+							if(patch.minElevation>patch.maxElevation || patch.minMoisture>patch.maxMoisture || palette==fields.end()) {error="Invalid ecology ranges or missing brushes.";return false;}
+							if(!ReadObjectPalette(palette->second,patch.brushes,error))return false;
+							patches[index].push_back(std::move(patch));
+						}
 					}
 				}
 				return true;
@@ -343,8 +377,10 @@ namespace WorldEditor {
 				return true;
 			}
 			std::array<std::vector<DoodadBrush*>, 7> brushes;
-			std::array<int, 7> densityScale;
-			if (!DecorationBrushes(spec, brushes, densityScale, stats, error)) return false;
+			std::array<int, 7> densityScale, patchSizes, baseWeights;
+			std::array<std::vector<ObjectPatch>,7> patches;
+			if (!DecorationBrushes(spec, brushes, densityScale, patches, patchSizes, baseWeights, stats, error)) return false;
+			int waterLimit=-1;for(const auto& biome:patches)for(const auto& patch:biome)waterLimit=std::max(waterLimit,patch.maxWaterDistance);
 			const uint32_t objectSeed = spec.world.objectSeed.value_or(spec.seed);
 			std::array<bool, 7> used {};
 			for (const auto& layer : plan.layers) {
@@ -356,6 +392,25 @@ namespace WorldEditor {
 				grid.reserved.resize(count);
 				grid.occupied.assign(count, 0);
 				grid.habitat.resize(count);
+				std::vector<uint8_t> waterDistance;
+				if(waterLimit>=0) {
+					waterDistance.assign(count,33);std::deque<size_t> queue;
+					for(int y=0;y<grid.height;++y)for(int x=0;x<grid.width;++x) {
+						const size_t i=size_t(y)*grid.width+x;if(!WorldGen::IsWater(layer.cells[i].terrain))continue;
+						waterDistance[i]=0;bool shore=false;
+						for(const auto [dx,dy]:{std::pair{1,0},std::pair{-1,0},std::pair{0,1},std::pair{0,-1}})if(x+dx>=0 && y+dy>=0 && x+dx<grid.width && y+dy<grid.height)shore|=!WorldGen::IsWater(layer.cells[size_t(y+dy)*grid.width+x+dx].terrain);
+						if(shore)queue.push_back(i);
+					}
+					while(!queue.empty()) {
+						const auto i=queue.front();queue.pop_front();if(waterDistance[i]>=waterLimit)continue;
+						const int x=int(i%grid.width),y=int(i/grid.width);
+						for(const auto [dx,dy]:{std::pair{1,0},std::pair{-1,0},std::pair{0,1},std::pair{0,-1}}) {
+							if(x+dx<0 || y+dy<0 || x+dx>=grid.width || y+dy>=grid.height)continue;
+							const size_t n=size_t(y+dy)*grid.width+x+dx;
+							if(waterDistance[n]>waterDistance[i]+1) {waterDistance[n]=waterDistance[i]+1;queue.push_back(n);}
+						}
+					}
+				}
 				for (int y = 0; y < grid.height; ++y) {
 					for (int x = 0; x < grid.width; ++x) {
 						const size_t index = size_t(y) * grid.width + x;
@@ -376,34 +431,49 @@ namespace WorldEditor {
 					for (int x = 1; x < grid.width - 1; ++x) {
 						const size_t index = size_t(y) * grid.width + x;
 						const uint8_t habitat = grid.habitat[index];
-						if (!habitat || grid.reserved[index] || !grid.walkable[index] || grid.occupied[index] || brushes[habitat].empty()) {
+						if (!habitat || grid.reserved[index] || !grid.walkable[index] || grid.occupied[index]) {
 							continue;
 						}
+						const auto& cell=layer.cells[index];
+						const auto* palette=&brushes[habitat];const ObjectPatch* selected=nullptr;
+						if(!patches[habitat].empty()) {
+							auto eligible=[&](const ObjectPatch& p){return cell.elevation>=p.minElevation && cell.elevation<=p.maxElevation && cell.moisture>=p.minMoisture && cell.moisture<=p.maxMoisture && (p.maxWaterDistance<0 || waterDistance[index]<=p.maxWaterDistance);};
+							int total=baseWeights[habitat];for(const auto& p:patches[habitat])if(eligible(p))total+=p.weight;
+							if(!total)continue;
+							int roll=int(CellSeed(objectSeed,x/patchSizes[habitat],y/patchSizes[habitat],layer.offsetZ,41)%uint32_t(total))-baseWeights[habitat];
+							if(roll>=0)for(const auto& p:patches[habitat])if(eligible(p)){if(roll<p.weight){selected=&p;palette=&p.brushes;break;}roll-=p.weight;}
+						}
+						if(palette->empty())continue;
 						const uint32_t choice = CellSeed(objectSeed, x, y, layer.offsetZ, 11);
 						const auto terrain = layer.cells[index].terrain;
 						const int factor = terrain == WorldGen::Terrain::Forest ? 180 : (terrain == WorldGen::Terrain::Grass ? 40 : (habitat == 4 ? 60 : 80));
 						const int patch = 60 + int(CellSeed(objectSeed, x / 12, y / 12, layer.offsetZ, 12) % 81);
-						const int density = std::min(80, std::clamp(spec.doodads.density, 0, 100) * factor * patch * densityScale[habitat] / 1000000);
+						const int density = std::min(80, std::clamp(spec.doodads.density, 0, 100) * factor * patch * (densityScale[habitat] * (selected?selected->density:100) / 100) / 1000000);
 						if (choice % 100 >= uint32_t(density)) {
 							continue;
 						}
-						DoodadBrush* brush = brushes[habitat][CellSeed(objectSeed, x, y, layer.offsetZ, 13) % brushes[habitat].size()];
+						DoodadBrush* brush = (*palette)[CellSeed(objectSeed, x, y, layer.offsetZ, 13) % palette->size()];
 						DoodadSample sample;
 						wxString reason;
 						const auto anchor = PositionFor(spec, { x, y }, layer.offsetZ);
-						if (!SampleDoodad(*brush, scratch, anchor, CellSeed(objectSeed, x, y, layer.offsetZ, 14), CellSeed(objectSeed, x, y, layer.offsetZ, 15), CellSeed(objectSeed, x, y, layer.offsetZ, 16), sample, reason) || !WorldGen::CanPlaceDecoration(grid, { x, y }, sample.footprint)) {
+						if (!SampleDoodad(*brush, scratch, anchor, CellSeed(objectSeed, x, y, layer.offsetZ, 14), CellSeed(objectSeed, x, y, layer.offsetZ, 15), CellSeed(objectSeed, x, y, layer.offsetZ, 16), sample, reason)) {
+							++stats.objectBrushRejected[brush->getName()];++stats.skippedDoodads;continue;
+						}
+						if (!WorldGen::CanPlaceDecoration(grid, { x, y }, sample.footprint)) {
 							++stats.skippedDoodads;
 							continue;
 						}
 						PlaceDoodad(sample, scratch, anchor, blocking);
 						WorldGen::MarkDecoration(grid, { x, y }, sample.footprint);
 						++stats.doodads;
+						++stats.objectBrushUsage[brush->getName()];
+						if(selected)++stats.objectPatchUsage[std::string(ObjectHabitats[habitat])+"/"+selected->id];
 					}
 				}
 			}
 			const char* names[] = { "", "forest/grass", "desert", "snow", "cave", "beach", "highland" };
 			for (int i = 1; i <= 6; ++i) {
-				if (used[i] && brushes[i].empty()) {
+				if (used[i] && brushes[i].empty() && std::none_of(patches[i].begin(),patches[i].end(),[](const ObjectPatch& p){return !p.brushes.empty();})) {
 					stats.warnings.push_back("No matching doodad brushes for " + wxString::FromUTF8(names[i]) + " in the active client.");
 				}
 			}

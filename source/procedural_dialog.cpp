@@ -585,6 +585,11 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	grid->Add(diverseSettlements, 0, wxEXPAND);
 	auto* buildings = spin("Buildings per settlement:", 0, 64, settings.buildingsPerSettlement);
 	auto* floors = spin("Building floors:", 1, 4, settings.buildingLevels);
+	auto* mountainLevels = spin("Mountain floors above surface:", 0, 4, settings.mountainLevels);
+	auto* streetVariation = spin("Street irregularity %:", 0, 60, settings.streetVariation);
+	grid->Add(new wxStaticText(content, wxID_ANY, "Vertical travel:"), 0, wxALIGN_CENTER_VERTICAL);
+	auto* physicalStairs = new wxCheckBox(content, wxID_ANY, "Physical directional stairs");
+	physicalStairs->SetValue(settings.physicalStairs); grid->Add(physicalStairs, 0, wxEXPAND);
 	auto* depth = spin("Cave floors below surface:", 0, 8, settings.caveDepth);
 	auto* caveEntrances = spin("Surface cave entrances:", 1, 16, settings.caveEntrances);
 	caveEntrances->Enable(settings.caveDepth > 0);
@@ -593,6 +598,8 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	auto* fill = spin("Cave initial rock density %:", 20, 65, settings.caveFill);
 	auto* road = spin("Road width:", 1, 4, settings.roadWidth);
 	auto* travel = spin("Travel teleport server ID (0 = auto):", 0, 65535, worldSettings.connectionItemId);
+	travel->Enable(!settings.physicalStairs);
+	physicalStairs->Bind(wxEVT_CHECKBOX,[=](wxCommandEvent&) { travel->Enable(!physicalStairs->GetValue()); });
 	grid->Add(new wxStaticText(content, wxID_ANY, "Building wall brush:"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* wall = new wxTextCtrl(content, wxID_ANY, worldSettings.wallBrushName);
 	grid->Add(wall, 1, wxEXPAND);
@@ -663,6 +670,9 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.diverseSettlements = diverseSettlements->GetValue();
 	candidate.settings.buildingsPerSettlement = buildings->GetValue();
 	candidate.settings.buildingLevels = floors->GetValue();
+	candidate.settings.mountainLevels = mountainLevels->GetValue();
+	candidate.settings.streetVariation = streetVariation->GetValue();
+	candidate.settings.physicalStairs = physicalStairs->GetValue();
 	candidate.settings.caveDepth = depth->GetValue();
 	candidate.settings.caveEntrances = caveEntrances->GetValue();
 	candidate.settings.caveFill = fill->GetValue();

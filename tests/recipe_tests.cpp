@@ -40,6 +40,10 @@ static void TestRecipes() {
 	original.world.settings.diverseSettlements = true;
 	original.world.settings.buildingsPerSettlement = 5;
 	original.world.settings.buildingLevels = 3;
+	original.world.settings.mountainLevels = 3;
+	original.world.settings.streetVariation = 37;
+	original.world.settings.physicalStairs = true;
+	original.world.stairItems = {410,1385,1388,1392,1390};
 	original.world.settings.caveDepth = 2;
 	original.world.settings.caveEntrances = 5;
 	original.world.settings.caveFill = 40;
@@ -67,6 +71,7 @@ static void TestRecipes() {
 	Check(loaded.world.settings.coastRoughness == 80 && loaded.world.settings.temperatureBias == -3200 && loaded.world.settings.moistureBias == 2100 && loaded.world.settings.riverWidth == 5, "Coast, climate and river width must round-trip");
 	Check(loaded.world.settings.settlementCount == 4 && loaded.world.settings.buildingsPerSettlement == 5 && loaded.world.settings.buildingLevels == 3, "World settlement settings must round-trip");
 	Check(loaded.world.settings.diverseSettlements, "Settlement habitat preference must round-trip");
+	Check(loaded.world.settings.mountainLevels==3 && loaded.world.settings.streetVariation==37 && loaded.world.settings.physicalStairs && loaded.world.stairItems==original.world.stairItems,"Mountain layers, irregular streets and exact physical stair items must round-trip");
 	Check(loaded.world.settings.caveDepth == 2 && loaded.world.settings.caveFill == 40 && loaded.world.settings.roadWidth == 3, "Caves and road settings must round-trip");
 	Check(loaded.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks, "City street layout must round-trip");
 	Check(loaded.world.settings.caveEntrances == 5, "Surface cave entrance count must round-trip");
@@ -229,7 +234,7 @@ static void TestCatalogJson() {
 		Check(!WorldGen::LoadBlueprintCatalog(path.string(), catalog, error), "Malformed construction catalog must fail");
 		Check(catalog.size() == WorldGen::DefaultBlueprints().size(), "Failed catalog load must preserve the caller catalog");
 	}
-	for (const char* objects : { R"([{"x":2,"y":2,"brush":"table"}])", R"([{"x":2,"y":2,"floor":1,"required":true,"brushes":["n","e","s","w"]}])" }) {
+	for (const char* objects : { R"([{"x":2,"y":2,"brush":"table","placementRadius":2}])", R"([{"x":2,"y":2,"floor":1,"required":true,"brushes":["n","e","s","w"]}])" }) {
 		std::ofstream file(path);
 		file << "{\"version\":1,\"templates\":[{\"id\":\"furnished\",\"maxLevels\":2,\"rows\":[\"#####\",\"#a.b#\",\"#...#\",\"#...#\",\"##+##\"],\"objects\":" << objects << "}]}";
 		file.close();

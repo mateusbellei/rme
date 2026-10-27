@@ -36,7 +36,7 @@ namespace WorldEditor {
 			Material floor;
 			WallBrush* wall = nullptr;
 		};
-		using BuildingMaterials = std::array<BuildingMaterial, 4>;
+		using BuildingMaterials = std::array<BuildingMaterial, 5>;
 
 		bool Update(const WorldGen::ProgressCallback& progress, const char* stage, int percent, wxString& error) {
 			if (progress && !progress(stage, percent)) {
@@ -89,15 +89,15 @@ namespace WorldEditor {
 			return true;
 		}
 
-		bool DecorationBrushes(const GenerationSpec& spec, std::array<std::vector<DoodadBrush*>, 6>& brushes, std::array<int, 6>& density, ApplicationStats& stats, wxString& error) {
+		bool DecorationBrushes(const GenerationSpec& spec, std::array<std::vector<DoodadBrush*>, 7>& brushes, std::array<int, 7>& density, ApplicationStats& stats, wxString& error) {
 			density.fill(100);
 			if (!spec.world.objectProfilePath.empty()) {
 				json::mValue root; std::string problem;
 				if (!ProceduralJSON::ReadFile(nstr(spec.world.objectProfilePath), 1024 * 1024, root, problem) || root.type() != json::obj_type) { error = "Invalid biome object profile: " + wxString::FromUTF8(problem); return false; }
 				const auto& object = root.get_obj();
 				const auto version = object.find("version"), biomes = object.find("biomes");
-				if (version == object.end() || version->second.type() != json::int_type || version->second.get_int64() != 1 || biomes == object.end() || biomes->second.type() != json::obj_type || biomes->second.get_obj().size() > 5) { error = "Object profiles require version 1 and a biomes object."; return false; }
-				const std::array<std::string, 6> names { "", "forest", "desert", "ice", "cave", "coast" };
+				if (version == object.end() || version->second.type() != json::int_type || version->second.get_int64() != 1 || biomes == object.end() || biomes->second.type() != json::obj_type || biomes->second.get_obj().size() > 6) { error = "Object profiles require version 1 and a biomes object."; return false; }
+				const std::array<std::string, 7> names { "", "forest", "desert", "ice", "cave", "coast", "highland" };
 				for (const auto& entry : biomes->second.get_obj()) {
 					const auto found = std::find(names.begin() + 1, names.end(), entry.first);
 					if (found == names.end() || entry.second.type() != json::obj_type) { error = "Unknown biome in object profile."; return false; }
@@ -119,12 +119,13 @@ namespace WorldEditor {
 				}
 				return true;
 			}
-			std::array<std::vector<std::string>, 6> keywords;
+			std::array<std::vector<std::string>, 7> keywords;
 			keywords[1] = { "tree", "bush", "fern", "mushroom", "log" };
 			keywords[2] = { "cactus", "desert", "dead", "palm", "rock" };
 			keywords[3] = { "snow", "ice", "frost", "pine", "fir" };
 			keywords[4] = { "stalagmite", "crystal", "rock" };
 			keywords[5] = { "palm", "shell", "coral", "beach" };
+			keywords[6] = { "rock", "rubble", "grass" };
 			const char* names[] = { "", "forest", "desert", "ice", "cave", "coast" };
 			const wxString path = g_gui.GetProceduralDataDirectory() + "biome_doodads.json";
 			json::mValue root;
@@ -154,7 +155,7 @@ namespace WorldEditor {
 				stats.warnings.push_back("Biome decoration settings could not be read; built-in keyword groups were used.");
 			}
 
-			for (int i = 1; i <= 5; ++i) {
+			for (int i = 1; i <= 6; ++i) {
 				if (!keywords[i].empty()) {
 					brushes[i] = ProceduralCommon::FindDoodadBrushes(keywords[i]);
 				}
@@ -295,18 +296,29 @@ namespace WorldEditor {
 						}
 						const auto& name = object.brushes.front();
 						Brush* found = g_brushes.getBrush(name);
-						const WorldGen::Point point { building.origin.x + object.x, building.origin.y + object.y };
+						const WorldGen::Point authored { building.origin.x + object.x, building.origin.y + object.y };
+						WorldGen::Point point=authored, anchor{object.x,object.y};
 						DoodadSample sample;
 						wxString reason;
 						std::string clearance;
-						const bool sampled = found && found->isDoodad() && SampleDoodad(*found->asDoodad(), scratch, PositionFor(spec, point, offsetZ), CellSeed(objectSeed, point.x, point.y, offsetZ, 21), CellSeed(objectSeed, point.x, point.y, offsetZ, 22), CellSeed(objectSeed, point.x, point.y, offsetZ, 23), sample, reason);
-						if (!sampled || !WorldGen::CanPlaceDecoration(grid, { object.x, object.y }, sample.footprint, &clearance)) {
+						bool sampled=false, fitted=false;
+						for (int radius=0; radius<=object.placementRadius && !fitted; ++radius) for (int dy=-radius;dy<=radius && !fitted;++dy) for (int dx=-radius;dx<=radius && !fitted;++dx) {
+							if (std::abs(dx)+std::abs(dy)!=radius) continue;
+							const WorldGen::Point candidate{object.x+dx,object.y+dy};
+							if(candidate.x<0 || candidate.y<0 || candidate.x>=grid.width || candidate.y>=grid.height || !grid.walkable[size_t(candidate.y)*grid.width+candidate.x]) continue;
+							DoodadSample trial;
+							const WorldGen::Point target{building.origin.x+candidate.x,building.origin.y+candidate.y};
+							sampled=found && found->isDoodad() && SampleDoodad(*found->asDoodad(),scratch,PositionFor(spec,target,offsetZ),CellSeed(objectSeed,authored.x,authored.y,offsetZ,21),CellSeed(objectSeed,authored.x,authored.y,offsetZ,22),CellSeed(objectSeed,authored.x,authored.y,offsetZ,23),trial,reason);
+							if(sampled && WorldGen::CanPlaceDecoration(grid,candidate,trial.footprint,&clearance)) { sample=std::move(trial); anchor=candidate; point=target; fitted=true; }
+						}
+						if (!fitted) {
 							if (!found || !found->isDoodad()) {
 								reason = "missing doodad brush";
 							} else if (sampled) {
 								reason = wxString::FromUTF8(clearance);
 							}
-							const wxString message = "Furniture '" + wxString::FromUTF8(name) + "' in template '" + wxString::FromUTF8(blueprint.id) + "': " + reason;
+							if (reason.empty()) reason="no safe furniture footprint within the authored placement radius";
+							const wxString message = "Furniture '" + wxString::FromUTF8(name) + "' in template '" + wxString::FromUTF8(blueprint.id) + wxString::Format("' (floor %d, local %d,%d, rotation %d): ",floor,object.x,object.y,building.rotation) + reason;
 							if (object.required) {
 								error = message;
 								return false;
@@ -316,7 +328,8 @@ namespace WorldEditor {
 							continue;
 						}
 						PlaceDoodad(sample, scratch, PositionFor(spec, point, offsetZ), blocking);
-						WorldGen::MarkDecoration(grid, { object.x, object.y }, sample.footprint);
+						WorldGen::MarkDecoration(grid, anchor, sample.footprint);
+						if (!(point==authored)) ++stats.relocatedFurniture;
 						++stats.furniture;
 					}
 				}
@@ -329,11 +342,11 @@ namespace WorldEditor {
 			if (!spec.doodads.enabled || spec.doodads.density <= 0) {
 				return true;
 			}
-			std::array<std::vector<DoodadBrush*>, 6> brushes;
-			std::array<int, 6> densityScale;
+			std::array<std::vector<DoodadBrush*>, 7> brushes;
+			std::array<int, 7> densityScale;
 			if (!DecorationBrushes(spec, brushes, densityScale, stats, error)) return false;
 			const uint32_t objectSeed = spec.world.objectSeed.value_or(spec.seed);
-			std::array<bool, 6> used {};
+			std::array<bool, 7> used {};
 			for (const auto& layer : plan.layers) {
 				WorldGen::DecorationGrid grid;
 				grid.width = plan.settings.width;
@@ -347,7 +360,7 @@ namespace WorldEditor {
 					for (int x = 0; x < grid.width; ++x) {
 						const size_t index = size_t(y) * grid.width + x;
 						const auto& cell = layer.cells[index];
-						const uint8_t habitat = Habitat(cell.terrain);
+						const uint8_t habitat = (cell.flags & WorldGen::Highland) && WorldGen::IsWalkable(cell) && cell.terrain != WorldGen::Terrain::Snow ? 6 : Habitat(cell.terrain);
 						grid.habitat[index] = habitat;
 						grid.reserved[index] = !habitat || (cell.flags & WorldGen::Reserved);
 						grid.walkable[index] = WorldGen::IsWalkable(cell) && TileWalkable(scratch.getTile(PositionFor(spec, { x, y }, layer.offsetZ)));
@@ -388,8 +401,8 @@ namespace WorldEditor {
 					}
 				}
 			}
-			const char* names[] = { "", "forest/grass", "desert", "snow", "cave", "beach" };
-			for (int i = 1; i <= 5; ++i) {
+			const char* names[] = { "", "forest/grass", "desert", "snow", "cave", "beach", "highland" };
+			for (int i = 1; i <= 6; ++i) {
 				if (used[i] && brushes[i].empty()) {
 					stats.warnings.push_back("No matching doodad brushes for " + wxString::FromUTF8(names[i]) + " in the active client.");
 				}
@@ -495,7 +508,7 @@ namespace WorldEditor {
 				}
 			}
 			teleportId = spec.world.connectionItemId;
-			if (!plan.links.empty()) {
+			if (!plan.links.empty() && !plan.settings.physicalStairs) {
 				if (!teleportId) {
 					for (int i = 1; i <= g_items.getMaxID(); ++i) {
 						if (g_items.typeExists(i) && g_items[i].isTeleport() && !g_items[i].isGroundTile() && !g_items[i].unpassable) {
@@ -524,8 +537,9 @@ namespace WorldEditor {
 				}
 				const auto& blueprint = plan.catalog[i];
 				if (!blueprint.prefabPath.empty()) continue;
-				for (int level = 0; level < usedLevels[i]; ++level) {
-					const auto binding = WorldGen::BlueprintMaterialForFloor(blueprint, level);
+				for (int level = 0; level < usedLevels[i] + int(!blueprint.roofBrush.empty()); ++level) {
+					const auto binding = level == usedLevels[i] ? WorldGen::BlueprintMaterial {blueprint.roofBrush, ""} : WorldGen::BlueprintMaterialForFloor(blueprint, level);
+					const size_t slot = level == usedLevels[i] ? 4 : size_t(level);
 					for (int type = 0; type < 2; ++type) {
 						const auto& name = type == 0 ? binding.floorBrush : binding.wallBrush;
 						if (name.empty()) {
@@ -537,9 +551,9 @@ namespace WorldEditor {
 							return false;
 						}
 						if (type == 0) {
-							materials[i][level].floor.brush = brush->asGround();
+							materials[i][slot].floor.brush = brush->asGround();
 						} else {
-							materials[i][level].wall = brush->asWall();
+							materials[i][slot].wall = brush->asWall();
 						}
 					}
 				}
@@ -547,8 +561,42 @@ namespace WorldEditor {
 			return true;
 		}
 
+		bool ResolveStairs(const GenerationSpec& spec, const WorldGen::Plan& plan, std::array<int,5>& ids, wxString& error) {
+			ids = spec.world.stairItems;
+			std::array<bool,5> needed{};
+			for (const auto& link : plan.links) { needed[0] = true; needed[size_t(link.stairDirection + 1)] = true; }
+			for (int slot = 0; slot < 5; ++slot) {
+				if (!needed[slot]) continue;
+				auto compatible = [&](int id) {
+					if (id < 1 || id > 65535 || !g_items.typeExists(id)) return false;
+					const auto& t=g_items[id];
+					const bool directions[]={t.floorChangeDown,t.floorChangeNorth,t.floorChangeEast,t.floorChangeSouth,t.floorChangeWest};
+					return t.isFloorChange() && directions[slot] && std::count(std::begin(directions),std::end(directions),true)==1 && !t.unpassable && !t.isTeleport() && !t.isDoor() && !t.isContainer() && !t.isMetaItem() && !t.ground_equivalent && !t.moveable;
+				};
+				if (!ids[slot]) {
+					int best=-1;
+					for (int id=1; id<=g_items.getMaxID(); ++id) if (compatible(id)) {
+						const auto& name=g_items[id].name;
+						const int score=name.find("stairs")!=std::string::npos ? 100 : (name.find("ramp")!=std::string::npos ? 80 : 0);
+						if (score>best) { best=score; ids[slot]=id; }
+					}
+				}
+				if (!compatible(ids[slot])) { error="Physical stairs require matching nonblocking directional floor-change items; check world.stairItems [down,north,east,south,west]."; return false; }
+			}
+			return true;
+		}
+
 		bool BuildScratch(Editor& editor, const GenerationSpec& spec, const WorldGen::Plan& plan, const std::array<Material, kTerrainCount>& materials, const std::vector<BuildingMaterials>& buildingMaterials, const WorldPrefab::Library& prefabs, WallBrush* wall, int teleportId, BaseMap& scratch, wxString& error, ApplicationStats& stats, const WorldGen::ProgressCallback& progress) {
 			std::set<Position> decorativeBlocking;
+			std::array<int,5> stairIds{};
+			std::map<Position,int> physicalTravel;
+			if (plan.settings.physicalStairs && !ResolveStairs(spec, plan, stairIds, error)) return false;
+			Material highland;
+			if (plan.settings.mountainLevels && !spec.world.highlandBrushName.empty()) {
+				Brush* brush = g_brushes.getBrush(nstr(spec.world.highlandBrushName));
+				if (!brush || !brush->isGround()) { error="Highland material requires an exact ground brush: "+spec.world.highlandBrushName; return false; }
+				highland.brush=brush->asGround();
+			}
 			for (const auto& building : plan.buildings) if (!plan.catalog[building.blueprint].prefabPath.empty()) ++stats.prefabBuildings;
 
 			// Copy context, including untouched void cells and the outer ring. Borders see
@@ -594,10 +642,11 @@ namespace WorldEditor {
 							continue;
 						}
 						Tile* tile = scratch.allocator(scratch.createTileL(pos));
+						if (cell.flags & WorldGen::Roof) ++stats.roofTiles;
 						const int building = prefabs.owners[size_t(y) * spec.region.width + x];
 						const int owner = building < 0 ? -1 : plan.buildings[building].blueprint;
-						const BuildingMaterial* style = owner >= 0 && layer.offsetZ <= 0 ? &buildingMaterials[owner][size_t(-layer.offsetZ)] : nullptr;
-						const auto& material = style && cell.terrain == WorldGen::Terrain::BuildingFloor && style->floor.brush ? style->floor : materials[size_t(cell.terrain)];
+						const BuildingMaterial* style = owner >= 0 && layer.offsetZ <= 0 ? &buildingMaterials[owner][(cell.flags & WorldGen::Roof) ? 4 : size_t(-layer.offsetZ)] : nullptr;
+						const auto& material = style && cell.terrain == WorldGen::Terrain::BuildingFloor && style->floor.brush ? style->floor : ((cell.flags & WorldGen::Highland) && WorldGen::IsWalkable(cell) && cell.terrain != WorldGen::Terrain::Snow && highland.brush ? highland : materials[size_t(cell.terrain)]);
 						WallBrush* selectedWall = style && style->wall ? style->wall : wall;
 						if (material.tileId) {
 							tile->addItem(Item::Create(uint16_t(material.tileId)));
@@ -640,9 +689,36 @@ namespace WorldEditor {
 					}
 				}
 			}
+			// Window brushes reuse the active wall's own orientation and client bindings.
+			DoorBrush windows(WALL_WINDOW);
+			for (const auto& b : plan.buildings) {
+				const auto blueprint=WorldGen::RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
+				if (!blueprint.windowChance || !blueprint.prefabPath.empty()) continue;
+				for (int level=0; level<b.levels; ++level) {
+					const auto& rows=WorldGen::BlueprintRowsForFloor(blueprint, level);
+					for (int y=0; y<b.height; ++y) for (int x=0; x<b.width; ++x) {
+						if (rows[y][x]!='#' || CellSeed(spec.seed,b.origin.x+x,b.origin.y+y,-level,31)%100 >= unsigned(blueprint.windowChance)) continue;
+						bool exterior=false;
+						for (const auto [dx,dy] : {std::pair{1,0},std::pair{-1,0},std::pair{0,1},std::pair{0,-1}}) exterior |= x+dx<0 || y+dy<0 || x+dx>=b.width || y+dy>=b.height || rows[y+dy][x+dx]==' ';
+						if (!exterior) continue;
+						Tile* tile=scratch.getTile(PositionFor(spec,{b.origin.x+x,b.origin.y+y},-level));
+						if (!tile || !tile->hasWall()) continue;
+						const auto before=tile->getWall()->getID();
+						windows.draw(&scratch,tile,nullptr);
+						if (tile->hasWall() && tile->getWall()->getID()!=before) ++stats.windows;
+					}
+				}
+			}
 			for (const auto& link : plan.links) {
 				const auto upper = PositionFor(spec, link.upper, link.upperOffsetZ), lower = PositionFor(spec, link.lower, link.lowerOffsetZ);
 				const auto upperArrival = PositionFor(spec, link.upperArrival, link.upperOffsetZ), lowerArrival = PositionFor(spec, link.lowerArrival, link.lowerOffsetZ);
+				if (plan.settings.physicalStairs) {
+					physicalTravel[upper]=stairIds[0]; physicalTravel[lower]=stairIds[size_t(link.stairDirection+1)];
+					scratch.getTile(upper)->addItem(Item::Create(uint16_t(physicalTravel[upper])));
+					scratch.getTile(lower)->addItem(Item::Create(uint16_t(physicalTravel[lower])));
+					stats.stairEndpoints += 2;
+					continue;
+				}
 				Teleport* down = newd Teleport(uint16_t(teleportId));
 				down->setDestination(lowerArrival);
 				scratch.getTile(upper)->addItem(down);
@@ -672,11 +748,13 @@ namespace WorldEditor {
 							error = "World grounds cannot use editor-only items that are omitted from OTBM.";
 							return false;
 						}
-						if (tile && tile->ground && (g_items[tile->ground->getID()].isFloorChange() || g_items[tile->ground->getID()].isTeleport())) {
+						int portals = 0;
+						auto expectedStair = [&](int id) { const auto it=physicalTravel.find(pos); return it!=physicalTravel.end() && it->second==id; };
+						if (tile && tile->ground && (g_items[tile->ground->getID()].isFloorChange() || g_items[tile->ground->getID()].isTeleport()) && !expectedStair(tile->ground->getID())) {
 							error = wxString::Format("Ground at %d,%d,%d changes floors outside the planned travel graph.", pos.x, pos.y, pos.z);
 							return false;
 						}
-						int portals = 0;
+						if (tile && tile->ground && expectedStair(tile->ground->getID())) ++portals;
 						if (tile) {
 							for (Item* item : tile->items) {
 								blocked = blocked || g_items[item->getID()].unpassable;
@@ -689,11 +767,11 @@ namespace WorldEditor {
 									error = wxString::Format("Client materials add a second ground at %d,%d,%d. Correct the border definitions before applying this world.", pos.x, pos.y, pos.z);
 									return false;
 								}
-								if (type.isFloorChange() || (type.isTeleport() && (!(cell.flags & WorldGen::Connection) || !dynamic_cast<Teleport*>(item)))) {
+								if ((type.isFloorChange() && !expectedStair(item->getID())) || (type.isTeleport() && (plan.settings.physicalStairs || !(cell.flags & WorldGen::Connection) || !dynamic_cast<Teleport*>(item)))) {
 									error = wxString::Format("Client items at %d,%d,%d add unplanned floor travel.", pos.x, pos.y, pos.z);
 									return false;
 								}
-								if (type.isTeleport()) {
+								if (type.isTeleport() || type.isFloorChange()) {
 									++portals;
 								}
 							}
@@ -706,7 +784,7 @@ namespace WorldEditor {
 							error = wxString::Format("Client borders or materials block the planned route at %d,%d,%d. Adjust the world legend or disable borders.", pos.x, pos.y, pos.z);
 							return false;
 						}
-						if (!WorldGen::IsWalkable(cell) && !(cell.flags & WorldGen::Wall) && !blocked) {
+						if (!WorldGen::IsWalkable(cell) && !(cell.flags & (WorldGen::Wall | WorldGen::Roof)) && !blocked) {
 							error = wxString::Format("World barrier at %d,%d,%d is walkable in the active client. Choose a blocking ground for water, mountains or cave rock.", pos.x, pos.y, pos.z);
 							return false;
 						}
@@ -754,7 +832,7 @@ namespace WorldEditor {
 		settings.width = resolved.region.width;
 		settings.height = resolved.region.height;
 		settings.seed = spec.seed;
-		if (resolved.region.z - (settings.buildingLevels - 1) < 0 || resolved.region.z + settings.caveDepth > MAP_MAX_LAYER) {
+		if (resolved.region.z - std::max(settings.buildingLevels - 1, settings.mountainLevels) < 0 || resolved.region.z + settings.caveDepth > MAP_MAX_LAYER) {
 			error = "Requested world building/cave floors exceed the map z range.";
 			return false;
 		}
@@ -791,6 +869,7 @@ namespace WorldEditor {
 			error = wxstr(buildError);
 			return false;
 		}
+		if (resolved.region.z + WorldGen::HighestOffset(plan) < 0) { error = "Requested roofs/highlands exceed the map z range."; return false; }
 		const auto report = WorldGen::Validate(plan);
 		if (!report.valid) {
 			error = "World plan validation failed:";
@@ -909,6 +988,7 @@ namespace WorldEditor {
 				const auto& cell = layer->cells[size_t(y) * plan.settings.width + x];
 				uint32_t color = WorldGen::TerrainColor(cell.terrain);
 				if (view == PreviewLayer::Terrain) {
+					if (cell.flags & WorldGen::Roof) color = 0xC07040;
 					if (cell.flags & WorldGen::Wall) {
 						color = 0x404040;
 					}
@@ -963,7 +1043,7 @@ namespace WorldEditor {
 	wxString Describe(const WorldGen::Plan& plan, size_t* plannedTiles) {
 		const auto report = WorldGen::Validate(plan);
 		if (plannedTiles) *plannedTiles = report.plannedTiles;
-		wxString text = wxString::Format("Seed %u | Algorithm %u | Plan %llu\n%d x %d | %u settlements | %u buildings | %u floors | %u planned vertical connections\nLand: %u tiles | Water: %u tiles | Roads/bridges: %u tiles\nYellow: travel portals; magenta: entrances; cyan: authored furniture anchors; dark gray: walls. Actual furniture placement is validated against client brushes.", unsigned(plan.settings.seed), unsigned(WorldGen::AlgorithmVersion), static_cast<unsigned long long>(WorldGen::Fingerprint(plan)), plan.settings.width, plan.settings.height, unsigned(plan.settlements.size()), unsigned(plan.buildings.size()), unsigned(plan.layers.size()), unsigned(plan.links.size()), unsigned(report.landTiles), unsigned(report.waterTiles), unsigned(report.roadTiles));
+		wxString text = wxString::Format("Seed %u | Algorithm %u | Plan %llu\n%d x %d | %u settlements | %u buildings | %u floors | %u planned vertical connections\nLand: %u tiles | Water: %u tiles | Roads/bridges: %u tiles\nYellow: travel endpoints; magenta: entrances; cyan: furniture anchors; brown: roofs; dark gray: walls. Actual furniture placement is validated against client brushes.", unsigned(plan.settings.seed), unsigned(WorldGen::AlgorithmVersion), static_cast<unsigned long long>(WorldGen::Fingerprint(plan)), plan.settings.width, plan.settings.height, unsigned(plan.settlements.size()), unsigned(plan.buildings.size()), unsigned(plan.layers.size()), unsigned(plan.links.size()), unsigned(report.landTiles), unsigned(report.waterTiles), unsigned(report.roadTiles));
 		text << wxString::Format("\nPlanned tiles (all floors): %llu | Editor budget: %llu.", static_cast<unsigned long long>(report.plannedTiles), static_cast<unsigned long long>(DefaultTileBudget));
 		if (report.plannedTiles > DefaultTileBudget) {
 			text << " Reduce the region/floors or use 64-bit batch export with an explicit larger tile budget.";

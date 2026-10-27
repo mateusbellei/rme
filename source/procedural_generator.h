@@ -8,6 +8,7 @@
 #include "main.h"
 #include "position.h"
 #include "world_plan.h"
+#include <array>
 
 class Map;
 class Editor;
@@ -86,7 +87,10 @@ struct GenerationWorld {
 	bool protectExisting = true;
 	// Zero selects an appropriate teleport type from the active client.
 	int connectionItemId = 0;
+	// Down, north, east, south, west. Zero resolves a compatible active-client item.
+	std::array<int, 5> stairItems {};
 	wxString wallBrushName = "stone";
+	wxString highlandBrushName;
 	wxString catalogPath;
 	wxString heightmapPath;
 	wxString biomeHintsPath;

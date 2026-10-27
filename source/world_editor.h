@@ -14,6 +14,8 @@ namespace WorldEditor {
 		size_t changedTiles = 0, doodads = 0, skippedDoodads = 0;
 		size_t furniture = 0, skippedFurniture = 0;
 		size_t prefabTiles = 0, prefabBuildings = 0;
+		size_t roofTiles = 0, windows = 0, stairEndpoints = 0;
+		size_t relocatedFurniture = 0;
 		std::vector<wxString> warnings;
 	};
 	enum class PreviewLayer { Terrain,

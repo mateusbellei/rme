@@ -132,6 +132,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	}
 
 	json::mObject root = MakeObject();
+	if (spec.world.highlandBrushName.find(wxUniChar(0)) != wxString::npos || spec.world.highlandBrushName.utf8_string().size() > 128 || std::any_of(spec.world.stairItems.begin(),spec.world.stairItems.end(),[](int id){return id<0 || id>65535;})) { error="Invalid highland brush or physical stair IDs."; return false; }
 	root["version"] = json::mValue(4);
 	if (paths == PathMode::RelativeToRecipe) {
 		root["pathBase"] = json::mValue("recipe");
@@ -181,6 +182,10 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["diverseSettlements"] = spec.world.settings.diverseSettlements;
 	world["buildings"] = json::mValue(spec.world.settings.buildingsPerSettlement);
 	world["buildingLevels"] = json::mValue(spec.world.settings.buildingLevels);
+	world["mountainLevels"] = json::mValue(spec.world.settings.mountainLevels);
+	world["streetVariation"] = json::mValue(spec.world.settings.streetVariation);
+	world["physicalStairs"] = json::mValue(spec.world.settings.physicalStairs);
+	json::mArray stairs; for (int id : spec.world.stairItems) stairs.emplace_back(id); world["stairItems"] = json::mValue(stairs);
 	world["caveDepth"] = json::mValue(spec.world.settings.caveDepth);
 	world["caveEntrances"] = spec.world.settings.caveEntrances;
 	world["caveFill"] = json::mValue(spec.world.settings.caveFill);
@@ -189,6 +194,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["protectExisting"] = json::mValue(spec.world.protectExisting);
 	world["connectionItemId"] = json::mValue(spec.world.connectionItemId);
 	world["wallBrush"] = json::mValue(nstr(spec.world.wallBrushName));
+	world["highlandBrush"] = json::mValue(nstr(spec.world.highlandBrushName));
 	world["catalog"] = json::mValue(filename(spec.world.catalogPath));
 	world["heightmap"] = json::mValue(filename(spec.world.heightmapPath));
 	world["biomeHints"] = json::mValue(filename(spec.world.biomeHintsPath));
@@ -457,6 +463,15 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		}
 		integer("buildings", spec.world.settings.buildingsPerSettlement);
 		integer("buildingLevels", spec.world.settings.buildingLevels);
+		integer("mountainLevels", spec.world.settings.mountainLevels);
+		integer("streetVariation", spec.world.settings.streetVariation);
+		const auto stairItems = world.find("stairItems");
+		if (stairItems != world.end()) {
+			if (stairItems->second.type() != json::array_type || stairItems->second.get_array().size() != 5) { error = "stairItems requires [down,north,east,south,west]."; return false; }
+			for (size_t i=0;i<5;++i) { const auto& v=stairItems->second.get_array()[i]; if(v.type()!=json::int_type || v.get_int64()<0 || v.get_int64()>65535) {error="Invalid physical stair item ID."; return false;} spec.world.stairItems[i]=int(v.get_int64()); }
+		}
+		const auto physical = world.find("physicalStairs");
+		if (physical != world.end()) { if (physical->second.type() != json::bool_type) { error = "physicalStairs must be a boolean."; return false; } spec.world.settings.physicalStairs = physical->second.get_bool(); }
 		integer("caveDepth", spec.world.settings.caveDepth);
 		integer("caveEntrances", spec.world.settings.caveEntrances);
 		integer("caveFill", spec.world.settings.caveFill);
@@ -527,6 +542,8 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			}
 			*field.second = wxString::FromUTF8(value->second.get_str());
 		}
+		const auto highland = world.find("highlandBrush");
+		if (highland != world.end()) { if (highland->second.type()!=json::str_type || highland->second.get_str().size()>128 || highland->second.get_str().find('\0')!=std::string::npos) { error="Invalid highland ground brush name."; return false; } spec.world.highlandBrushName=wxString::FromUTF8(highland->second.get_str()); }
 		const auto wall = world.find("wallBrush");
 		for (const auto& field : { std::pair {"objectSeed", &spec.world.objectSeed}, std::pair {"caveSeed", &spec.world.settings.caveSeed} }) {
 			const auto value = world.find(field.first);

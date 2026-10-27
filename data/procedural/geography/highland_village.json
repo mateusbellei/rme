@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "background": {
+    "elevation": 2000
+  },
+  "settlements": [
+    [
+      0.72,
+      0.7
+    ]
+  ],
+  "world": {
+    "buildings": 4,
+    "buildingLevels": 3,
+    "mountainLevels": 3,
+    "streetVariation": 35,
+    "physicalStairs": true,
+    "highlandBrush": "mountain top ground",
+    "caveDepth": 0
+  },
+  "zones": [
+    {
+      "shape": "ellipse",
+      "center": [
+        0.5,
+        0.5
+      ],
+      "radius": [
+        0.48,
+        0.48
+      ],
+      "elevation": 5800,
+      "biome": "forest",
+      "feather": 0.1,
+      "noise": 100
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.28,
+        0.28
+      ],
+      "radius": [
+        0.23,
+        0.23
+      ],
+      "elevation": 9600,
+      "biome": "grass",
+      "feather": 0.6,
+      "noise": 50
+    },
+    {
+      "shape": "ellipse",
+      "center": [
+        0.72,
+        0.7
+      ],
+      "radius": [
+        0.17,
+        0.17
+      ],
+      "elevation": 6000,
+      "biome": "grass",
+      "feather": 0.2
+    }
+  ]
+}

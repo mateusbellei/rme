@@ -165,6 +165,35 @@
           "weight": 1
         }
       ]
+    },
+    "highland": {
+      "density": 85,
+      "brushes": [
+        {
+          "name": "small rocks",
+          "weight": 5
+        },
+        {
+          "name": "gray rocks",
+          "weight": 2
+        },
+        {
+          "name": "brown rocks",
+          "weight": 2
+        },
+        {
+          "name": "weird shaped stones",
+          "weight": 1
+        },
+        {
+          "name": "grass tufts",
+          "weight": 2
+        },
+        {
+          "name": "tree stubs",
+          "weight": 1
+        }
+      ]
     }
   }
 }

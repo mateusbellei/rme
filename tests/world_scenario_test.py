@@ -14,7 +14,7 @@ def main():
     scenario = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(scenario)
     # Bundled scenarios remain verifiable on LF and CRLF checkouts.
-    for name in ("coastal_port", "wetland_trade"):
+    for name in ("coastal_port", "wetland_trade", "highland_village"):
         folder = source / "data/procedural/scenarios" / name
         manifest = json.loads((folder / "manifest.json").read_text())
         recipe = json.loads((folder / "recipe.json").read_text())
@@ -64,7 +64,10 @@ def main():
         original = json.loads(profile.read_text())
         for change in ({"version": True}, {"settlements": [[.1,.1],[.11,.1]]},
                        {"zones": [{"shape": "typo", "elevation": 6000}]},
-                       {"world": {"buildings": 1000}}, {"doodadDensity": -1}):
+                       {"world": {"buildings": 1000}}, {"doodadDensity": -1},
+                       {"world": {"mountainLevels": 5}}, {"world": {"streetVariation": 61}},
+                       {"world": {"physicalStairs": 1}}, {"world": {"stairItems": [0]}},
+                       {"world": {"stairItems": [0, 0, True, 0, 0]}}):
             invalid.write_text(json.dumps(dict(original, **change)))
             try:
                 compile("invalid-output", file=invalid)

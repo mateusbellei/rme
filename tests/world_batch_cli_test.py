@@ -281,6 +281,82 @@ def main():
             assert [entry["blueprint"] for entry in settlement["constructionMix"]] == [f"town_{town}_residence"]
         assert len(regional_plan["buildings"]) == 8
         assert all(building["blueprint"] == f"town_{building['settlement'] + 1}_residence" for building in regional_plan["buildings"])
+        # Complete roofed village: directional stairs, irregular streets and mountain layers.
+        highland_command = command.copy()
+        highland_command[2] = str(source / "data/procedural/recipes/example_highland_village_1098.json")
+        highland_command.extend(["--no-previews"])
+        highland_bytes = []
+        for attempt in range(2):
+            highland_command[6] = str(Path(temporary) / f"highland-{attempt}")
+            generated = subprocess.run(highland_command, cwd=temporary, capture_output=True, text=True, errors="replace", timeout=60)
+            assert generated.returncode == 0, generated.stdout + generated.stderr
+            folder = Path(highland_command[6])
+            result = json.loads((folder / "generation.json").read_text(encoding="utf-8"))
+            highland_plan = json.loads((folder / "plan.json").read_text(encoding="utf-8"))
+            assert result["roofTiles"] == 4 * 13 * 13 and result["windows"] > 0
+            assert result["stairEndpoints"] == len(highland_plan["verticalLinks"]) * 2
+            assert result["skippedFurniture"] == 0 and result["furniture"] == 36
+            assert len(highland_plan["layers"]) == 4 and result["verifiedOTBM"]
+            assert highland_plan["settings"]["streetVariation"] == 35
+            assert highland_plan["settings"]["physicalStairs"] is True
+            assert any(link["upper"][2] == -3 for link in highland_plan["verticalLinks"])
+            data = (folder / "world.otbm").read_bytes()
+            highland_bytes.append(data)
+            # Count real floor-change objects and reject teleport metadata in the encoded map.
+            floor_changes = 0
+            known_stairs = set()
+            items = ET.parse(source / "data/1098/items_original1098.xml").getroot()
+            for item in items.findall("item"):
+                if any(a.attrib.get("key") == "floorchange" for a in item.findall("attribute")):
+                    known_stairs.update(range(int(item.attrib.get("id", item.attrib.get("fromid"))), int(item.attrib.get("id", item.attrib.get("toid"))) + 1))
+            for node, ancestors in otbm_nodes(data):
+                if node[0] in (5, 14):
+                    offset = 3 if node[0] == 5 else 7
+                    while offset < len(node):
+                        attr = node[offset]; offset += 1
+                        if attr == 3: offset += 4
+                        elif attr == 9:
+                            floor_changes += struct.unpack_from("<H", node, offset)[0] in known_stairs
+                            offset += 2
+                        else: raise AssertionError(f"Unexpected tile attribute {attr}")
+                elif node[0] == 6:
+                    floor_changes += struct.unpack_from("<H", node, 1)[0] in known_stairs
+            assert floor_changes == result["stairEndpoints"]
+        assert highland_bytes[0] == highland_bytes[1]
+        # Wrong client travel IDs must fail before creating any output.
+        bad_stairs = json.loads((source / "data/procedural/recipes/example_highland_village_1098.json").read_text())
+        for key in ("heightmap", "biomeHints", "landMask", "catalog", "objectProfile"):
+            bad_stairs["world"][key] = str((source / "data/procedural/recipes" / bad_stairs["world"][key]).resolve())
+        bad_stairs["legend"] = str(source / "data/procedural/world_legend.json")
+        bad_stairs["world"]["stairItems"] = [1387, 1385, 1388, 1392, 1390]
+        bad_path = Path(temporary) / "bad-stairs.json"
+        bad_path.write_text(json.dumps(bad_stairs), encoding="utf-8")
+        highland_command[2], highland_command[6] = str(bad_path), str(Path(temporary) / "invalid-stairs")
+        generated = subprocess.run(highland_command, cwd=temporary, capture_output=True, text=True, errors="replace", timeout=60)
+        assert generated.returncode == 1 and not Path(highland_command[6]).exists()
+        # Bounded fitting keeps required furniture when a stair reservation occupies its halo.
+        fit_catalog = json.loads((source / "data/procedural/profiles/1098/roofed_buildings.json").read_text())
+        for template in fit_catalog["templates"]:
+            for prop in template["objects"]:
+                if "bed" in prop["brushes"][0]:
+                    prop.update(x=4, y=4, placementRadius=2)
+        fit_catalog_path = Path(temporary) / "fitting-catalog.json"
+        fit_catalog_path.write_text(json.dumps(fit_catalog), encoding="utf-8")
+        bad_stairs["world"].update(stairItems=[0, 0, 0, 0, 0], catalog=str(fit_catalog_path))
+        fit_recipe = Path(temporary) / "fitting-recipe.json"
+        fit_recipe.write_text(json.dumps(bad_stairs), encoding="utf-8")
+        highland_command[2], highland_command[6] = str(fit_recipe), str(Path(temporary) / "fitting-world")
+        generated = subprocess.run(highland_command, cwd=temporary, capture_output=True, text=True, errors="replace", timeout=60)
+        assert generated.returncode == 0, generated.stdout + generated.stderr
+        fitting = json.loads((Path(highland_command[6]) / "generation.json").read_text())
+        assert fitting["relocatedFurniture"] > 0 and fitting["skippedFurniture"] == 0 and fitting["furniture"] == 36
+        for template in fit_catalog["templates"]:
+            for prop in template["objects"]: prop["placementRadius"] = 0
+        fit_catalog_path.write_text(json.dumps(fit_catalog), encoding="utf-8")
+        highland_command[6] = str(Path(temporary) / "unfitted-world")
+        generated = subprocess.run(highland_command, cwd=temporary, capture_output=True, text=True, errors="replace", timeout=60)
+        assert generated.returncode == 1 and not Path(highland_command[6]).exists()
+        print("PASS: separate roofs, client windows, physical stair items, mountain layers, invalid travel rejection and byte-identical replay")
         # Exact profiles vary only objects; terrain/city planning keeps its master seed.
         object_recipe = json.loads(Path(ridged_command[2]).read_text(encoding="utf-8"))
         object_recipe["world"].update(objectProfile=str(source / "data/procedural/profiles/1098/objects_rich.json"))

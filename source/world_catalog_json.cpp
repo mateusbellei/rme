@@ -58,10 +58,15 @@ namespace WorldGen {
 				return false;
 			}
 			blueprint.id = id->second.get_str();
+			const auto roof = entry.find("roof");
+			if (roof != entry.end()) {
+				if (roof->second.type() != json::str_type || roof->second.get_str().empty()) { error = "Template roof must be an exact nonempty ground brush name."; return false; }
+				blueprint.roofBrush = roof->second.get_str();
+			}
 			auto integer = [&](const char* key, int& target) {const auto it=entry.find(key);if(it==entry.end()){return true;
 }if(it->second.type()!=json::int_type||it->second.get_int64()<0||it->second.get_int64()>1000){return false;
 }target=int(it->second.get_int64());return true; };
-			if (!integer("weight", blueprint.weight) || !integer("maxLevels", blueprint.maxLevels) || !integer("maxPerSettlement", blueprint.maxPerSettlement) || !integer("minPerSettlement", blueprint.minPerSettlement) || !integer("minimumPriority", blueprint.minimumPriority)) {
+			if (!integer("weight", blueprint.weight) || !integer("maxLevels", blueprint.maxLevels) || !integer("maxPerSettlement", blueprint.maxPerSettlement) || !integer("minPerSettlement", blueprint.minPerSettlement) || !integer("minimumPriority", blueprint.minimumPriority) || !integer("windowChance", blueprint.windowChance)) {
 				error = "Invalid construction template weight, levels or per-settlement limits.";
 				return false;
 			}
@@ -206,6 +211,11 @@ namespace WorldGen {
 						}
 					}
 					const auto required = fields.find("required");
+					const auto radius = fields.find("placementRadius");
+					if (radius != fields.end()) {
+						if (radius->second.type()!=json::int_type || radius->second.get_int64()<0 || radius->second.get_int64()>3) { error="Furniture placementRadius must be an integer in 0..3."; return false; }
+						prop.placementRadius=int(radius->second.get_int64());
+					}
 					if (required != fields.end()) {
 						if (required->second.type() != json::bool_type) {
 							error = "Furniture required must be a boolean.";

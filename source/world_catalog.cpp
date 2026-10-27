@@ -140,11 +140,11 @@ namespace WorldGen {
 			error = "Blueprint id, weight or maximum floor count is invalid.";
 			return false;
 		}
-		if (b.minimumPriority < 0 || b.minimumPriority > 1000 || b.maxPerSettlement < 0 || b.maxPerSettlement > 64 || b.minPerSettlement < 0 || b.minPerSettlement > 64 || (b.maxPerSettlement && b.minPerSettlement > b.maxPerSettlement) || b.role.size() > 32 || b.role.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos) {
+		if (b.windowChance < 0 || b.windowChance > 100 || b.minimumPriority < 0 || b.minimumPriority > 1000 || b.maxPerSettlement < 0 || b.maxPerSettlement > 64 || b.minPerSettlement < 0 || b.minPerSettlement > 64 || (b.maxPerSettlement && b.minPerSettlement > b.maxPerSettlement) || b.role.size() > 32 || b.role.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos) {
 			error = "Blueprint role or per-settlement limit is invalid.";
 			return false;
 		}
-		for (const auto& name : { b.floorBrush, b.wallBrush }) {
+		for (const auto& name : { b.floorBrush, b.wallBrush, b.roofBrush }) {
 			if (name.size() > 128 || name.find('\0') != std::string::npos) {
 				error = "Blueprint material brush names must contain at most 128 bytes without NUL.";
 				return false;
@@ -186,7 +186,7 @@ namespace WorldGen {
 				}
 			}
 		}
-		if (!b.prefabPath.empty() && (b.allowRotation || b.prefabPath.size() > 32768 || b.prefabPath.find('\0') != std::string::npos || b.prefabX < 0 || b.prefabY < 0 || b.prefabZ < b.maxLevels - 1 || b.prefabZ > 15 || b.prefabX > 65535 - int(b.rows.front().size()) || b.prefabY > 65535 - int(b.rows.size()) || !b.objects.empty() || !b.floorBrush.empty() || !b.wallBrush.empty() || !b.floorMaterials.empty())) {
+		if (!b.prefabPath.empty() && (b.windowChance || b.allowRotation || b.prefabPath.size() > 32768 || b.prefabPath.find('\0') != std::string::npos || b.prefabX < 0 || b.prefabY < 0 || b.prefabZ < b.maxLevels - 1 || b.prefabZ > 15 || b.prefabX > 65535 - int(b.rows.front().size()) || b.prefabY > 65535 - int(b.rows.size()) || !b.objects.empty() || !b.floorBrush.empty() || !b.wallBrush.empty() || !b.roofBrush.empty() || !b.floorMaterials.empty())) {
 			error = "OTBM prefabs require fixed rotation, a bounded origin and no generated furniture/material overrides.";
 			return false;
 		}
@@ -202,7 +202,7 @@ namespace WorldGen {
 		}
 		std::set<std::tuple<int, int, int>> occupied;
 		for (const auto& object : b.objects) {
-			if (object.floor < 0 || object.floor >= b.maxLevels || object.x < 0 || object.y < 0 || object.x >= int(b.rows.front().size()) || object.y >= int(b.rows.size()) || (object.brushes.size() != 1 && object.brushes.size() != 4)) {
+			if (object.placementRadius < 0 || object.placementRadius > 3 || object.floor < 0 || object.floor >= b.maxLevels || object.x < 0 || object.y < 0 || object.x >= int(b.rows.front().size()) || object.y >= int(b.rows.size()) || (object.brushes.size() != 1 && object.brushes.size() != 4)) {
 				error = "Blueprint furniture coordinates, floor or orientation brushes are invalid.";
 				return false;
 			}

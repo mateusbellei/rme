@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "compiler": "world_scenario/v1",
+  "seed": 20261027,
+  "size": 256,
+  "profileSHA256": "035d9d032b179d8c7b42b542d0eb18aeceb92b8ec7df04a737105c6a19ccded4",
+  "hashNormalization": "UTF-8/LF JSON; binary PNG bytes",
+  "settlements": [
+    {
+      "x": 184,
+      "y": 179
+    }
+  ],
+  "regions": [],
+  "assets": {
+    "legend": "06760d6fbbd643e7d9a39f7b0a6bd5f1100931b580a89e9cabc62edb3f827449",
+    "catalog": "219bfbeeee3d4211c14fd8a8de8bcbe8b43ab22ea346bee6a96552952bb6eb81",
+    "objects": "ffdd8699f6fd5b2870b9e0e486e0449c798f53a448eadd6e326d0654ec312e80"
+  },
+  "files": {
+    "height.png": "00ef8f823298c6b75837b28561390915451730f7ce02a9abe08f8415765aafae",
+    "biomes.png": "799ef5e34a66c1e78dcc9cdd46e50a40b0989a8d23e02bda88a60feeade06dad",
+    "land.png": "31fe3c1c62f75a7ed7f01e40ca9e73756f39cefc62be3b4c8296ea7fb7f41aa3",
+    "recipe.json": "f2b8d39a870e38f9e6f141df25a59fcc7bc78becccc81d7e4ab479f7a0497016"
+  }
+}

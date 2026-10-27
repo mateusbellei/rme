@@ -495,6 +495,10 @@ namespace WorldBatch {
 		report["furniture"] = json::mValue(uint64_t(prepared.application.furniture));
 		report["skippedDoodads"] = json::mValue(uint64_t(prepared.application.skippedDoodads));
 		report["skippedFurniture"] = json::mValue(uint64_t(prepared.application.skippedFurniture));
+		report["roofTiles"] = json::mValue(uint64_t(prepared.application.roofTiles));
+		report["windows"] = json::mValue(uint64_t(prepared.application.windows));
+		report["stairEndpoints"] = json::mValue(uint64_t(prepared.application.stairEndpoints));
+		report["relocatedFurniture"] = json::mValue(uint64_t(prepared.application.relocatedFurniture));
 		client["otbFormat"] = int(g_items.MajorVersion);
 		client["clientVersion"] = int(g_items.MinorVersion);
 		client["build"] = int(g_items.BuildNumber);

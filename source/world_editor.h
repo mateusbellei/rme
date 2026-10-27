@@ -16,6 +16,7 @@ namespace WorldEditor {
 		size_t prefabTiles = 0, prefabBuildings = 0;
 		size_t roofTiles = 0, windows = 0, stairEndpoints = 0;
 		size_t relocatedFurniture = 0;
+		std::map<std::string,size_t> objectBrushUsage, objectPatchUsage, objectBrushRejected;
 		std::vector<wxString> warnings;
 	};
 	enum class PreviewLayer { Terrain,

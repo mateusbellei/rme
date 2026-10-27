@@ -1,0 +1,54 @@
+{
+  "version": 4,
+  "source": "world",
+  "pathBase": "recipe",
+  "seed": 20261027,
+  "region": {
+    "originX": 0,
+    "originY": 0,
+    "width": 256,
+    "height": 256,
+    "z": 7
+  },
+  "legend": "../world_legend.json",
+  "world": {
+    "shape": "continent",
+    "seaLevel": 4200,
+    "rivers": 0,
+    "settlements": 1,
+    "buildings": 4,
+    "buildingLevels": 3,
+    "caveDepth": 0,
+    "layout": "blocks",
+    "roadWidth": 3,
+    "protectExisting": true,
+    "wallBrush": "stone",
+    "caveSeed": 2606840857,
+    "objectSeed": 3647866,
+    "mountainLevels": 3,
+    "streetVariation": 35,
+    "physicalStairs": true,
+    "highlandBrush": "mountain top ground",
+    "settlementAnchors": [
+      {
+        "x": 184,
+        "y": 179
+      }
+    ],
+    "heightmap": "../scenarios/highland_village/height.png",
+    "biomeHints": "../scenarios/highland_village/biomes.png",
+    "landMask": "../scenarios/highland_village/land.png",
+    "catalog": "../profiles/1098/roofed_buildings.json",
+    "objectProfile": "../profiles/1098/objects_ecology.json"
+  },
+  "useSelection": false,
+  "pipeline": {
+    "borderize": true,
+    "randomize": true,
+    "walls": true
+  },
+  "doodads": {
+    "enabled": true,
+    "density": 8
+  }
+}

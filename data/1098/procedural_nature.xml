@@ -1,0 +1,8 @@
+<materials>
+  <!-- The stock bamboo brush also contains z=-1 composites. This binding is
+       deliberately single-floor; it reuses existing 10.98 client graphics. -->
+  <brush name="world bamboo clump" type="doodad" server_lookid="4025" on_blocking="true" thickness="100/100">
+    <item id="4025" chance="10"/>
+    <item id="4026" chance="10"/>
+  </brush>
+</materials>

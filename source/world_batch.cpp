@@ -490,6 +490,12 @@ namespace WorldBatch {
 		report["planFingerprint"] = std::to_string(prepared.fingerprint);
 		report["tiles"] = json::mValue(uint64_t(prepared.application.changedTiles));
 		report["doodads"] = json::mValue(uint64_t(prepared.application.doodads));
+		json::mObject brushUsage,patchUsage,rejected;
+		for(const auto& [name,count]:prepared.application.objectBrushUsage)brushUsage[name]=json::mValue(uint64_t(count));
+		for(const auto& [name,count]:prepared.application.objectPatchUsage)patchUsage[name]=json::mValue(uint64_t(count));
+		report["objectBrushUsage"]=brushUsage;report["objectPatchUsage"]=patchUsage;
+		for(const auto& [name,count]:prepared.application.objectBrushRejected)rejected[name]=json::mValue(uint64_t(count));
+		report["objectBrushRejected"]=rejected;
 		report["prefabTiles"] = json::mValue(uint64_t(prepared.application.prefabTiles));
 		report["prefabBuildings"] = json::mValue(uint64_t(prepared.application.prefabBuildings));
 		report["furniture"] = json::mValue(uint64_t(prepared.application.furniture));

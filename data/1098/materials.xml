@@ -21,4 +21,5 @@
 	<include file="doodads.xml"/>
 	<include file="procedural_furniture.xml"/>
 	<include file="tilesets.xml"/>
+	<include file="procedural_nature.xml"/>
 </materials>

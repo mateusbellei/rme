@@ -37,7 +37,9 @@ namespace WorldGen {
 		Reserved = 1,
 		Wall = 2,
 		Entrance = 4,
-		Connection = 8
+		Connection = 8,
+		Roof = 16,
+		Highland = 32
 	};
 
 	struct Point {
@@ -80,6 +82,7 @@ namespace WorldGen {
 		Point upper, lower;
 		int upperOffsetZ = 0, lowerOffsetZ = 1;
 		Point upperArrival, lowerArrival;
+		int stairDirection = -1; // -1 teleport; 0 north, 1 east, 2 south, 3 west.
 	};
 
 	enum class LandShape { Continent,
@@ -108,6 +111,9 @@ namespace WorldGen {
 		bool diverseSettlements = false;
 		int buildingsPerSettlement = 8;
 		int buildingLevels = 1;
+		int mountainLevels = 0;
+		int streetVariation = 0;
+		bool physicalStairs = false;
 		int caveDepth = 0;
 		int caveEntrances = 1;
 		int caveFill = 45;
@@ -151,6 +157,7 @@ namespace WorldGen {
 
 	bool IsWater(Terrain terrain);
 	bool IsWalkable(const Cell& cell);
+	int HighestOffset(const Plan& plan);
 	const char* TerrainName(Terrain terrain);
 	uint32_t TerrainColor(Terrain terrain);
 	bool ValidateSettings(const Settings& settings, std::string& error);

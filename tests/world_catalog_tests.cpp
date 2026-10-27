@@ -13,6 +13,10 @@ int main() {
 	try {
 		std::string error;
 		const auto& catalog = WorldGen::DefaultBlueprints();
+		auto roofed=catalog.front(); roofed.roofBrush="roof"; roofed.windowChance=40;
+		Check(WorldGen::ValidateBlueprint(roofed,error),"Roof and facade bindings must validate");
+		Check(WorldGen::RotateBlueprint(roofed,3).roofBrush=="roof" && WorldGen::RotateBlueprint(roofed,3).windowChance==40,"Rotation must preserve roof/facade bindings");
+		roofed.windowChance=101; Check(!WorldGen::ValidateBlueprint(roofed,error),"Facade density must be bounded");
 		auto regional = catalog.front();
 		regional.settlements = {1, 3}; regional.biomes = {"grass"};
 		Check(WorldGen::ValidateBlueprint(regional, error), "Regional ordinals must validate");
@@ -81,6 +85,9 @@ int main() {
 			Check(back.objects[0].x == 3 && back.objects[0].y == 3 && back.objects[0].brushes == furnished.objects[0].brushes, "Furniture position and all orientation names must round-trip");
 		}
 		auto invalidFurniture = furnished;
+		invalidFurniture.objects[0].placementRadius=4;
+		Check(!WorldGen::ValidateBlueprint(invalidFurniture,error),"Furniture fitting radius must be bounded");
+		invalidFurniture=furnished;
 		invalidFurniture.objects[0].x = 1;
 		invalidFurniture.objects[0].y = 1;
 		Check(!WorldGen::ValidateBlueprint(invalidFurniture, error), "Furniture cannot anchor on a landing");

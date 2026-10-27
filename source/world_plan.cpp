@@ -436,7 +436,8 @@ namespace WorldGen {
 						continue;
 					}
 					const int step = c.terrain == Terrain::River ? 50 : (c.terrain == Terrain::Road || c.terrain == Terrain::Plaza ? 2 : 10);
-					const int candidate = value + step + std::abs(int(c.elevation) - int(cells[current].elevation)) / 100;
+					const int bend = s.streetVariation && step == 10 ? int(Hash(s.seed ^ 0x57aee7u, nx / 6, ny / 6) % uint32_t(1 + s.streetVariation / 5)) : 0;
+					const int candidate = value + step + bend + std::abs(int(c.elevation) - int(cells[current].elevation)) / 100;
 					if (visited[next] != search || candidate < cost[next]) {
 						visited[next] = search;
 						cost[next] = candidate;
@@ -495,15 +496,23 @@ namespace WorldGen {
 				}
 			}
 			const int pitch = largest + s.roadWidth + 4;
+			auto lane = [&](int index, int axis) {
+				int distance = 0;
+				for (int i = 0; i < std::abs(index); ++i) {
+					const int extra = s.streetVariation ? int(Hash(s.seed ^ uint32_t(ordinal * 7919), index < 0 ? -i - 1 : i, axis) % uint32_t(1 + pitch * s.streetVariation / 100)) : 0;
+					distance += pitch + extra;
+				}
+				return index < 0 ? -distance : distance;
+			};
 			int reach = 2;
 			while ((reach * 2) * (reach * 2) < s.buildingsPerSettlement * 3) {
 				++reach;
 			}
 			for (int gy = -reach; gy < reach; ++gy) {
 				for (int gx = -reach; gx < reach; ++gx) {
-					const Point center { town.center.x + gx * pitch + pitch / 2, town.center.y + gy * pitch + pitch / 2 };
-					const int streetX = town.center.x + (gx >= 0 ? gx : gx + 1) * pitch;
-					const int streetY = town.center.y + (gy >= 0 ? gy : gy + 1) * pitch;
+					const Point center { town.center.x + lane(gx, 0) + (lane(gx + 1, 0) - lane(gx, 0)) / 2, town.center.y + lane(gy, 1) + (lane(gy + 1, 1) - lane(gy, 1)) / 2 };
+					const int streetX = town.center.x + lane(gx >= 0 ? gx : gx + 1, 0);
+					const int streetY = town.center.y + lane(gy >= 0 ? gy : gy + 1, 1);
 					const bool vertical = std::abs(center.x - town.center.x) >= std::abs(center.y - town.center.y);
 					lots.push_back({ center, vertical ? Point { streetX, center.y } : Point { center.x, streetY }, vertical ? Point { streetX, town.center.y } : Point { town.center.x, streetY }, uint32_t((gy + reach) * reach * 2 + gx + reach + 1000) });
 				}
@@ -874,21 +883,111 @@ namespace WorldGen {
 			layer.cells[plan.Index(center)].flags |= Connection;
 		}
 
+		bool BuildHighlands(Plan& plan, std::string& error, Control& control) {
+			const auto& s = plan.settings;
+			const auto& surface = plan.FindLayer(0)->cells;
+			std::vector<uint8_t> excluded(surface.size());
+			std::vector<int> approachParent, touched;
+			for (const auto& town : plan.settlements) {
+				int left=town.center.x-5, right=town.center.x+5, top=town.center.y-5, bottom=town.center.y+5;
+				for (int index : town.buildings) { const auto& b=plan.buildings[index]; left=std::min(left,b.origin.x-8); right=std::max(right,b.origin.x+b.width+8); top=std::min(top,b.origin.y-8); bottom=std::max(bottom,b.origin.y+b.height+8); }
+				const int cx=(left+right)/2,cy=(top+bottom)/2,rx=std::max(8,(right-left)*3/4+1),ry=std::max(8,(bottom-top)*3/4+1);
+				for (int y=std::max(0,cy-ry); y<=std::min(s.height-1,cy+ry); ++y) for (int x=std::max(0,cx-rx); x<=std::min(s.width-1,cx+rx); ++x) {
+					const int64_t dx=x-cx,dy=y-cy;
+					if(dx*dx*ry*ry+dy*dy*rx*rx<=int64_t(rx)*rx*ry*ry) excluded[size_t(y)*s.width+x]=1;
+				}
+			}
+			for (int y = 0; y < s.height; ++y) for (int x = 0; x < s.width; ++x) {
+				if (!(surface[size_t(y) * s.width + x].flags & Reserved)) continue;
+				for (int dy = -3; dy <= 3; ++dy) for (int dx = -3; dx <= 3; ++dx) if (Inside(x + dx, y + dy, s.width, s.height)) excluded[size_t(y + dy) * s.width + x + dx] = 1;
+			}
+			for (int level = 1; level <= s.mountainLevels; ++level) {
+				control.Poll();
+				auto& upper = *plan.FindLayer(-level);
+				auto& lower = *plan.FindLayer(1 - level);
+				std::vector<Cell> mask(surface.size());
+				for (int y = 2; y < s.height - 2; ++y) for (int x = 2; x < s.width - 2; ++x) {
+					const auto i = size_t(y) * s.width + x;
+					if (!excluded[i] && !IsWater(surface[i].terrain) && surface[i].elevation >= 7600 + (level - 1) * 600 && upper.cells[i].terrain == Terrain::Void) mask[i].terrain = Terrain::Grass;
+				}
+				int regions = 0;
+				const auto labels = Components(mask, s.width, s.height, regions);
+				std::vector<int> sizes(size_t(regions), 0);
+				for (int label : labels) if (label >= 0) ++sizes[label];
+				for (int y = 2; y < s.height - 2; ++y) for (int x = 2; x < s.width - 2; ++x) {
+					const auto i = size_t(y) * s.width + x;
+					if (labels[i] < 0 || sizes[labels[i]] < 64) continue;
+					bool edge = false;
+					for (Point d : kDirections) edge |= labels[size_t(y + d.y) * s.width + x + d.x] != labels[i];
+					upper.cells[i] = surface[i];
+					upper.cells[i].terrain = edge ? Terrain::Mountain : (surface[i].terrain==Terrain::Snow || (level>=3 && surface[i].temperature<3000) ? Terrain::Snow : Terrain::Grass);
+					upper.cells[i].flags = Highland;
+				}
+				int components = 0;
+				const auto walkable = Components(upper.cells, s.width, s.height, components);
+				std::vector<bool> linked(size_t(components), false);
+				// Only new natural components are handled here; buildings have their own links.
+				for (size_t i = 0; i < walkable.size(); ++i) if (walkable[i] >= 0 && !(upper.cells[i].flags & Highland)) linked[walkable[i]] = true;
+				for (int y = 3; y < s.height - 3; ++y) for (int x = 3; x < s.width - 3; ++x) {
+					const Point p {x, y}; const auto i = plan.Index(p);
+					if (walkable[i] < 0 || linked[walkable[i]] || !(upper.cells[i].flags & Highland)) continue;
+					bool clear = true;
+					for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+						const auto n = size_t(y + dy) * s.width + x + dx;
+						clear &= IsWalkable(upper.cells[n]) && !(upper.cells[n].flags & Connection) && (level == 1 || IsWalkable(lower.cells[n])) && !(lower.cells[n].flags & Connection);
+					}
+					if (!clear) continue;
+					if (level == 1 && !IsWalkable(lower.cells[i])) {
+						// Find an actual surface approach before opening a mountain landing.
+						if (approachParent.empty()) approachParent.assign(surface.size(),-2);
+						for(int at:touched) approachParent[at]=-2;
+						touched.clear(); touched.push_back(int(i));
+						auto& parent=approachParent; std::deque<int> queue;
+						queue.push_back(int(i)); parent[i] = -1; int target = -1;
+						while (!queue.empty()) {
+							const int at = queue.front(); queue.pop_front();
+							if ((at != int(i)) && IsWalkable(lower.cells[at])) { target = at; break; }
+							for (Point d : kDirections) {
+								const int nx = at % s.width + d.x, ny = at / s.width + d.y;
+								if (!Interior({nx,ny}, s.width,s.height)) continue;
+								const int next = ny * s.width + nx;
+								if (parent[next] == -2 && !IsWater(lower.cells[next].terrain) && !(lower.cells[next].flags & (Wall | Connection | Roof))) { parent[next] = at; queue.push_back(next); touched.push_back(next); }
+							}
+						}
+						if (target < 0) continue;
+						for (int at = target; at >= 0; at = parent[at]) if (lower.cells[at].terrain == Terrain::Mountain) { lower.cells[at].terrain = Terrain::Grass; lower.cells[at].flags |= Reserved; }
+						ClearLanding(plan, lower, p, Terrain::Grass);
+					}
+					lower.cells[i].flags |= Reserved | Connection;
+					upper.cells[i].flags |= Reserved | Connection;
+					plan.links.push_back({p,p,-level,1-level});
+					linked[walkable[i]] = true;
+				}
+				// Thin or unsupported slivers are omitted rather than exported without access.
+				std::vector<bool> supported(size_t(regions),false);
+				for(size_t i=0;i<walkable.size();++i) if(walkable[i]>=0 && linked[walkable[i]] && labels[i]>=0) supported[labels[i]]=true;
+				for (size_t i = 0; i < walkable.size(); ++i) if (walkable[i] >= 0 && !linked[walkable[i]] && (upper.cells[i].flags & Highland)) upper.cells[i] = Cell{};
+				for(size_t i=0;i<labels.size();++i) if(labels[i]>=0 && !supported[labels[i]] && (upper.cells[i].flags & Highland)) upper.cells[i]=Cell{};
+			}
+			return true;
+		}
+
 		bool BuildVertical(Plan& plan, std::string& error, Control& control) {
 			const auto& s = plan.settings;
 			// Upper floors occupy only building footprints; the remaining layer is void.
-			for (int level = 1; level < s.buildingLevels; ++level) {
+			for (int level = 1; level <= -HighestOffset(plan); ++level) {
 				control.Poll();
 				Layer upper;
 				upper.offsetZ = -level;
 				upper.cells.resize(size_t(s.width) * s.height);
 
 				for (const Building& b : plan.buildings) {
-					if (level >= b.levels) {
+					const bool roof = level == b.levels && !plan.catalog[b.blueprint].roofBrush.empty();
+					if (level >= b.levels && !roof) {
 						continue;
 					}
 					const auto blueprint = RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
-					const auto& rows = BlueprintRowsForFloor(blueprint, level);
+					const auto& rows = BlueprintRowsForFloor(blueprint, roof ? level - 1 : level);
 					for (int y = 0; y < b.height; ++y) {
 						for (int x = 0; x < b.width; ++x) {
 							char symbol = rows[y][x];
@@ -903,12 +1002,13 @@ namespace WorldGen {
 							}
 							Cell& c = upper.cells[size_t(b.origin.y + y) * s.width + b.origin.x + x];
 							c.terrain = Terrain::BuildingFloor;
-							c.flags = uint8_t(Reserved | (symbol == '#' ? Wall : 0));
+							c.flags = roof ? uint8_t(Reserved | Roof) : uint8_t(Reserved | (symbol == '#' ? Wall : 0));
 						}
 					}
 				}
 				plan.layers.push_back(std::move(upper));
 			}
+			if (s.mountainLevels && !BuildHighlands(plan, error, control)) return false;
 			for (const Building& b : plan.buildings) {
 				for (int level = 1; level < b.levels; ++level) {
 					const auto blueprint = RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
@@ -1021,6 +1121,39 @@ namespace WorldGen {
 					plan.warnings.push_back("Fewer separated cave entrance sites fit than requested.");
 				}
 			}
+			if (s.physicalStairs) {
+				for (const auto& link : plan.links) {
+					plan.FindLayer(link.upperOffsetZ)->cells[plan.Index(link.upper)].flags &= ~Connection;
+					plan.FindLayer(link.lowerOffsetZ)->cells[plan.Index(link.lower)].flags &= ~Connection;
+				}
+				for (auto& link : plan.links) {
+					auto& upper = *plan.FindLayer(link.upperOffsetZ); auto& lower = *plan.FindLayer(link.lowerOffsetZ);
+					const Point anchor = link.upper; bool found = false;
+					for (int radius = 0; radius <= 3 && !found; ++radius) for (int dy = -radius; dy <= radius && !found; ++dy) for (int dx = -radius; dx <= radius && !found; ++dx) {
+						if (std::max(std::abs(dx), std::abs(dy)) != radius) continue;
+						const Point p {anchor.x + dx, anchor.y + dy};
+						if (!plan.Contains(p)) continue;
+						auto safe = [&](const Layer& layer, Point q) { return plan.Contains(q) && IsWalkable(layer.cells[plan.Index(q)]) && !(layer.cells[plan.Index(q)].flags & (Connection | Entrance)); };
+						if (!safe(upper,p) || !safe(lower,p)) continue;
+						for (int direction = 0; direction < 4; ++direction) {
+							const auto d = kDirections[direction]; const Point up {p.x+d.x,p.y+d.y}, down {p.x-d.x,p.y-d.y};
+							if (!safe(upper,up) || !safe(lower,down)) continue;
+							// Do not place a later stair on an earlier stair's reserved arrival.
+							bool conflict = false;
+							for (const auto& other : plan.links) if (other.stairDirection >= 0) {
+								for (const auto [z,q] : {std::pair{other.upperOffsetZ,other.upperArrival},std::pair{other.lowerOffsetZ,other.lowerArrival}}) conflict |= (z==link.upperOffsetZ || z==link.lowerOffsetZ) && q==p;
+							}
+							if (conflict) continue;
+							link.upper = link.lower = p; link.upperArrival=up; link.lowerArrival=down; link.stairDirection=direction;
+							upper.cells[plan.Index(p)].flags |= Connection | Reserved; lower.cells[plan.Index(p)].flags |= Connection | Reserved;
+							upper.cells[plan.Index(up)].flags |= Reserved; lower.cells[plan.Index(down)].flags |= Reserved;
+							found=true; break;
+						}
+					}
+					if (!found) { error="Physical stairs require clear opposite arrivals on both floors; revise the landing gallery."; return false; }
+				}
+				return true;
+			}
 			for (auto& link : plan.links) {
 				auto arrival = [&](int floor, Point portal, Point& target) {
 					Layer* layer = plan.FindLayer(floor);
@@ -1074,7 +1207,12 @@ namespace WorldGen {
 		return t == Terrain::Ocean || t == Terrain::Lake || t == Terrain::River;
 	}
 	bool IsWalkable(const Cell& c) {
-		return c.terrain != Terrain::Void && !IsWater(c.terrain) && c.terrain != Terrain::Mountain && c.terrain != Terrain::CaveWall && !(c.flags & Wall);
+		return c.terrain != Terrain::Void && !IsWater(c.terrain) && c.terrain != Terrain::Mountain && c.terrain != Terrain::CaveWall && !(c.flags & (Wall | Roof));
+	}
+	int HighestOffset(const Plan& plan) {
+		int levels = std::max(plan.settings.buildingLevels - 1, plan.settings.mountainLevels);
+		for (const auto& b : plan.buildings) if (b.levels >= 1 && b.levels <= 4 && b.blueprint >= 0 && size_t(b.blueprint) < plan.catalog.size() && !plan.catalog[b.blueprint].roofBrush.empty()) levels = std::max(levels, b.levels);
+		return -levels;
 	}
 	const char* TerrainName(Terrain t) {
 		static const char* names[] = { "ocean", "lake", "river", "beach", "grass", "forest", "desert", "snow", "mountain", "road", "bridge", "plaza", "building", "cave_wall", "cave_floor", "void" };
@@ -1093,7 +1231,7 @@ namespace WorldGen {
 			error = "World dimensions must be 32..4096 with at most 4,194,304 surface cells.";
 			return false;
 		}
-		if ((s.relief != ReliefStyle::Smooth && s.relief != ReliefStyle::Ridges) || s.biomeDetail < 0 || s.biomeDetail > 100 || (s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveEntrances < 1 || s.caveEntrances > 16 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4) {
+		if ((s.relief != ReliefStyle::Smooth && s.relief != ReliefStyle::Ridges) || s.biomeDetail < 0 || s.biomeDetail > 100 || (s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveEntrances < 1 || s.caveEntrances > 16 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4 || s.mountainLevels < 0 || s.mountainLevels > 4 || s.streetVariation < 0 || s.streetVariation > 60) {
 			error = "World settings are outside supported ranges.";
 			return false;
 		}
@@ -1110,7 +1248,7 @@ namespace WorldGen {
 				error = "Settlement anchors violate the minimum settlement spacing."; return false;
 			}
 		}
-		if (int64_t(s.width) * s.height * (s.buildingLevels + s.caveDepth) > int64_t(kMaxCells) * 2) {
+		if (int64_t(s.width) * s.height * (std::max(s.buildingLevels, s.mountainLevels + 1) + s.caveDepth) > int64_t(kMaxCells) * 2) {
 			error = "World layers exceed the 8,388,608-cell planning budget. Reduce dimensions or floors.";
 			return false;
 		}
@@ -1169,7 +1307,9 @@ namespace WorldGen {
 				return false;
 			}
 			control.Stage("Building upper floors and connected caves", 70, 99);
+			if (int64_t(settings.width) * settings.height * (1 - HighestOffset(plan) + settings.caveDepth) > int64_t(kMaxCells) * 2) { error = "World roofs/highlands exceed the layer allocation budget."; plan = Plan(); return false; }
 			if (!BuildVertical(plan, error, control)) {
+				plan = Plan();
 				return false;
 			}
 			control.Stage("World planned", 100, 100);
@@ -1254,7 +1394,7 @@ namespace WorldGen {
 		};
 		std::vector<Topology> topology;
 		int totalComponents = 0;
-		size_t flaggedConnections = 0;
+		size_t flaggedConnections = 0, flaggedRoofs = 0;
 		for (const auto& layer : plan.layers) {
 			if (layer.cells.size() != count) {
 				fail("Layer dimensions do not match world dimensions.");
@@ -1264,7 +1404,7 @@ namespace WorldGen {
 				fail("Duplicate floor offset.");
 			}
 			offsets.push_back(layer.offsetZ);
-			if (layer.offsetZ < 1 - plan.settings.buildingLevels || layer.offsetZ > plan.settings.caveDepth) {
+			if (layer.offsetZ < HighestOffset(plan) || layer.offsetZ > plan.settings.caveDepth) {
 				fail("Floor offset is outside the requested world layers.");
 				continue;
 			}
@@ -1272,7 +1412,9 @@ namespace WorldGen {
 			for (const auto& cell : layer.cells) {
 				report.plannedTiles += cell.terrain != Terrain::Void;
 				flaggedConnections += (cell.flags & Connection) != 0;
-				invalidCell = invalidCell || static_cast<unsigned>(cell.terrain) > static_cast<unsigned>(Terrain::Void) || cell.elevation > 10000 || cell.moisture > 10000 || cell.temperature > 10000 || (cell.flags & ~(Reserved | Wall | Entrance | Connection)) || (layer.offsetZ >= 0 && cell.terrain == Terrain::Void);
+				flaggedRoofs += (cell.flags & Roof) != 0;
+				if (((cell.flags & Roof) && (layer.offsetZ >= 0 || cell.terrain != Terrain::BuildingFloor || (cell.flags & (Wall | Entrance | Connection | Highland)))) || ((cell.flags & Highland) && layer.offsetZ >= 0)) invalidCell = true;
+				invalidCell = invalidCell || static_cast<unsigned>(cell.terrain) > static_cast<unsigned>(Terrain::Void) || cell.elevation > 10000 || cell.moisture > 10000 || cell.temperature > 10000 || (cell.flags & ~(Reserved | Wall | Entrance | Connection | Roof | Highland)) || (layer.offsetZ >= 0 && cell.terrain == Terrain::Void);
 			}
 			if (invalidCell) {
 				fail("Layer has an invalid terrain, flag or normalized value.");
@@ -1302,7 +1444,7 @@ namespace WorldGen {
 				}
 			}
 		}
-		for (int z = 1 - plan.settings.buildingLevels; z <= plan.settings.caveDepth; ++z) {
+		for (int z = HighestOffset(plan); z <= plan.settings.caveDepth; ++z) {
 			if (!plan.FindLayer(z)) {
 				fail("Requested world floor is missing.");
 			}
@@ -1348,6 +1490,11 @@ namespace WorldGen {
 		std::set<std::tuple<int, int, int>> endpoints;
 		for (const auto& link : plan.links) {
 			const auto* upper = plan.FindLayer(link.upperOffsetZ);
+			if (link.stairDirection < -1 || link.stairDirection > 3 || (plan.settings.physicalStairs != (link.stairDirection >= 0))) { fail("Vertical connection mode does not match the world settings."); continue; }
+			if (link.stairDirection >= 0) {
+				const auto d = kDirections[link.stairDirection];
+				if (!(link.upper == link.lower) || !(link.upperArrival == Point{link.lower.x+d.x,link.lower.y+d.y}) || !(link.lowerArrival == Point{link.upper.x-d.x,link.upper.y-d.y})) fail("Physical stair arrivals disagree with the directional floor-change rule.");
+			}
 			const auto* lower = plan.FindLayer(link.lowerOffsetZ);
 			if (!plan.Contains(link.upper) || !plan.Contains(link.lower) || !upper || !lower || upper->cells.size() != count || lower->cells.size() != count) {
 				fail("Vertical link endpoint is outside the plan.");
@@ -1438,6 +1585,19 @@ namespace WorldGen {
 				fail("Building entrance is disconnected from its settlement plaza.");
 			}
 		}
+		size_t expectedRoofs = 0;
+		for (const auto& b : plan.buildings) {
+			if (b.blueprint < 0 || size_t(b.blueprint) >= plan.catalog.size() || b.levels < 1 || b.levels > 4 || plan.catalog[b.blueprint].roofBrush.empty()) continue;
+			const auto blueprint=RotateBlueprint(plan.catalog[b.blueprint],b.rotation);
+			const auto& rows=BlueprintRowsForFloor(blueprint,b.levels-1);
+			const auto* layer=plan.FindLayer(-b.levels);
+			for (int y=0; y<int(rows.size()); ++y) for (int x=0; x<int(rows[y].size()); ++x) {
+				if (rows[y][x]==' ' || rows[y][x]==',') continue;
+				++expectedRoofs; const Point p{b.origin.x+x,b.origin.y+y};
+				if (!layer || !plan.Contains(p) || !(layer->cells[plan.Index(p)].flags & Roof)) fail("Roof footprint differs from its owned top-floor silhouette.");
+			}
+		}
+		if (flaggedRoofs != expectedRoofs) fail("Roof markers must belong to exactly their generated building footprints.");
 		for (size_t t = 0; t < plan.settlements.size(); ++t) {
 			for (size_t i = 0; i < plan.catalog.size(); ++i) {
 				const auto& blueprint = plan.catalog[i];
@@ -1488,6 +1648,9 @@ namespace WorldGen {
 		add(plan.settings.settlementCount);
 		add(plan.settings.buildingsPerSettlement);
 		add(plan.settings.buildingLevels);
+		if (plan.settings.mountainLevels) { string("mountain-levels"); add(plan.settings.mountainLevels); }
+		if (plan.settings.streetVariation) { string("street-variation"); add(plan.settings.streetVariation); }
+		if (plan.settings.physicalStairs) { string("physical-stairs"); }
 		add(plan.settings.caveDepth);
 		add(plan.settings.caveFill);
 		add(plan.settings.roadWidth);
@@ -1508,6 +1671,8 @@ namespace WorldGen {
 					string(material.wallBrush);
 				}
 			}
+			if (!blueprint.roofBrush.empty()) { string("roof"); string(blueprint.roofBrush); }
+			if (blueprint.windowChance) { string("facade-windows"); add(blueprint.windowChance); }
 			if (!blueprint.settlements.empty()) { string("settlement-ordinals"); add(uint32_t(blueprint.settlements.size())); for (int ordinal : blueprint.settlements) add(uint32_t(ordinal)); }
 			if (blueprint.minimumPriority) { string("minimum-priority"); add(uint32_t(blueprint.minimumPriority)); }
 			if (blueprint.minPerSettlement) {
@@ -1547,6 +1712,7 @@ namespace WorldGen {
 				add(object.y);
 				add(object.floor);
 				add(object.required);
+				if (object.placementRadius) { string("furniture-fit-radius"); add(object.placementRadius); }
 				add(uint32_t(object.brushes.size()));
 				for (const auto& name : object.brushes) {
 					string(name);
@@ -1606,6 +1772,7 @@ namespace WorldGen {
 			}
 		}
 		for (const auto& link : plan.links) {
+			if (link.stairDirection >= 0) { string("directional-stair"); add(link.stairDirection); }
 			add(link.upper.x);
 			add(link.upper.y);
 			add(link.lower.x);

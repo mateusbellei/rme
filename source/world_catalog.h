@@ -17,6 +17,7 @@ namespace WorldGen {
 		// One orientation-independent brush or four clockwise orientation brushes.
 		std::vector<std::string> brushes;
 		bool required = false;
+		int placementRadius = 0; // Optional nearest safe anchor, Manhattan distance 0..3.
 	};
 	struct BlueprintMaterial {
 		std::string floorBrush, wallBrush;
@@ -35,6 +36,9 @@ namespace WorldGen {
 		std::vector<BlueprintProp> objects;
 		// Exact client brush bindings; empty values inherit the world legend/settings.
 		std::string floorBrush, wallBrush;
+		// Optional non-accessible roof, one layer above the last occupied floor.
+		std::string roofBrush;
+		int windowChance = 0;
 		std::string role;
 		int maxPerSettlement = 0; // Zero means unlimited.
 		int minPerSettlement = 0; // Required in each generated settlement of an allowed biome.

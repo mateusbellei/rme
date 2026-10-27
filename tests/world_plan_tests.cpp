@@ -1,6 +1,7 @@
 #include "world_plan.h"
 
 #include <iostream>
+#include <algorithm>
 #include <limits>
 #include <set>
 #include <queue>
@@ -658,8 +659,38 @@ static void TestRegionalArchitecture() {
 	Check(Fingerprint(replay) != Fingerprint(plan) && !Validate(replay).valid, "Identity and plan validation must enforce settlement bindings");
 }
 
+static void TestRoofsStairsAndHighlands() {
+	Settings s; s.width=s.height=128; s.riverCount=0; s.settlementCount=1;
+	s.settlementAnchors={{64,64}}; s.buildingsPerSettlement=4; s.buildingLevels=2;
+	s.settlementLayout=SettlementLayout::Blocks;
+	GeographyInput input; input.elevation.assign(128*128,6000); input.biomes.assign(128*128,Terrain::Grass);
+	auto catalog=DefaultBlueprints(); catalog.resize(1); catalog[0].roofBrush="flat roof"; catalog[0].windowChance=40;
+	Plan plan, replay; std::string error;
+	Check(Build(s,plan,error,&catalog,&input) && Validate(plan).valid,"Roofed town must validate without treating the roof as an occupied floor");
+	Check(HighestOffset(plan)==-2 && plan.FindLayer(-2),"Roofs require a separate extra layer above occupied floors");
+	replay=plan; replay.FindLayer(-2)->cells[0]={Terrain::BuildingFloor,uint8_t(Reserved|Roof),0,0,0};
+	Check(!Validate(replay).valid,"Roof tiles outside owned footprints must fail validation");
+	s.physicalStairs=true; s.streetVariation=35;
+	Check(Build(s,plan,error,&catalog,&input) && Validate(plan).valid,"Irregular streets and physical stairs must retain navigation");
+	Check(Build(s,replay,error,&catalog,&input) && Fingerprint(plan)==Fingerprint(replay),"Combined features must replay deterministically");
+	for(const auto& link:plan.links) Check(link.stairDirection>=0 && link.upper==link.lower && !(link.upperArrival==link.lowerArrival),"Physical stairs need opposite safe arrival coordinates");
+	replay.links[0].stairDirection=(replay.links[0].stairDirection+1)%4;
+	Check(!Validate(replay).valid && Fingerprint(plan)!=Fingerprint(replay),"Altered stair directions must fail validation and change identity");
+	s.settlementCount=s.buildingsPerSettlement=0; s.settlementAnchors.clear(); s.buildingLevels=1; s.mountainLevels=3;
+	for(int y=0;y<128;++y)for(int x=0;x<128;++x)input.elevation[y*128+x]=uint16_t(std::max(6000,9600-std::max(std::abs(x-64),std::abs(y-64))*90));
+	Check(Build(s,plan,error,nullptr,&input) && Validate(plan).valid,"Terraced highlands must have valid physical access to the surface");
+	for(int z=-1;z>=-3;--z) {
+		const auto* layer=plan.FindLayer(z);
+		Check(layer && std::count_if(layer->cells.begin(),layer->cells.end(),[](const Cell& c){return (c.flags&Highland)&&IsWalkable(c);})>0,"Every requested mountain level needs actual walkable terrain in a tall peak");
+	}
+	Check(plan.links.size()>=3,"Every separate highland component needs an access link");
+	s.mountainLevels=5; Check(!ValidateSettings(s,error),"Mountain floors are bounded");
+	s.mountainLevels=0; s.streetVariation=61; Check(!ValidateSettings(s,error),"Street variation is bounded");
+}
+
 int main() {
 	try {
+		TestRoofsStairsAndHighlands();
 		TestRegionalArchitecture();
 		TestSettlementAnchors();
 		TestIndependentCavesAndShape();

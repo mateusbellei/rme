@@ -497,13 +497,18 @@ def main():
                 assert constrained["doodads"] == 0 and constrained["objectPatchUsage"] == {}
             else:
                 assert constrained["doodads"] > 0 and set(constrained["objectBrushUsage"]) == {"grass tufts"}
-        # A path margin with zero density suppresses all selected near-path anchors.
-        profile=dict(version=1,transitions=dict(pathWidth=32,pathDensity=0),biomes={"forest":dict(density=150,brushes=[],baseWeight=0,patches=[dict(id="verge",maxPathDistance=0,brushes=[dict(name="grass tufts")])])})
-        constraint_profile.write_text(json.dumps(profile),encoding="utf-8");object_command[6]=str(Path(temporary)/"zero-verge")
-        generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
-        assert generated.returncode==0,generated.stdout+generated.stderr
-        suppressed=json.loads((Path(object_command[6])/"generation.json").read_text())
-        assert suppressed["doodads"]==0 and suppressed["planFingerprint"]==ridged_report["planFingerprint"]
+        # Environmental filters target a real path margin; transition thinning must reduce actual anchors.
+        margin_counts=[]
+        for attenuate in (False,True):
+            profile=dict(version=1,biomes={"forest":dict(density=200,brushes=[],baseWeight=0,patches=[dict(id="verge",maxPathDistance=4,brushes=[dict(name="grass tufts")])])})
+            if attenuate:profile["transitions"]=dict(pathWidth=32,pathDensity=0)
+            constraint_profile.write_text(json.dumps(profile),encoding="utf-8");object_command[6]=str(Path(temporary)/f"thin-verge-{attenuate}")
+            generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+            assert generated.returncode==0,generated.stdout+generated.stderr
+            margin=json.loads((Path(object_command[6])/"generation.json").read_text())
+            assert margin["planFingerprint"]==ridged_report["planFingerprint"]
+            margin_counts.append(margin["doodads"])
+        assert margin_counts[0]>margin_counts[1],margin_counts
         # Malformed patch groups fail atomically, even when another palette is usable.
         for invalid in ({"id":"bad","weight":0}, {"id":"bad","minElevation":9000,"maxElevation":1000},
                         {"id":"bad","maxWaterDistance":33}, {"id":"bad","minWaterDistance":5,"maxWaterDistance":2}, {"id":"bad","minSlope":9000,"maxSlope":20}, {"id":"bad","maxEdgeDistance":33}, {"id":"bad","maxPathDistance":-1}, {"id":"bad","minMoisture":False}, {"id":"base"}):

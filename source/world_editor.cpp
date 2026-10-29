@@ -1151,6 +1151,10 @@ namespace WorldEditor {
 			error = "World seed differs from the displayed plan. Rebuild the preview before applying.";
 			return false;
 		}
+		if (!resolved.world.natureMaskPath.empty() && resolved.world.natureMask.empty()) {
+			error = "Nature mask has not been resolved for this preview. Rebuild before applying.";
+			return false;
+		}
 		if (!resolved.world.natureMask.empty() && (resolved.world.natureMask.size()!=size_t(plan.settings.width)*plan.settings.height || !plan.FindLayer(resolved.world.natureFloor))) {error="Nature mask dimensions or selected floor do not match the plan.";return false;}
 		if (!CheckRegion(editor, resolved, &plan, error)) {
 			return false;

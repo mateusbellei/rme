@@ -840,6 +840,8 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			Check(!WorldEditor::ApplyPlan(editor,local,plan,error) && MapHash(editor.map)==applied,"Missing mask floor fails without changing the map");
 			local.world.natureFloor=0;std::fill(local.world.natureMask.begin(),local.world.natureMask.end(),0);
 			Check(!WorldEditor::ApplyPlan(editor,local,plan,error) && MapHash(editor.map)==applied,"Empty effective mask fails atomically");
+			local.world.natureMask.clear();local.world.natureMaskPath="unresolved-mask.png";
+			Check(!WorldEditor::ApplyPlan(editor,local,plan,error) && MapHash(editor.map)==applied,"An unresolved mask path cannot silently fall back to replacing the complete world");
 		}
 
 		editor.actionQueue->undo();

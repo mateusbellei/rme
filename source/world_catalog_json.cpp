@@ -78,6 +78,21 @@ namespace WorldGen {
 				}
 				blueprint.role = role->second.get_str();
 			}
+			const auto district = entry.find("district");
+			if (district != entry.end()) {
+				if (district->second.type() != json::str_type) { error="Template district must be a string."; return false; }
+				blueprint.district=district->second.get_str();
+			}
+			const auto roofMaterials=entry.find("roofMaterials");
+			if(roofMaterials!=entry.end()) {
+				if(roofMaterials->second.type()!=json::obj_type || roofMaterials->second.get_obj().size()>6){error="roofMaterials needs exact orientation bindings.";return false;}
+				const std::array<std::string,6> keys {"north","east","south","west","horizontal","vertical"};
+				for(const auto& [name,value]:roofMaterials->second.get_obj()) {
+					const auto i=std::find(keys.begin(),keys.end(),name);
+					if(i==keys.end() || value.type()!=json::str_type || value.get_str().empty()){error="Invalid oriented roof material.";return false;}
+					blueprint.roofMaterials[size_t(i-keys.begin())]=value.get_str();
+				}
+			}
 			const auto rotate = entry.find("rotate");
 			if (rotate != entry.end()) {
 				if (rotate->second.type() != json::bool_type) {
@@ -90,7 +105,7 @@ namespace WorldGen {
 }if(it->second.type()!=json::array_type||it->second.get_array().size()>maxEntries){return false;
 }for(const auto& v:it->second.get_array()){if(v.type()!=json::str_type||v.get_str().size()>64){return false;
 }target.push_back(v.get_str());}return true; };
-			if (!strings("rows", blueprint.rows, 32) || !strings("upperRows", blueprint.upperRows, 32) || !strings("biomes", blueprint.biomes, 5)) {
+			if (!strings("rows", blueprint.rows, 32) || !strings("upperRows", blueprint.upperRows, 32) || !strings("roofRows", blueprint.roofRows, 32) || !strings("biomes", blueprint.biomes, 5)) {
 				error = "Template rows, upperRows and biomes must be bounded string arrays.";
 				return false;
 			}

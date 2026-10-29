@@ -23,6 +23,7 @@
 #include <memory>
 #include <set>
 #include <filesystem>
+#include <limits>
 
 namespace WorldEditor {
 	namespace {
@@ -37,7 +38,7 @@ namespace WorldEditor {
 			Material floor;
 			WallBrush* wall = nullptr;
 		};
-		using BuildingMaterials = std::array<BuildingMaterial, 5>;
+		using BuildingMaterials = std::array<BuildingMaterial, 11>;
 
 		bool Update(const WorldGen::ProgressCallback& progress, const char* stage, int percent, wxString& error) {
 			if (progress && !progress(stage, percent)) {
@@ -76,6 +77,13 @@ namespace WorldEditor {
 				default:
 					return 0;
 			}
+		}
+
+		bool SelectedNature(const GenerationSpec& spec,const WorldGen::Plan& plan,int x,int y,int floor) {
+			if(spec.world.natureMask.empty())return true;
+			const auto index=size_t(y)*plan.settings.width+x;
+			const auto& cell=plan.FindLayer(floor)->cells[index];
+			return floor==spec.world.natureFloor && spec.world.natureMask[index] && !(cell.flags & WorldGen::Reserved) && ((cell.flags & WorldGen::Highland) || Habitat(cell.terrain));
 		}
 
 		bool TileWalkable(const Tile* tile) {
@@ -372,6 +380,136 @@ namespace WorldEditor {
 			return true;
 		}
 
+
+		struct ObjectScene {
+			std::string id;
+			std::vector<int> habitats, settlements;
+			int spacing=48, chance=45, radius=6;
+			int minElevation=0,maxElevation=10000,minMoisture=0,maxMoisture=10000;
+			bool rotate=true;
+			std::vector<WorldGen::BlueprintProp> objects;
+		};
+
+		bool ReadScenes(const GenerationSpec& spec,std::vector<ObjectScene>& scenes,wxString& error) {
+			if(spec.world.objectProfilePath.empty())return true;
+			json::mValue root;std::string problem;
+			if(!ProceduralJSON::ReadFile(nstr(spec.world.objectProfilePath),1024*1024,root,problem) || root.type()!=json::obj_type) {error="Invalid scene profile.";return false;}
+			const auto list=root.get_obj().find("scenes");if(list==root.get_obj().end())return true;
+			if(list->second.type()!=json::array_type || list->second.get_array().size()>32) {error="scenes must contain at most 32 bounded compositions.";return false;}
+			std::set<std::string> ids;
+			for(const auto& value:list->second.get_array()) {
+				if(value.type()!=json::obj_type) {error="A scene must be an object.";return false;}
+				const auto& fields=value.get_obj();ObjectScene scene;
+				const auto id=fields.find("id"),habitats=fields.find("habitats"),objects=fields.find("objects");
+				if(id==fields.end() || id->second.type()!=json::str_type) {error="Scene needs an id.";return false;}
+				scene.id=id->second.get_str();
+				if(scene.id.empty() || scene.id.size()>40 || scene.id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-")!=std::string::npos || !ids.insert(scene.id).second) {error="Scene IDs must be unique bounded identifiers.";return false;}
+				auto integer=[&](const json::mObject& f,const char* key,int& target,int low,int high) {
+					const auto i=f.find(key);if(i==f.end())return true;
+					if(i->second.type()!=json::int_type || i->second.get_int64()<low || i->second.get_int64()>high) {error="Invalid scene field: "+wxString::FromUTF8(key);return false;}
+					target=int(i->second.get_int64());return true;
+				};
+				if(!integer(fields,"spacing",scene.spacing,16,128) || !integer(fields,"chance",scene.chance,1,100) || !integer(fields,"radius",scene.radius,2,12) || !integer(fields,"minElevation",scene.minElevation,0,10000) || !integer(fields,"maxElevation",scene.maxElevation,0,10000) || !integer(fields,"minMoisture",scene.minMoisture,0,10000) || !integer(fields,"maxMoisture",scene.maxMoisture,0,10000))return false;
+				if(scene.minElevation>scene.maxElevation || scene.minMoisture>scene.maxMoisture || scene.spacing<scene.radius*2+4) {error="Invalid scene climate range or spacing.";return false;}
+				const auto settlements=fields.find("settlements");
+				if(settlements!=fields.end()) {
+					if(settlements->second.type()!=json::array_type || settlements->second.get_array().empty() || settlements->second.get_array().size()>32){error="Scene settlements must contain 1..32 ordinals.";return false;}
+					for(const auto& ordinal:settlements->second.get_array()) {
+						if(ordinal.type()!=json::int_type || ordinal.get_int64()<1 || ordinal.get_int64()>32 || std::find(scene.settlements.begin(),scene.settlements.end(),int(ordinal.get_int64()))!=scene.settlements.end()){error="Scene settlement ordinals must be unique integers 1..32.";return false;}
+						scene.settlements.push_back(int(ordinal.get_int64()));
+					}
+				}
+				const auto rotate=fields.find("rotate");if(rotate!=fields.end()) {if(rotate->second.type()!=json::bool_type){error="Scene rotate must be boolean.";return false;}scene.rotate=rotate->second.get_bool();}
+				if(habitats==fields.end() || habitats->second.type()!=json::array_type || habitats->second.get_array().empty() || habitats->second.get_array().size()>6) {error="Scene needs 1..6 habitat names.";return false;}
+				for(const auto& h:habitats->second.get_array()) {
+					if(h.type()!=json::str_type){error="Scene habitats must be names.";return false;}
+					int index=0;for(int i=1;i<=6;++i)if(h.get_str()==ObjectHabitats[i])index=i;
+					if(!index || std::find(scene.habitats.begin(),scene.habitats.end(),index)!=scene.habitats.end()) {error="Unknown or duplicate scene habitat.";return false;}
+					scene.habitats.push_back(index);
+				}
+				if(objects==fields.end() || objects->second.type()!=json::array_type || objects->second.get_array().empty() || objects->second.get_array().size()>24) {error="Scene needs 1..24 object anchors.";return false;}
+				std::set<std::pair<int,int>> positions;
+				for(const auto& object:objects->second.get_array()) {
+					if(object.type()!=json::obj_type){error="Scene objects must be objects.";return false;}
+					const auto& f=object.get_obj();WorldGen::BlueprintProp prop;
+					if(f.find("x")==f.end() || f.find("y")==f.end() || !integer(f,"x",prop.x,-12,12) || !integer(f,"y",prop.y,-12,12) || std::abs(prop.x)>scene.radius || std::abs(prop.y)>scene.radius || !positions.insert({prop.x,prop.y}).second) {error="Scene object anchors must be distinct and inside radius.";return false;}
+					const auto names=f.find("brushes");
+					if(names==f.end() || names->second.type()!=json::array_type || (names->second.get_array().size()!=1 && names->second.get_array().size()!=4)) {error="Scene object needs one or four clockwise exact brushes.";return false;}
+					for(const auto& name:names->second.get_array()) {
+						if(name.type()!=json::str_type || name.get_str().empty() || name.get_str().size()>128 || name.get_str().find('\0')!=std::string::npos) {error="Invalid scene brush name.";return false;}
+						const auto* brush=g_brushes.getBrush(name.get_str());if(!brush || !brush->isDoodad()) {error="Missing exact scene doodad brush: "+wxString::FromUTF8(name.get_str());return false;}
+						prop.brushes.push_back(name.get_str());
+					}
+					scene.objects.push_back(std::move(prop));
+				}
+				scenes.push_back(std::move(scene));
+			}
+			return true;
+		}
+
+		bool PlaceScenes(const GenerationSpec& spec,const WorldGen::Plan& plan,const WorldGen::Layer& layer,const std::vector<ObjectScene>& scenes,WorldGen::DecorationGrid& grid,BaseMap& scratch,std::set<Position>& blocking,ApplicationStats& stats,const WorldGen::ProgressCallback& progress,wxString& error) {
+			const auto seed=spec.world.objectSeed.value_or(spec.seed);
+			for(size_t sceneIndex=0;sceneIndex<scenes.size();++sceneIndex) {
+				const auto& scene=scenes[sceneIndex];
+				const std::vector<WorldGen::DecorationCell> clearance {
+					{{-scene.radius,-scene.radius},false},{{scene.radius,-scene.radius},false},
+					{{-scene.radius,scene.radius},false},{{scene.radius,scene.radius},false}
+				};
+				for(int gy=0;gy<grid.height;gy+=scene.spacing) {
+					if(!Update(progress,"Composing wilderness scenes",63,error))return false;
+					for(int gx=0;gx<grid.width;gx+=scene.spacing) {
+						const auto key=CellSeed(seed^uint32_t(sceneIndex*7919),gx,gy,layer.offsetZ,201);
+						if(key%100>=uint32_t(scene.chance))continue;
+						const int x=gx+int(CellSeed(key,0,0,0,202)%scene.spacing),y=gy+int(CellSeed(key,0,0,0,203)%scene.spacing);
+						if(x>=grid.width || y>=grid.height)continue;
+						const size_t index=size_t(y)*grid.width+x;const auto& cell=layer.cells[index];
+						if(std::find(scene.habitats.begin(),scene.habitats.end(),grid.habitat[index])==scene.habitats.end() || cell.elevation<scene.minElevation || cell.elevation>scene.maxElevation || cell.moisture<scene.minMoisture || cell.moisture>scene.maxMoisture)continue;
+						if(!scene.settlements.empty()) {
+							int nearest=0,best=std::numeric_limits<int>::max();
+							for(size_t t=0;t<plan.settlements.size();++t) {
+								const auto center=plan.settlements[t].center;const int distance=std::abs(x-center.x)+std::abs(y-center.y);
+								if(distance<best){nearest=int(t)+1;best=distance;}
+							}
+							if(std::find(scene.settlements.begin(),scene.settlements.end(),nearest)==scene.settlements.end())continue;
+						}
+						if(!WorldGen::CanPlaceDecoration(grid,{x,y},clearance)) {++stats.skippedScenes;continue;}
+						const int turn=scene.rotate?int(CellSeed(key,0,0,0,204)%4):0;
+						std::vector<DoodadSample> samples;std::vector<WorldGen::Point> offsets;std::vector<std::string> names;
+						std::map<std::pair<int,int>,bool> footprint;bool valid=true;
+						for(size_t n=0;n<scene.objects.size();++n) {
+							const auto& object=scene.objects[n];WorldGen::Point offset{object.x,object.y};
+							for(int t=0;t<turn;++t)offset={-offset.y,offset.x};
+							const Position anchor=PositionFor(spec,{x+offset.x,y+offset.y},layer.offsetZ);
+							if(!scratch.getTile(anchor)) {valid=false;break;}
+							const auto& name=object.brushes[object.brushes.size()==4?size_t(turn):0];
+							DoodadSample sample;wxString reason;
+							if(!SampleDoodad(*g_brushes.getBrush(name)->asDoodad(),scratch,anchor,CellSeed(key,int(n),0,0,205),CellSeed(key,int(n),0,0,206),CellSeed(key,int(n),0,0,207),sample,reason)) {++stats.objectBrushRejected[name];valid=false;break;}
+							for(const auto& f:sample.footprint) {
+								const auto point=std::pair{offset.x+f.offset.x,offset.y+f.offset.y};
+								if(std::abs(point.first)>scene.radius || std::abs(point.second)>scene.radius || !footprint.emplace(point,f.blocking).second)valid=false;
+							}
+							if(!valid)break;
+							samples.push_back(std::move(sample));offsets.push_back(offset);names.push_back(name);
+						}
+						std::vector<WorldGen::DecorationCell> combined;
+						for(const auto& [point,blocked]:footprint)combined.push_back({{point.first,point.second},blocked});
+						// Corners impose a clear square around the composition without blocking it.
+						for(const int dx:{-scene.radius,scene.radius})for(const int dy:{-scene.radius,scene.radius})if(!footprint.count({dx,dy}))combined.push_back({{dx,dy},false});
+						if(!valid || !WorldGen::CanPlaceDecoration(grid,{x,y},combined)) {++stats.skippedScenes;continue;}
+						for(size_t n=0;n<samples.size();++n) {
+							PlaceDoodad(samples[n],scratch,PositionFor(spec,{x+offsets[n].x,y+offsets[n].y},layer.offsetZ),blocking);
+							++stats.doodads;++stats.objectBrushUsage[names[n]];
+						}
+						WorldGen::MarkDecoration(grid,{x,y},combined);
+						for(int dy=-scene.radius;dy<=scene.radius;++dy)for(int dx=-scene.radius;dx<=scene.radius;++dx)grid.reserved[size_t(y+dy)*grid.width+x+dx]=1;
+						++stats.sceneUsage[scene.id];
+						if(stats.scenePlacements.size()<4096)stats.scenePlacements.push_back({scene.id,PositionFor(spec,{x,y},layer.offsetZ),turn,samples.size()});
+					}
+				}
+			}
+			return true;
+		}
+
 		bool Decorate(const GenerationSpec& spec, const WorldGen::Plan& plan, BaseMap& scratch, std::set<Position>& blocking, ApplicationStats& stats, const WorldGen::ProgressCallback& progress, wxString& error) {
 			if (!spec.doodads.enabled || spec.doodads.density <= 0) {
 				return true;
@@ -380,6 +518,7 @@ namespace WorldEditor {
 			std::array<int, 7> densityScale, patchSizes, baseWeights;
 			std::array<std::vector<ObjectPatch>,7> patches;
 			if (!DecorationBrushes(spec, brushes, densityScale, patches, patchSizes, baseWeights, stats, error)) return false;
+			std::vector<ObjectScene> scenes;if(!ReadScenes(spec,scenes,error))return false;
 			int waterLimit=-1;for(const auto& biome:patches)for(const auto& patch:biome)waterLimit=std::max(waterLimit,patch.maxWaterDistance);
 			const uint32_t objectSeed = spec.world.objectSeed.value_or(spec.seed);
 			std::array<bool, 7> used {};
@@ -417,13 +556,14 @@ namespace WorldEditor {
 						const auto& cell = layer.cells[index];
 						const uint8_t habitat = (cell.flags & WorldGen::Highland) && WorldGen::IsWalkable(cell) && cell.terrain != WorldGen::Terrain::Snow ? 6 : Habitat(cell.terrain);
 						grid.habitat[index] = habitat;
-						grid.reserved[index] = !habitat || (cell.flags & WorldGen::Reserved);
+						grid.reserved[index] = !habitat || (cell.flags & WorldGen::Reserved) || !SelectedNature(spec,plan,x,y,layer.offsetZ);
 						grid.walkable[index] = WorldGen::IsWalkable(cell) && TileWalkable(scratch.getTile(PositionFor(spec, { x, y }, layer.offsetZ)));
 						if (habitat && !grid.reserved[index]) {
 							used[habitat] = true;
 						}
 					}
 				}
+				if(!PlaceScenes(spec,plan,layer,scenes,grid,scratch,blocking,stats,progress,error))return false;
 				for (int y = 1; y < grid.height - 1; ++y) {
 					if ((y & 15) == 0 && !Update(progress, "Decorating biomes", 65, error)) {
 						return false;
@@ -512,6 +652,7 @@ namespace WorldEditor {
 						if (layer.cells[size_t(y) * spec.region.width + x].terrain == WorldGen::Terrain::Void) {
 							continue;
 						}
+						if (!SelectedNature(spec,plan,x,y,layer.offsetZ)) continue;
 						if (++changes > tileBudget) {
 							error = wxString::Format("World application exceeds its budget of %llu tiles. Reduce the region/floors or increase the explicit batch tile budget.", static_cast<unsigned long long>(tileBudget));
 							return false;
@@ -522,6 +663,7 @@ namespace WorldEditor {
 						auto scripted = [](const Item* item) { return item && (item->getUniqueID() || item->getActionID()); };
 						const bool scriptAttributes = tile && (scripted(tile->ground) || std::any_of(tile->items.begin(), tile->items.end(), scripted));
 						const bool metadata = scriptAttributes || (tile && (tile->house_id || tile->spawn || tile->creature || tile->hasUniqueItem() || tile->getMapFlags() || !tile->getZoneIds().empty() || tile->isHouseExit())) || (location && (location->getWaypointCount() || location->getTownCount() || location->getSpawnCount()));
+						if (!spec.world.natureMask.empty() && (!tile || !tile->ground)) {error="Localized nature regeneration requires an existing world, not an empty target.";return false;}
 						if (metadata || (spec.world.protectExisting && tile && !tile->empty())) {
 							error = wxString::Format("World generation overlaps a protected tile at %d,%d,%d. Choose an empty area%s.", pos.x, pos.y, pos.z, metadata ? " (house, spawn, creature, zone, map flags, unique/action ID or waypoint)" : " or disable 'Protect existing tiles' to replace ordinary tiles");
 							return false;
@@ -529,6 +671,7 @@ namespace WorldEditor {
 					}
 				}
 			}
+			if (!spec.world.natureMask.empty() && !changes) {error="Nature mask selects no replaceable natural tiles on the chosen floor.";return false;}
 			return true;
 		}
 
@@ -607,6 +750,12 @@ namespace WorldEditor {
 				}
 				const auto& blueprint = plan.catalog[i];
 				if (!blueprint.prefabPath.empty()) continue;
+				for(size_t r=0;r<blueprint.roofMaterials.size();++r) {
+					const auto& name=blueprint.roofMaterials[r];if(name.empty())continue;
+					auto* brush=g_brushes.getBrush(name);
+					if(!brush || !brush->isGround()){error="Missing exact oriented roof ground brush: "+wxString::FromUTF8(name);return false;}
+					materials[i][r+5].floor.brush=brush->asGround();
+				}
 				for (int level = 0; level < usedLevels[i] + int(!blueprint.roofBrush.empty()); ++level) {
 					const auto binding = level == usedLevels[i] ? WorldGen::BlueprintMaterial {blueprint.roofBrush, ""} : WorldGen::BlueprintMaterialForFloor(blueprint, level);
 					const size_t slot = level == usedLevels[i] ? 4 : size_t(level);
@@ -661,6 +810,8 @@ namespace WorldEditor {
 			std::array<int,5> stairIds{};
 			std::map<Position,int> physicalTravel;
 			if (plan.settings.physicalStairs && !ResolveStairs(spec, plan, stairIds, error)) return false;
+			std::vector<std::vector<std::string>> roofRows;
+			for(const auto& b:plan.buildings)roofRows.push_back(WorldGen::RotateBlueprint(plan.catalog[b.blueprint],b.rotation).roofRows);
 			Material highland;
 			if (plan.settings.mountainLevels && !spec.world.highlandBrushName.empty()) {
 				Brush* brush = g_brushes.getBrush(nstr(spec.world.highlandBrushName));
@@ -715,7 +866,9 @@ namespace WorldEditor {
 						if (cell.flags & WorldGen::Roof) ++stats.roofTiles;
 						const int building = prefabs.owners[size_t(y) * spec.region.width + x];
 						const int owner = building < 0 ? -1 : plan.buildings[building].blueprint;
-						const BuildingMaterial* style = owner >= 0 && layer.offsetZ <= 0 ? &buildingMaterials[owner][(cell.flags & WorldGen::Roof) ? 4 : size_t(-layer.offsetZ)] : nullptr;
+						size_t roofSlot=4;
+						if((cell.flags & WorldGen::Roof) && building>=0 && !roofRows[building].empty())roofSlot=size_t(WorldGen::BlueprintRoofSlot(roofRows[building][y-plan.buildings[building].origin.y][x-plan.buildings[building].origin.x]));
+						const BuildingMaterial* style = owner >= 0 && layer.offsetZ <= 0 ? &buildingMaterials[owner][(cell.flags & WorldGen::Roof) ? roofSlot : size_t(-layer.offsetZ)] : nullptr;
 						const auto& material = style && cell.terrain == WorldGen::Terrain::BuildingFloor && style->floor.brush ? style->floor : ((cell.flags & WorldGen::Highland) && WorldGen::IsWalkable(cell) && cell.terrain != WorldGen::Terrain::Snow && highland.brush ? highland : materials[size_t(cell.terrain)]);
 						WallBrush* selectedWall = style && style->wall ? style->wall : wall;
 						if (material.tileId) {
@@ -796,8 +949,30 @@ namespace WorldEditor {
 				up->setDestination(upperArrival);
 				scratch.getTile(lower)->addItem(up);
 			}
-			if (!Decorate(spec, plan, scratch, decorativeBlocking, stats, progress, error) || !Furnish(spec, plan, scratch, decorativeBlocking, stats, progress, error)) {
+			if (!Decorate(spec, plan, scratch, decorativeBlocking, stats, progress, error) || (spec.world.natureMask.empty() && !Furnish(spec, plan, scratch, decorativeBlocking, stats, progress, error))) {
 				return false;
+			}
+			if (!spec.world.natureMask.empty()) {
+				// Validate the actual merged result; untouched tiles are not re-bordered or committed.
+				for(const auto& layer:plan.layers)for(int y=0;y<spec.region.height;++y)for(int x=0;x<spec.region.width;++x) {
+					if(x==0 && (y&15)==0 && !Update(progress,"Preserving unselected tiles",82,error))return false;
+					if(layer.cells[size_t(y)*spec.region.width+x].terrain==WorldGen::Terrain::Void || SelectedNature(spec,plan,x,y,layer.offsetZ))continue;
+					const auto pos=PositionFor(spec,{x,y},layer.offsetZ);auto* original=editor.map.getTile(pos);
+					if(!original || !original->ground) {error="Localized regeneration requires the complete original world at the same origin and floors.";return false;}
+					auto* copy=original->deepCopy(scratch);copy->setLocation(scratch.createTileL(pos));scratch.setTile(pos,copy,true);
+					decorativeBlocking.erase(pos);
+					const auto& cell=layer.cells[size_t(y)*spec.region.width+x];
+					const bool ordinaryInterior=cell.terrain==WorldGen::Terrain::BuildingFloor && !(cell.flags & (WorldGen::Wall | WorldGen::Entrance | WorldGen::Connection));
+					if(WorldGen::IsWalkable(cell) && (!(cell.flags & WorldGen::Reserved) || ordinaryInterior) && !TileWalkable(copy))decorativeBlocking.insert(pos);
+				}
+				stats.furniture=stats.roofTiles=stats.windows=stats.stairEndpoints=stats.prefabTiles=stats.prefabBuildings=0;
+			}
+			if(!plan.settings.physicalStairs)for(const auto& link:plan.links) {
+				for(const auto& edge:{std::pair{PositionFor(spec,link.upper,link.upperOffsetZ),PositionFor(spec,link.lowerArrival,link.lowerOffsetZ)},std::pair{PositionFor(spec,link.lower,link.lowerOffsetZ),PositionFor(spec,link.upperArrival,link.upperOffsetZ)}}) {
+					const auto* tile=scratch.getTile(edge.first);bool matching=false;
+					if(tile)for(const auto* item:tile->items)if(const auto* teleport=dynamic_cast<const Teleport*>(item))matching |= teleport->getDestination()==edge.second;
+					if(!matching){error="A preserved or generated portal differs from the planned safe destination.";return false;}
+				}
 			}
 			// Final client-material pass: border rules must not block planned doors,
 			// streets, cave floors or arrivals, even if a client has unusual definitions.
@@ -921,6 +1096,11 @@ namespace WorldEditor {
 		} else {
 			catalog = WorldGen::DefaultBlueprints();
 		}
+		resolved.world.natureMask.clear();
+		if(!spec.world.natureMaskPath.empty()) {
+			wxImage mask;
+			if(!WorldGen::LoadWorldPNG(spec.world.natureMaskPath,mask,error) || !WorldGen::DecodeNatureMask(mask,settings.width,settings.height,resolved.world.natureMask,error))return false;
+		}
 		WorldGen::GeographyInput input;
 		for (int type = 0; type < 3; ++type) {
 			const wxString path = type == 0 ? spec.world.heightmapPath : (type == 1 ? spec.world.biomeHintsPath : spec.world.landMaskPath);
@@ -971,6 +1151,11 @@ namespace WorldEditor {
 			error = "World seed differs from the displayed plan. Rebuild the preview before applying.";
 			return false;
 		}
+		if (!resolved.world.natureMaskPath.empty() && resolved.world.natureMask.empty()) {
+			error = "Nature mask has not been resolved for this preview. Rebuild before applying.";
+			return false;
+		}
+		if (!resolved.world.natureMask.empty() && (resolved.world.natureMask.size()!=size_t(plan.settings.width)*plan.settings.height || !plan.FindLayer(resolved.world.natureFloor))) {error="Nature mask dimensions or selected floor do not match the plan.";return false;}
 		if (!CheckRegion(editor, resolved, &plan, error)) {
 			return false;
 		}
@@ -1008,6 +1193,7 @@ namespace WorldEditor {
 						continue;
 					}
 					const auto pos = PositionFor(resolved, { x, y }, layer.offsetZ);
+					if (!SelectedNature(resolved,plan,x,y,layer.offsetZ)) continue;
 					Tile* tile = scratch.swapTile(pos, nullptr);
 					tile->setLocation(editor.map.createTileL(pos));
 					action->addChange(newd Change(tile));
@@ -1044,7 +1230,14 @@ namespace WorldEditor {
 		return ApplyPlan(editor, resolved, plan, error);
 	}
 
-	wxImage Render(const WorldGen::Plan& plan, int floor, PreviewLayer view) {
+	size_t ApplicationTileCount(const GenerationSpec& spec,const WorldGen::Plan& plan) {
+		if(!spec.world.natureMask.empty() && spec.world.natureMask.size()!=size_t(plan.settings.width)*plan.settings.height)return 0;
+		size_t count=0;
+		for(const auto& layer:plan.layers)for(int y=0;y<plan.settings.height;++y)for(int x=0;x<plan.settings.width;++x)if(layer.cells[size_t(y)*plan.settings.width+x].terrain!=WorldGen::Terrain::Void && SelectedNature(spec,plan,x,y,layer.offsetZ))++count;
+		return count;
+	}
+
+	wxImage Render(const WorldGen::Plan& plan, int floor, PreviewLayer view,const GenerationSpec* scope) {
 		const auto* layer = plan.FindLayer(floor);
 		if (!layer) {
 			return wxImage();
@@ -1075,6 +1268,7 @@ namespace WorldEditor {
 					const uint32_t amount = uint32_t(value) * 255 / 10000;
 					color = view == PreviewLayer::Moisture ? (amount << 8) | 0xFF : (view == PreviewLayer::Temperature ? (amount << 16) | ((255 - amount) << 8) : amount * 0x010101);
 				}
+				if(scope && scope->world.natureMask.size()==layer->cells.size() && !SelectedNature(*scope,plan,x,y,floor)) color=((color>>16)/4<<16)|(((color>>8)&255)/4<<8)|((color&255)/4);
 				image.SetRGB(x, y, uint8_t(color >> 16), uint8_t(color >> 8), uint8_t(color));
 				image.SetAlpha(x, y, cell.terrain == WorldGen::Terrain::Void ? 0 : 255);
 			}

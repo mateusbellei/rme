@@ -1,0 +1,992 @@
+{
+  "version": 1,
+  "biomes": {
+    "forest": {
+      "density": 130,
+      "brushes": [
+        {
+          "name": "green trees",
+          "weight": 7
+        },
+        {
+          "name": "trees",
+          "weight": 2
+        },
+        {
+          "name": "bushes",
+          "weight": 4
+        },
+        {
+          "name": "blueberry bushes",
+          "weight": 2
+        },
+        {
+          "name": "grass tufts",
+          "weight": 6
+        },
+        {
+          "name": "flowers",
+          "weight": 2
+        },
+        {
+          "name": "yellow flowers",
+          "weight": 1
+        },
+        {
+          "name": "tree stubs",
+          "weight": 1
+        },
+        {
+          "name": "small mushrooms",
+          "weight": 2
+        },
+        {
+          "name": "mossy rocks",
+          "weight": 2
+        },
+        {
+          "name": "small rocks",
+          "weight": 1
+        },
+        {
+          "name": "world bamboo clump",
+          "weight": 1
+        }
+      ],
+      "baseWeight": 35,
+      "patchSize": 18,
+      "patches": [
+        {
+          "id": "flower_meadow",
+          "weight": 25,
+          "brushes": [
+            {
+              "name": "flowers",
+              "weight": 4
+            },
+            {
+              "name": "yellow flowers",
+              "weight": 3
+            },
+            {
+              "name": "royal flowers",
+              "weight": 2
+            },
+            {
+              "name": "sunflowers",
+              "weight": 1
+            },
+            {
+              "name": "grass tufts",
+              "weight": 5
+            }
+          ],
+          "density": 70
+        },
+        {
+          "id": "bamboo_grove",
+          "weight": 25,
+          "brushes": [
+            {
+              "name": "world bamboo clump",
+              "weight": 4
+            },
+            {
+              "name": "tall jungle grass",
+              "weight": 3
+            },
+            {
+              "name": "green trees",
+              "weight": 2
+            },
+            {
+              "name": "small mushrooms",
+              "weight": 1
+            }
+          ],
+          "minMoisture": 5000,
+          "density": 100
+        },
+        {
+          "id": "wet_riparian",
+          "weight": 60,
+          "brushes": [
+            {
+              "name": "mangrove tree",
+              "weight": 3
+            },
+            {
+              "name": "swamp plants",
+              "weight": 3
+            },
+            {
+              "name": "tall swamp grass",
+              "weight": 5
+            },
+            {
+              "name": "mossy rocks",
+              "weight": 2
+            }
+          ],
+          "maxWaterDistance": 6,
+          "minMoisture": 4500,
+          "density": 110
+        },
+        {
+          "id": "orchard",
+          "weight": 15,
+          "brushes": [
+            {
+              "name": "banana tree",
+              "weight": 2
+            },
+            {
+              "name": "mango tree",
+              "weight": 2
+            },
+            {
+              "name": "bushes",
+              "weight": 4
+            },
+            {
+              "name": "grass tufts",
+              "weight": 3
+            }
+          ],
+          "minMoisture": 5500,
+          "density": 90
+        },
+        {
+          "id": "open_glade",
+          "weight": 25,
+          "brushes": [
+            {
+              "name": "grass tufts",
+              "weight": 5
+            },
+            {
+              "name": "flowers",
+              "weight": 1
+            },
+            {
+              "name": "tree stubs",
+              "weight": 1
+            }
+          ],
+          "density": 30
+        }
+      ]
+    },
+    "desert": {
+      "density": 85,
+      "brushes": [
+        {
+          "name": "dead bushes",
+          "weight": 5
+        },
+        {
+          "name": "dead trees",
+          "weight": 2
+        },
+        {
+          "name": "brown rocks",
+          "weight": 3
+        },
+        {
+          "name": "small rocks",
+          "weight": 2
+        },
+        {
+          "name": "weird shaped stones",
+          "weight": 1
+        },
+        {
+          "name": "broken palm trees",
+          "weight": 1
+        }
+      ],
+      "baseWeight": 40,
+      "patchSize": 20,
+      "patches": [
+        {
+          "id": "sand_piles",
+          "weight": 30,
+          "brushes": [
+            {
+              "name": "sand pile",
+              "weight": 2
+            },
+            {
+              "name": "brown rocks",
+              "weight": 1
+            }
+          ],
+          "density": 70
+        },
+        {
+          "id": "dry_scrub",
+          "weight": 30,
+          "brushes": [
+            {
+              "name": "dead bushes",
+              "weight": 5
+            },
+            {
+              "name": "dead trees",
+              "weight": 2
+            },
+            {
+              "name": "weird shaped stones",
+              "weight": 2
+            }
+          ],
+          "density": 85
+        },
+        {
+          "id": "oasis_edge",
+          "weight": 50,
+          "brushes": [
+            {
+              "name": "palm trees",
+              "weight": 3
+            },
+            {
+              "name": "grass tufts",
+              "weight": 3
+            },
+            {
+              "name": "bushes",
+              "weight": 1
+            }
+          ],
+          "maxWaterDistance": 5,
+          "density": 90
+        }
+      ]
+    },
+    "ice": {
+      "density": 100,
+      "brushes": [
+        {
+          "name": "snowy trees",
+          "weight": 4
+        },
+        {
+          "name": "snowy alive trees",
+          "weight": 2
+        },
+        {
+          "name": "snowy dead trees",
+          "weight": 1
+        },
+        {
+          "name": "small snowy rocks",
+          "weight": 3
+        },
+        {
+          "name": "snowy rocks",
+          "weight": 1
+        }
+      ],
+      "baseWeight": 50,
+      "patchSize": 18,
+      "patches": [
+        {
+          "id": "snow_grove",
+          "weight": 30,
+          "brushes": [
+            {
+              "name": "snowy alive trees",
+              "weight": 3
+            },
+            {
+              "name": "snowy dead trees",
+              "weight": 1
+            },
+            {
+              "name": "snowy trees",
+              "weight": 2
+            }
+          ],
+          "density": 90
+        },
+        {
+          "id": "snowdrifts",
+          "weight": 30,
+          "brushes": [
+            {
+              "name": "snow drift",
+              "weight": 3
+            },
+            {
+              "name": "small snowy rocks",
+              "weight": 3
+            }
+          ],
+          "density": 60
+        }
+      ]
+    },
+    "cave": {
+      "density": 85,
+      "brushes": [
+        {
+          "name": "small rocks",
+          "weight": 5
+        },
+        {
+          "name": "gray rocks",
+          "weight": 2
+        },
+        {
+          "name": "brown rocks",
+          "weight": 1
+        },
+        {
+          "name": "small mushrooms",
+          "weight": 1
+        },
+        {
+          "name": "blue cave crystal",
+          "weight": 1
+        },
+        {
+          "name": "green cave crystal",
+          "weight": 1
+        }
+      ],
+      "baseWeight": 35,
+      "patchSize": 14,
+      "patches": [
+        {
+          "id": "rock_formations",
+          "weight": 35,
+          "brushes": [
+            {
+              "name": "staglamites",
+              "weight": 4
+            },
+            {
+              "name": "stone cave rocks",
+              "weight": 2
+            },
+            {
+              "name": "mud cave rocks",
+              "weight": 2
+            }
+          ],
+          "density": 70
+        },
+        {
+          "id": "crystal_pocket",
+          "weight": 15,
+          "brushes": [
+            {
+              "name": "blue cave crystal",
+              "weight": 2
+            },
+            {
+              "name": "green cave crystal",
+              "weight": 2
+            },
+            {
+              "name": "light blue cave crystal",
+              "weight": 1
+            },
+            {
+              "name": "small rocks",
+              "weight": 5
+            }
+          ],
+          "density": 75
+        },
+        {
+          "id": "mushroom_pocket",
+          "weight": 25,
+          "brushes": [
+            {
+              "name": "small mushrooms",
+              "weight": 4
+            },
+            {
+              "name": "moldy mushrooms",
+              "weight": 2
+            },
+            {
+              "name": "moldy giant mushrooms",
+              "weight": 1
+            },
+            {
+              "name": "small rocks",
+              "weight": 3
+            }
+          ],
+          "density": 60
+        }
+      ]
+    },
+    "coast": {
+      "density": 80,
+      "brushes": [
+        {
+          "name": "palm trees",
+          "weight": 4
+        },
+        {
+          "name": "broken palm trees",
+          "weight": 1
+        },
+        {
+          "name": "grass tufts",
+          "weight": 3
+        },
+        {
+          "name": "small rocks",
+          "weight": 3
+        },
+        {
+          "name": "brown rocks",
+          "weight": 1
+        },
+        {
+          "name": "dead bushes",
+          "weight": 1
+        }
+      ],
+      "baseWeight": 30,
+      "patchSize": 16,
+      "patches": [
+        {
+          "id": "palms",
+          "weight": 35,
+          "brushes": [
+            {
+              "name": "palm trees",
+              "weight": 4
+            },
+            {
+              "name": "broken palm trees",
+              "weight": 1
+            },
+            {
+              "name": "grass tufts",
+              "weight": 4
+            }
+          ],
+          "density": 95
+        },
+        {
+          "id": "reeds",
+          "weight": 45,
+          "brushes": [
+            {
+              "name": "tall swamp grass",
+              "weight": 5
+            },
+            {
+              "name": "swamp plants",
+              "weight": 2
+            },
+            {
+              "name": "small rocks",
+              "weight": 1
+            }
+          ],
+          "maxWaterDistance": 4,
+          "density": 85
+        },
+        {
+          "id": "stony_shore",
+          "weight": 25,
+          "brushes": [
+            {
+              "name": "small rocks",
+              "weight": 5
+            },
+            {
+              "name": "brown rocks",
+              "weight": 2
+            },
+            {
+              "name": "debris",
+              "weight": 1
+            }
+          ],
+          "density": 70
+        }
+      ]
+    },
+    "highland": {
+      "density": 85,
+      "brushes": [
+        {
+          "name": "small rocks",
+          "weight": 5
+        },
+        {
+          "name": "gray rocks",
+          "weight": 2
+        },
+        {
+          "name": "brown rocks",
+          "weight": 2
+        },
+        {
+          "name": "weird shaped stones",
+          "weight": 1
+        },
+        {
+          "name": "grass tufts",
+          "weight": 2
+        },
+        {
+          "name": "tree stubs",
+          "weight": 1
+        }
+      ],
+      "baseWeight": 35,
+      "patchSize": 16,
+      "patches": [
+        {
+          "id": "rock_outcrop",
+          "weight": 40,
+          "brushes": [
+            {
+              "name": "gray rocks",
+              "weight": 3
+            },
+            {
+              "name": "small rocks",
+              "weight": 4
+            },
+            {
+              "name": "weird shaped stones",
+              "weight": 2
+            },
+            {
+              "name": "gray rubble",
+              "weight": 1
+            }
+          ],
+          "density": 80
+        },
+        {
+          "id": "sparse_scree",
+          "weight": 40,
+          "brushes": [
+            {
+              "name": "small rocks",
+              "weight": 3
+            },
+            {
+              "name": "grass tufts",
+              "weight": 2
+            }
+          ],
+          "density": 35
+        },
+        {
+          "id": "weathered_slope",
+          "weight": 20,
+          "brushes": [
+            {
+              "name": "tree stubs",
+              "weight": 3
+            },
+            {
+              "name": "dead bushes",
+              "weight": 2
+            },
+            {
+              "name": "brown rocks",
+              "weight": 4
+            }
+          ],
+          "maxMoisture": 5500,
+          "density": 65
+        }
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "id": "wayside_camp",
+      "habitats": [
+        "forest"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": 0,
+          "y": 0,
+          "brushes": [
+            "world campsite hearth"
+          ]
+        },
+        {
+          "x": -3,
+          "y": 3,
+          "brushes": [
+            "world chair east"
+          ]
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "brushes": [
+            "world chair west"
+          ]
+        },
+        {
+          "x": -4,
+          "y": -3,
+          "brushes": [
+            "tree stubs"
+          ]
+        },
+        {
+          "x": 4,
+          "y": -3,
+          "brushes": [
+            "mossy rocks"
+          ]
+        },
+        {
+          "x": 0,
+          "y": -3,
+          "brushes": [
+            "gray striped tent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "overgrown_ruin",
+      "habitats": [
+        "forest",
+        "highland"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": -3,
+          "y": -2,
+          "brushes": [
+            "world broken pillar"
+          ]
+        },
+        {
+          "x": 3,
+          "y": -2,
+          "brushes": [
+            "world broken pillar"
+          ]
+        },
+        {
+          "x": -4,
+          "y": 3,
+          "brushes": [
+            "bushes"
+          ]
+        },
+        {
+          "x": 4,
+          "y": 3,
+          "brushes": [
+            "small mushrooms"
+          ]
+        },
+        {
+          "x": 0,
+          "y": 3,
+          "brushes": [
+            "mossy rocks"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stone_shrine",
+      "habitats": [
+        "forest",
+        "highland"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": -4,
+          "y": -2,
+          "brushes": [
+            "world stone pillar"
+          ]
+        },
+        {
+          "x": 4,
+          "y": -2,
+          "brushes": [
+            "world stone pillar"
+          ]
+        },
+        {
+          "x": 0,
+          "y": -2,
+          "brushes": [
+            "weird shaped stones"
+          ]
+        },
+        {
+          "x": -3,
+          "y": 3,
+          "brushes": [
+            "yellow flowers"
+          ]
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "brushes": [
+            "yellow flowers"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "training_clearing",
+      "habitats": [
+        "forest"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": -3,
+          "y": -2,
+          "brushes": [
+            "world training target"
+          ]
+        },
+        {
+          "x": 3,
+          "y": -2,
+          "brushes": [
+            "world training target"
+          ]
+        },
+        {
+          "x": -4,
+          "y": 4,
+          "brushes": [
+            "tree stubs"
+          ]
+        },
+        {
+          "x": 4,
+          "y": 4,
+          "brushes": [
+            "small rocks"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "snow_shelter",
+      "habitats": [
+        "ice"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": 0,
+          "y": 0,
+          "brushes": [
+            "world campsite hearth"
+          ]
+        },
+        {
+          "x": -3,
+          "y": -3,
+          "brushes": [
+            "small snowy rocks"
+          ]
+        },
+        {
+          "x": 3,
+          "y": -3,
+          "brushes": [
+            "small snowy rocks"
+          ]
+        },
+        {
+          "x": -3,
+          "y": 3,
+          "brushes": [
+            "world chair east"
+          ]
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "brushes": [
+            "world chair west"
+          ]
+        },
+        {
+          "x": 0,
+          "y": -3,
+          "brushes": [
+            "gray striped tent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "crystal_sanctuary",
+      "habitats": [
+        "cave"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": -3,
+          "y": -2,
+          "brushes": [
+            "blue cave crystal"
+          ]
+        },
+        {
+          "x": 3,
+          "y": -2,
+          "brushes": [
+            "green cave crystal"
+          ]
+        },
+        {
+          "x": 0,
+          "y": 3,
+          "brushes": [
+            "world broken pillar"
+          ]
+        },
+        {
+          "x": -4,
+          "y": 3,
+          "brushes": [
+            "small mushrooms"
+          ]
+        },
+        {
+          "x": 4,
+          "y": 3,
+          "brushes": [
+            "small mushrooms"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dry_waystation",
+      "habitats": [
+        "desert",
+        "coast"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": 0,
+          "y": 0,
+          "brushes": [
+            "world campsite hearth"
+          ]
+        },
+        {
+          "x": -4,
+          "y": -3,
+          "brushes": [
+            "dead bushes"
+          ]
+        },
+        {
+          "x": 4,
+          "y": -3,
+          "brushes": [
+            "small rocks"
+          ]
+        },
+        {
+          "x": -3,
+          "y": 3,
+          "brushes": [
+            "world chair east"
+          ]
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "brushes": [
+            "world chair west"
+          ]
+        },
+        {
+          "x": 0,
+          "y": -3,
+          "brushes": [
+            "red striped tent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "orchard_rest",
+      "habitats": [
+        "forest"
+      ],
+      "spacing": 48,
+      "chance": 80,
+      "radius": 6,
+      "objects": [
+        {
+          "x": -4,
+          "y": -3,
+          "brushes": [
+            "mango tree"
+          ]
+        },
+        {
+          "x": 4,
+          "y": -3,
+          "brushes": [
+            "banana tree"
+          ]
+        },
+        {
+          "x": -3,
+          "y": 3,
+          "brushes": [
+            "flowers"
+          ]
+        },
+        {
+          "x": 3,
+          "y": 3,
+          "brushes": [
+            "flowers"
+          ]
+        }
+      ],
+      "minMoisture": 4000
+    }
+  ]
+}

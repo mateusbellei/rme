@@ -47,7 +47,7 @@ namespace WorldGen {
 		biomeHints = std::move(biomes);
 		return true;
 	}
-	bool ExportGeographyInputs(const Plan& plan, const wxString& prefix, wxString& heightmapPath, wxString& biomeHintsPath, wxString& error, wxString* landMaskPath) {
+	bool ExportGeographyInputs(const Plan& plan, const wxString& prefix, wxString& heightmapPath, wxString& biomeHintsPath, wxString& error, wxString* landMaskPath, wxString* natureMaskPath) {
 		if (prefix.empty() || prefix.find(wxUniChar(0)) != wxString::npos) {
 			error = "Choose a nonempty editable-input filename prefix without NUL.";
 			return false;
@@ -78,6 +78,13 @@ namespace WorldGen {
 			if (!stream.IsOk() || !encoder.SaveFile(&mask, stream, false) || !stream.Commit()) { error = "Could not finish editable land mask: " + path; return false; }
 			*landMaskPath = path;
 		}
+		if(natureMaskPath) {
+			wxImage mask(plan.settings.width,plan.settings.height);if(!mask.IsOk()){error="Could not allocate nature mask template.";return false;}
+			mask.SetRGB(wxRect(0,0,plan.settings.width,plan.settings.height),0,0,0);
+			const auto path=prefix+"_nature.png";wxTempFileOutputStream stream(path);
+			if(!stream.IsOk() || !encoder.SaveFile(&mask,stream,false) || !stream.Commit()){error="Could not finish nature mask template.";return false;}
+			*natureMaskPath=path;
+		}
 		return true;
 	}
 	namespace {
@@ -96,6 +103,19 @@ namespace WorldGen {
 			}
 			return true;
 		}
+	}
+	bool DecodeNatureMask(const wxImage& image,int width,int height,std::vector<uint8_t>& mask,wxString& error) {
+		if(!CheckImage(image,width,height,error))return false;
+		if(image.GetWidth()!=width || image.GetHeight()!=height) {error="Nature mask must exactly match the target dimensions; it is never rescaled.";return false;}
+		std::vector<uint8_t> parsed(size_t(width)*height);
+		for(int y=0;y<height;++y)for(int x=0;x<width;++x) {
+			if(ProceduralMask::IsTransparent(image,x,y))continue;
+			if(!Opaque(image,x,y,error))return false;
+			const int value=image.GetRed(x,y);
+			if((value!=0 && value!=255) || image.GetGreen(x,y)!=value || image.GetBlue(x,y)!=value) {error="Nature mask uses white to regenerate, black/transparent to preserve.";return false;}
+			parsed[size_t(y)*width+x]=value?1:0;
+		}
+		mask=std::move(parsed);return true;
 	}
 	bool DecodeLandMask(const wxImage& image, int width, int height, GeographyInput& input, wxString& error) {
 		if (!CheckImage(image, width, height, error)) return false;

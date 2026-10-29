@@ -432,10 +432,10 @@ namespace WorldGen {
 					}
 					const int next = ny * s.width + nx;
 					const Cell& c = cells[next];
-					if (c.terrain == Terrain::Ocean || c.terrain == Terrain::Lake || c.terrain == Terrain::Mountain || (c.flags & Wall)) {
+					if (c.terrain == Terrain::Ocean || c.terrain == Terrain::Lake || (c.terrain == Terrain::Mountain && (!s.mountainPasses || (c.flags & Reserved))) || (c.flags & Wall)) {
 						continue;
 					}
-					const int step = c.terrain == Terrain::River ? 50 : (c.terrain == Terrain::Road || c.terrain == Terrain::Plaza ? 2 : 10);
+					const int step = c.terrain == Terrain::Mountain ? 120 : c.terrain == Terrain::River ? 50 : (c.terrain == Terrain::Road || c.terrain == Terrain::Plaza ? 2 : 10);
 					const int bend = s.streetVariation && step == 10 ? int(Hash(s.seed ^ 0x57aee7u, nx / 6, ny / 6) % uint32_t(1 + s.streetVariation / 5)) : 0;
 					const int candidate = value + step + bend + std::abs(int(c.elevation) - int(cells[current].elevation)) / 100;
 					if (visited[next] != search || candidate < cost[next]) {
@@ -460,7 +460,7 @@ namespace WorldGen {
 						Cell& c = cells[size_t(ny) * s.width + nx];
 						if (c.terrain == Terrain::River) {
 							c.terrain = Terrain::Bridge;
-						} else if (DryBuildable(c) && c.terrain != Terrain::Plaza) {
+						} else if ((DryBuildable(c) || (s.mountainPasses && c.terrain==Terrain::Mountain && !(c.flags & Reserved))) && c.terrain != Terrain::Plaza) {
 							c.terrain = Terrain::Road;
 						}
 						if (c.terrain == Terrain::Road || c.terrain == Terrain::Bridge) {
@@ -697,6 +697,14 @@ namespace WorldGen {
 
 					std::vector<int> eligible;
 					int totalWeight = 0;
+					auto lotWeight = [&](const Blueprint& b) {
+						if (b.district.empty()) return b.weight;
+						const int dx=slot.center.x-town.center.x,dy=slot.center.y-town.center.y;
+						const int distance=std::abs(dx)+std::abs(dy);
+						const int sector=((std::abs(dx)>=std::abs(dy) ? (dx>=0?0:2) : (dy>=0?1:3)) + int(Hash(s.seed,t,133)%4))%4;
+						const bool preferred=b.district=="civic" ? distance<=24 : b.district=="market" ? sector==0 : b.district=="residential" ? sector==1 : b.district=="training" ? sector==2 : sector==3 && distance>=24;
+						return b.weight*(preferred?8:1);
+					};
 					int minimumPriority = -1;
 					for (size_t i = 0; i < plan.catalog.size(); ++i) {
 						if (allowed(plan.catalog[i]) && templateCounts[i] < plan.catalog[i].minPerSettlement) minimumPriority = std::max(minimumPriority, plan.catalog[i].minimumPriority);
@@ -705,7 +713,7 @@ namespace WorldGen {
 						const auto& candidate = plan.catalog[i];
 						if ((!candidate.maxPerSettlement || templateCounts[i] < candidate.maxPerSettlement) && allowed(candidate) && (minimumPriority < 0 || (templateCounts[i] < candidate.minPerSettlement && candidate.minimumPriority == minimumPriority))) {
 							eligible.push_back(i);
-							totalWeight += candidate.weight;
+							totalWeight += lotWeight(candidate);
 						}
 					}
 					if (eligible.empty()) {
@@ -714,11 +722,11 @@ namespace WorldGen {
 					int roll = int(Hash(s.seed, uint32_t(t) * 997u + slot.serial, 31) % uint32_t(totalWeight));
 					int templateIndex = eligible.back();
 					for (int i : eligible) {
-						if (roll < plan.catalog[i].weight) {
+						if (roll < lotWeight(plan.catalog[i])) {
 							templateIndex = i;
 							break;
 						}
-						roll -= plan.catalog[i].weight;
+						roll -= lotWeight(plan.catalog[i]);
 					}
 					int rotation = 0, bestDistance = std::numeric_limits<int>::max();
 					// Determine orientation from the actual template entrance, including custom north/east doors.
@@ -864,6 +872,17 @@ namespace WorldGen {
 				}
 				layer.cells.swap(next);
 			}
+			for (int room=0;room<s.caveChambers;++room) {
+				control.Poll();
+				const auto seed=s.caveSeed.value_or(s.seed)^uint32_t(depth*7919);
+				const int cx=8+int(Hash(seed,room,161)%uint32_t(s.width-16)),cy=8+int(Hash(seed,room,162)%uint32_t(s.height-16));
+				const int rx=4+int(Hash(seed,room,163)%7),ry=4+int(Hash(seed,room,164)%7);
+				for(int y=std::max(1,cy-ry);y<std::min(s.height-1,cy+ry+1);++y) for(int x=std::max(1,cx-rx);x<std::min(s.width-1,cx+rx+1);++x) {
+					if ((x-cx)*(x-cx)*ry*ry+(y-cy)*(y-cy)*rx*rx>rx*rx*ry*ry) continue;
+					auto& cell=layer.cells[size_t(y)*s.width+x];cell.terrain=Terrain::CaveFloor;
+					cell.moisture=uint16_t(2000+Hash(seed,room,165)%7001);
+				}
+			}
 			return layer;
 		}
 
@@ -987,7 +1006,7 @@ namespace WorldGen {
 						continue;
 					}
 					const auto blueprint = RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
-					const auto& rows = BlueprintRowsForFloor(blueprint, roof ? level - 1 : level);
+					const auto& rows = roof && !blueprint.roofRows.empty() ? blueprint.roofRows : BlueprintRowsForFloor(blueprint, roof ? level - 1 : level);
 					for (int y = 0; y < b.height; ++y) {
 						for (int x = 0; x < b.width; ++x) {
 							char symbol = rows[y][x];
@@ -1021,7 +1040,7 @@ namespace WorldGen {
 			}
 			if (s.caveDepth > 0) {
 				Point entrance { s.width / 2, s.height / 2 };
-				if (!plan.settlements.empty()) {
+				if (!s.wildernessCaveEntry && !plan.settlements.empty()) {
 					entrance = plan.settlements.front().center;
 				} else {
 					int best = std::numeric_limits<int>::max();
@@ -1032,6 +1051,12 @@ namespace WorldGen {
 								continue;
 							}
 							int distance = std::abs(x - s.width / 2) + std::abs(y - s.height / 2);
+							if (s.wildernessCaveEntry) {
+								bool clear=true;for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx)clear &= DryBuildable(plan.layers[0].cells[size_t(y+dy)*s.width+x+dx]);
+								for(const auto& town:plan.settlements) clear &= std::abs(x-town.center.x)+std::abs(y-town.center.y)>town.radius+12;
+								if(!clear)continue;
+								distance=10000-int(c.elevation)+int(Hash(s.caveSeed.value_or(s.seed),x,y)%200);
+							}
 							if (distance < best) {
 								best = distance;
 								entrance = { x, y };
@@ -1231,7 +1256,7 @@ namespace WorldGen {
 			error = "World dimensions must be 32..4096 with at most 4,194,304 surface cells.";
 			return false;
 		}
-		if ((s.relief != ReliefStyle::Smooth && s.relief != ReliefStyle::Ridges) || s.biomeDetail < 0 || s.biomeDetail > 100 || (s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveEntrances < 1 || s.caveEntrances > 16 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4 || s.mountainLevels < 0 || s.mountainLevels > 4 || s.streetVariation < 0 || s.streetVariation > 60) {
+		if ((s.relief != ReliefStyle::Smooth && s.relief != ReliefStyle::Ridges) || s.biomeDetail < 0 || s.biomeDetail > 100 || (s.shape != LandShape::Continent && s.shape != LandShape::Archipelago) || (s.settlementLayout != SettlementLayout::Organic && s.settlementLayout != SettlementLayout::Blocks) || s.coastRoughness < 0 || s.coastRoughness > 100 || s.temperatureBias < -5000 || s.temperatureBias > 5000 || s.moistureBias < -5000 || s.moistureBias > 5000 || s.riverWidth < 1 || s.riverWidth > 7 || s.riverWidth % 2 == 0 || s.seaLevel < 2000 || s.seaLevel > 6500 || s.riverCount < 0 || s.riverCount > 64 || s.settlementCount < 0 || s.settlementCount > 32 || s.buildingsPerSettlement < 0 || s.buildingsPerSettlement > 64 || s.buildingLevels < 1 || s.buildingLevels > 4 || s.caveDepth < 0 || s.caveDepth > 8 || s.caveEntrances < 1 || s.caveEntrances > 16 || s.caveFill < 20 || s.caveFill > 65 || s.roadWidth < 1 || s.roadWidth > 4 || s.mountainLevels < 0 || s.mountainLevels > 4 || s.streetVariation < 0 || s.streetVariation > 60 || s.caveChambers < 0 || s.caveChambers > 64) {
 			error = "World settings are outside supported ranges.";
 			return false;
 		}
@@ -1589,7 +1614,7 @@ namespace WorldGen {
 		for (const auto& b : plan.buildings) {
 			if (b.blueprint < 0 || size_t(b.blueprint) >= plan.catalog.size() || b.levels < 1 || b.levels > 4 || plan.catalog[b.blueprint].roofBrush.empty()) continue;
 			const auto blueprint=RotateBlueprint(plan.catalog[b.blueprint],b.rotation);
-			const auto& rows=BlueprintRowsForFloor(blueprint,b.levels-1);
+			const auto& rows=blueprint.roofRows.empty()?BlueprintRowsForFloor(blueprint,b.levels-1):blueprint.roofRows;
 			const auto* layer=plan.FindLayer(-b.levels);
 			for (int y=0; y<int(rows.size()); ++y) for (int x=0; x<int(rows[y].size()); ++x) {
 				if (rows[y][x]==' ' || rows[y][x]==',') continue;
@@ -1651,6 +1676,9 @@ namespace WorldGen {
 		if (plan.settings.mountainLevels) { string("mountain-levels"); add(plan.settings.mountainLevels); }
 		if (plan.settings.streetVariation) { string("street-variation"); add(plan.settings.streetVariation); }
 		if (plan.settings.physicalStairs) { string("physical-stairs"); }
+		if (plan.settings.mountainPasses) string("mountain-passes");
+		if (plan.settings.caveChambers) { string("cave-chambers"); add(plan.settings.caveChambers); }
+		if (plan.settings.wildernessCaveEntry) string("wilderness-cave-entry");
 		add(plan.settings.caveDepth);
 		add(plan.settings.caveFill);
 		add(plan.settings.roadWidth);
@@ -1658,6 +1686,8 @@ namespace WorldGen {
 		add(uint32_t(plan.catalog.size()));
 		for (const auto& blueprint : plan.catalog) {
 			string(blueprint.id);
+			if (!blueprint.district.empty()) { string("district"); string(blueprint.district); }
+			if (!blueprint.roofRows.empty()) { string("roof-silhouette"); for (const auto& row:blueprint.roofRows) string(row); for(const auto& name:blueprint.roofMaterials)string(name); }
 			if (!blueprint.prefabPath.empty()) {
 				string("otbm-prefab");
 				add(blueprint.prefabX); add(blueprint.prefabY); add(blueprint.prefabZ);

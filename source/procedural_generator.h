@@ -96,6 +96,9 @@ struct GenerationWorld {
 	wxString biomeHintsPath;
 	wxString landMaskPath;
 	wxString objectProfilePath;
+	wxString natureMaskPath;
+	int natureFloor = 0; // Relative offset, surface=0.
+	std::vector<uint8_t> natureMask; // Resolved immutable preview input, never serialized.
 	std::optional<uint32_t> objectSeed;
 };
 

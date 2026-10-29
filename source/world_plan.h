@@ -113,10 +113,13 @@ namespace WorldGen {
 		int buildingLevels = 1;
 		int mountainLevels = 0;
 		int streetVariation = 0;
+		bool mountainPasses = false;
 		bool physicalStairs = false;
 		int caveDepth = 0;
 		int caveEntrances = 1;
 		int caveFill = 45;
+		int caveChambers = 0; // Seeded elliptical rooms before connectivity carving.
+		bool wildernessCaveEntry = false;
 		int roadWidth = 2;
 		SettlementLayout settlementLayout = SettlementLayout::Organic;
 	};

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <array>
 
 namespace WorldGen {
 
@@ -38,6 +39,9 @@ namespace WorldGen {
 		std::string floorBrush, wallBrush;
 		// Optional non-accessible roof, one layer above the last occupied floor.
 		std::string roofBrush;
+		std::vector<std::string> roofRows; // . default, n/e/s/w slopes, h/v ridges, space open.
+		std::array<std::string,6> roofMaterials {}; // n,e,s,w,h,v; client orientation bindings.
+		std::string district; // civic, market, residential, training, rural; soft affinity.
 		int windowChance = 0;
 		std::string role;
 		int maxPerSettlement = 0; // Zero means unlimited.
@@ -64,6 +68,7 @@ namespace WorldGen {
 	std::pair<int, int> FindBlueprintSymbol(const std::vector<std::string>& rows, char symbol);
 	const BlueprintCatalog& DefaultBlueprints();
 	const std::string& BlueprintRole(const Blueprint& blueprint);
+	int BlueprintRoofSlot(char symbol); // Slots 4 default, 5..10 oriented roof materials.
 	uint32_t RoleColor(const std::string& role);
 
 	// JSON/file adapter; compiled with the existing json_spirit parser.

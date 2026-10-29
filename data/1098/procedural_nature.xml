@@ -5,4 +5,9 @@
     <item id="4025" chance="10"/>
     <item id="4026" chance="10"/>
   </brush>
+  <!-- Scene props bind exact existing client items; no containers or field damage. -->
+  <brush name="world campsite hearth" type="doodad" server_lookid="1426" on_blocking="true" thickness="100/100"><item id="1426" chance="1"/></brush>
+  <brush name="world broken pillar" type="doodad" server_lookid="3767" on_blocking="true" thickness="100/100"><item id="3767" chance="1"/></brush>
+  <brush name="world stone pillar" type="doodad" server_lookid="1514" on_blocking="true" thickness="100/100"><item id="1514" chance="1"/></brush>
+  <brush name="world training target" type="doodad" server_lookid="5787" on_blocking="true" thickness="100/100"><item id="5787" chance="1"/></brush>
 </materials>

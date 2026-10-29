@@ -688,8 +688,46 @@ static void TestRoofsStairsAndHighlands() {
 	s.mountainLevels=0; s.streetVariation=61; Check(!ValidateSettings(s,error),"Street variation is bounded");
 }
 
+
+static void TestComposedPlaces() {
+	Settings s;s.width=s.height=128;s.riverCount=0;s.settlementCount=1;s.settlementAnchors={{64,64}};
+	s.buildingsPerSettlement=12;s.buildingLevels=2;s.settlementLayout=SettlementLayout::Blocks;
+	GeographyInput input;input.elevation.assign(128*128,6000);input.biomes.assign(128*128,Terrain::Grass);
+	auto catalog=DefaultBlueprints();catalog.resize(2);
+	catalog[0].district="civic";catalog[0].minPerSettlement=catalog[0].maxPerSettlement=1;catalog[0].minimumPriority=100;
+	catalog[1].district="residential";
+	for(auto& b:catalog) {
+		b.roofBrush="roof";b.roofRows.assign(b.rows.size(),std::string(b.rows.front().size(),'.'));
+		b.roofRows[0][0]=' ';b.roofRows.back().back()=' ';
+	}
+	Plan plan,replay;std::string error;
+	Check(Build(s,plan,error,&catalog,&input) && Validate(plan).valid,"Districts and explicit roof silhouettes must preserve navigation");
+	Check(Build(s,replay,error,&catalog,&input) && Fingerprint(plan)==Fingerprint(replay),"District and roof composition must replay");
+	Check(plan.buildings.size()==12 && plan.buildings.front().blueprint==0,"Required civic functions retain first access to central lots");
+	const auto& first=plan.buildings.front();
+	Check(std::abs(first.origin.x+first.width/2-64)+std::abs(first.origin.y+first.height/2-64)<=24,"Civic minimum belongs near the central plaza");
+	for(const auto& b:plan.buildings) {
+		const auto rotated=RotateBlueprint(plan.catalog[b.blueprint],b.rotation);
+		for(int y=0;y<b.height;++y)for(int x=0;x<b.width;++x)Check(bool(plan.FindLayer(-b.levels)->cells[plan.Index({b.origin.x+x,b.origin.y+y})].flags&Roof)==(rotated.roofRows[y][x]!=' '),"Roof markers must follow rotated authored openings exactly");
+	}
+	s.caveDepth=2;s.caveChambers=12;s.wildernessCaveEntry=true;s.physicalStairs=true;
+	Check(Build(s,plan,error,&catalog,&input) && Validate(plan).valid,"Chambers and wilderness cave entries must connect all floors");
+	Check(std::count_if(plan.FindLayer(1)->cells.begin(),plan.FindLayer(1)->cells.end(),[](const Cell& c){return c.moisture>0 && c.terrain==Terrain::CaveFloor;})>0,"Cave chambers must create actual humid room terrain");
+	for(const auto& link:plan.links)if(link.upperOffsetZ==0 && link.lowerOffsetZ==1)Check(std::abs(link.upper.x-64)+std::abs(link.upper.y-64)>plan.settlements[0].radius+8,"Wilderness entrance must stay outside the town");
+	Check(Build(s,replay,error,&catalog,&input) && Fingerprint(plan)==Fingerprint(replay),"Composed caverns retain seeded replay");
+	s.caveChambers=65;Check(!ValidateSettings(s,error),"Cave chamber count is bounded");
+	s=Settings{};s.width=s.height=128;s.riverCount=0;s.settlementCount=2;s.settlementAnchors={{30,64},{98,64}};s.buildingsPerSettlement=0;
+	for(int y=0;y<128;++y)for(int x=60;x<=68;++x)input.biomes[y*128+x]=Terrain::Mountain;
+	Check(Build(s,plan,error,nullptr,&input),"Baseline mountain barrier must build");
+	s.mountainPasses=true;
+	Check(Build(s,replay,error,nullptr,&input) && Validate(replay).valid,"Mountain passes must route a walkable crossing");
+	bool crossing=false;for(int y=0;y<128;++y)crossing |= replay.FindLayer(0)->cells[y*128+64].terrain==Terrain::Road;
+	Check(crossing && Fingerprint(plan)!=Fingerprint(replay),"Pass option must create actual road tiles through a blocking ridge");
+}
+
 int main() {
 	try {
+		TestComposedPlaces();
 		TestRoofsStairsAndHighlands();
 		TestRegionalArchitecture();
 		TestSettlementAnchors();

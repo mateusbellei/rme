@@ -586,6 +586,9 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	auto* buildings = spin("Buildings per settlement:", 0, 64, settings.buildingsPerSettlement);
 	auto* floors = spin("Building floors:", 1, 4, settings.buildingLevels);
 	auto* mountainLevels = spin("Mountain floors above surface:", 0, 4, settings.mountainLevels);
+	grid->Add(new wxStaticText(content,wxID_ANY,"Mountain roads:"),0,wxALIGN_CENTER_VERTICAL);
+	auto* passes=new wxCheckBox(content,wxID_ANY,"Allow costly passes through ridges");
+	passes->SetValue(settings.mountainPasses);grid->Add(passes,0,wxEXPAND);
 	auto* streetVariation = spin("Street irregularity %:", 0, 60, settings.streetVariation);
 	grid->Add(new wxStaticText(content, wxID_ANY, "Vertical travel:"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* physicalStairs = new wxCheckBox(content, wxID_ANY, "Physical directional stairs");
@@ -595,6 +598,10 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	caveEntrances->Enable(settings.caveDepth > 0);
 	depth->Bind(wxEVT_SPINCTRL, [=](wxSpinEvent&) { caveEntrances->Enable(depth->GetValue() > 0); });
 	depth->Bind(wxEVT_TEXT, [=](wxCommandEvent& event) { caveEntrances->Enable(depth->GetValue() > 0); event.Skip(); });
+	auto* chambers = spin("Additional cave chambers:",0,64,settings.caveChambers);
+	grid->Add(new wxStaticText(content,wxID_ANY,"First cave entrance:"),0,wxALIGN_CENTER_VERTICAL);
+	auto* wildEntry=new wxCheckBox(content,wxID_ANY,"Prefer wilderness outside towns");
+	wildEntry->SetValue(settings.wildernessCaveEntry);grid->Add(wildEntry,0,wxEXPAND);
 	auto* fill = spin("Cave initial rock density %:", 20, 65, settings.caveFill);
 	auto* road = spin("Road width:", 1, 4, settings.roadWidth);
 	auto* travel = spin("Travel teleport server ID (0 = auto):", 0, 65535, worldSettings.connectionItemId);
@@ -631,6 +638,8 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	auto* heightmap = assetPath("Heightmap PNG (optional grayscale):", worldSettings.heightmapPath, "PNG (*.png)|*.png");
 	auto* biomeHints = assetPath("Biome hints PNG (optional palette):", worldSettings.biomeHintsPath, "PNG (*.png)|*.png");
 	auto* landMask = assetPath("Land mask PNG (black ocean / white land):", worldSettings.landMaskPath, "PNG (*.png)|*.png");
+	auto* natureMask = assetPath("Local nature mask PNG (white = replace):",worldSettings.natureMaskPath,"PNG (*.png)|*.png");
+	auto* natureFloor = spin("Nature mask floor offset (surface = 0):",-4,8,worldSettings.natureFloor);
 	auto* objects = assetPath("Biome object profile (optional):", worldSettings.objectProfilePath, "JSON (*.json)|*.json");
 	auto seedInput = [&](const wxString& label, const std::optional<uint32_t>& value) {
 		grid->Add(new wxStaticText(content, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
@@ -642,7 +651,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	auto* caveSeed = seedInput("Cave seed (optional):", settings.caveSeed);
 	auto* objectSeed = seedInput("Object / furniture seed (optional):", worldSettings.objectSeed);
 	layout->Add(grid, 1, wxEXPAND | wxALL, 12);
-	auto* note = new wxStaticText(content, wxID_ANY, "Multi-floor travel uses paired teleports with safe arrival tiles.\nThe legend must match the grounds and brushes of your loaded client.");
+	auto* note = new wxStaticText(content, wxID_ANY, "Travel uses validated directional stairs or paired teleports.\nLocal nature masks replace ordinary tiles in an existing world; black pixels preserve.\nThe legend and profiles must match the grounds and brushes of your loaded client.");
 	layout->Add(note, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
 	content->SetSizer(layout);
 	auto* outer = new wxBoxSizer(wxVERTICAL);
@@ -672,9 +681,12 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.buildingLevels = floors->GetValue();
 	candidate.settings.mountainLevels = mountainLevels->GetValue();
 	candidate.settings.streetVariation = streetVariation->GetValue();
+	candidate.settings.mountainPasses = passes->GetValue();
 	candidate.settings.physicalStairs = physicalStairs->GetValue();
 	candidate.settings.caveDepth = depth->GetValue();
 	candidate.settings.caveEntrances = caveEntrances->GetValue();
+	candidate.settings.caveChambers = chambers->GetValue();
+	candidate.settings.wildernessCaveEntry = wildEntry->GetValue();
 	candidate.settings.caveFill = fill->GetValue();
 	candidate.settings.roadWidth = road->GetValue();
 	candidate.connectionItemId = travel->GetValue();
@@ -683,6 +695,9 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.heightmapPath = heightmap->GetValue();
 	candidate.biomeHintsPath = biomeHints->GetValue();
 	candidate.landMaskPath = landMask->GetValue();
+	candidate.natureMaskPath = natureMask->GetValue();
+	candidate.natureFloor = natureFloor->GetValue();
+	candidate.natureMask.clear();
 	candidate.objectProfilePath = objects->GetValue();
 	auto parseSeed = [&](wxTextCtrl* control, std::optional<uint32_t>& value) {
 		const wxString text = control->GetValue();
@@ -769,9 +784,13 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	auto updateDescription = [&]() {
 		size_t tiles = 0;
 		description->SetValue(WorldEditor::Describe(plan, &tiles));
-		const bool fits = tiles <= WorldEditor::DefaultTileBudget;
+		if(!resolved.world.natureMask.empty()) {
+			tiles=WorldEditor::ApplicationTileCount(resolved,plan);
+			description->AppendText(wxString::Format("\nLOCAL NATURE: %llu replaceable tiles on floor offset %d. Dimmed pixels are preserved. Existing complete world required; grounds and ordinary objects inside the white mask are replaced.",static_cast<unsigned long long>(tiles),resolved.world.natureFloor));
+		}
+		const bool fits = tiles>0 && tiles <= WorldEditor::DefaultTileBudget;
 		apply->Enable(fits);
-		apply->SetToolTip(fits ? "Apply this displayed plan in one undo operation." : "This plan exceeds the editor tile budget. Reduce its size/floors or export in a 64-bit batch with --tile-budget.");
+		apply->SetToolTip(!tiles ? "The nature mask selects no replaceable natural tiles on this floor." : fits ? "Apply this displayed plan in one undo operation." : "This plan exceeds the editor tile budget. Reduce its size/floors or export in a 64-bit batch with --tile-budget.");
 	};
 	wxBitmap rendered;
 	int renderedFloor = -1, renderedView = -1;
@@ -783,7 +802,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		}
 		const int view = views->GetSelection();
 		if (!rendered.IsOk() || renderedFloor != index || renderedView != view) {
-			const wxImage image = WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
+			const wxImage image = WorldEditor::Render(plan, plan.layers[index].offsetZ, static_cast<WorldEditor::PreviewLayer>(view), &resolved);
 			rendered = image.IsOk() ? wxBitmap(image) : wxNullBitmap;
 			renderedFloor = index;
 			renderedView = view;
@@ -878,8 +897,9 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 			return;
 		}
 		GenerationSpec editable = resolved;
+		wxString natureTemplate;
 		editable.world.settings = plan.settings;
-		if (!WorldGen::ExportGeographyInputs(plan, prefix.GetFullPath(), editable.world.heightmapPath, editable.world.biomeHintsPath, error, &editable.world.landMaskPath) || !ProceduralRecipe::Save(prefix.GetFullPath() + "_editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
+		if (!WorldGen::ExportGeographyInputs(plan, prefix.GetFullPath(), editable.world.heightmapPath, editable.world.biomeHintsPath, error, &editable.world.landMaskPath, &natureTemplate) || !ProceduralRecipe::Save(prefix.GetFullPath() + "_editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 			g_gui.PopupDialog(&preview, "Export failed", error, wxOK | wxICON_ERROR);
 			return;
 		}

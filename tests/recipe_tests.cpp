@@ -46,6 +46,11 @@ static void TestRecipes() {
 	original.world.stairItems = {410,1385,1388,1392,1390};
 	original.world.settings.caveDepth = 2;
 	original.world.settings.caveEntrances = 5;
+	original.world.settings.caveChambers = 12;
+	original.world.settings.wildernessCaveEntry = true;
+	original.world.settings.mountainPasses = true;
+	original.world.natureMaskPath = "edit.png";
+	original.world.natureFloor = -2;
 	original.world.settings.caveFill = 40;
 	original.world.settings.roadWidth = 3;
 	original.world.settings.settlementLayout = WorldGen::SettlementLayout::Blocks;
@@ -64,6 +69,7 @@ static void TestRecipes() {
 	Check(ProceduralRecipe::Save(file, original, error), "World recipe must save");
 	GenerationSpec loaded;
 	Check(ProceduralRecipe::Load(file, loaded, error), "World recipe must load");
+	Check(loaded.world.settings.caveChambers==12 && loaded.world.settings.wildernessCaveEntry && loaded.world.settings.mountainPasses && loaded.world.natureMaskPath=="edit.png" && loaded.world.natureFloor==-2,"Place composition and local nature paths round-trip");
 	Check(loaded.world.settings.settlementAnchors == original.world.settings.settlementAnchors, "Authored city anchors must round-trip in order");
 	Check(loaded.source == original.source && loaded.seed == original.seed, "Full uint32 seed and world source must round-trip");
 	Check(loaded.region.originX == 200 && loaded.region.originY == 300 && loaded.region.width == 128 && loaded.region.height == 96, "Target origin and dimensions must round-trip");
@@ -395,14 +401,17 @@ static void TestEditableInputs() {
 	}
 	const auto prefix = std::filesystem::temp_directory_path() / (std::filesystem::path(u8"rme-editable-\u00e7-").native() + std::filesystem::path(std::to_string(wxGetProcessId())).native());
 	const auto utf8 = prefix.u8string();
-	wxString heightPath, biomePath, maskPath;
-	Check(WorldGen::ExportGeographyInputs(plan, wxString::FromUTF8(std::string(utf8.begin(), utf8.end())), heightPath, biomePath, error, &maskPath), "Editable PNG files must save to Unicode paths");
+	wxString heightPath, biomePath, maskPath, naturePath;
+	Check(WorldGen::ExportGeographyInputs(plan, wxString::FromUTF8(std::string(utf8.begin(), utf8.end())), heightPath, biomePath, error, &maskPath, &naturePath), "Editable PNG files must save to Unicode paths");
 	wxImage reopened;
 	WorldGen::GeographyInput replay;
 	Check(WorldGen::LoadWorldPNG(heightPath, reopened, error) && WorldGen::DecodeHeightmap(reopened, 32, 32, replay, error), "Saved editable heightmap must reload");
 	Check(WorldGen::LoadWorldPNG(biomePath, reopened, error) && WorldGen::DecodeBiomeHints(reopened, 32, 32, replay, error), "Saved biome alpha/palette must reload");
 	Check(WorldGen::LoadWorldPNG(maskPath, reopened, error) && WorldGen::DecodeLandMask(reopened, 32, 32, replay, error), "Exported coastline PNG must pass strict input decoding");
 	for (size_t i = 0; i < cells.size(); ++i) Check(replay.landMask[i] == (cells[i].terrain == WorldGen::Terrain::Ocean ? 0 : 1), "Exported mask must preserve the planned ocean outline");
+	std::vector<uint8_t> nature;
+	Check(WorldGen::LoadWorldPNG(naturePath,reopened,error) && WorldGen::DecodeNatureMask(reopened,32,32,nature,error) && std::count(nature.begin(),nature.end(),uint8_t(1))==0,"Exported nature authoring template preserves every tile until painted");
+	std::filesystem::remove(std::filesystem::u8path(nstr(naturePath)));
 	std::filesystem::remove(std::filesystem::u8path(nstr(maskPath)));
 	Check(decoded.elevation == replay.elevation && decoded.biomes == replay.biomes, "PNG encoding must preserve every editable sample and transparent hole");
 	std::filesystem::remove(std::filesystem::u8path(nstr(heightPath)));
@@ -413,8 +422,22 @@ static void TestEditableInputs() {
 	Check(!WorldGen::EncodeGeographyInputs(invalid, heightmap, hints, error) && heightmap.GetWidth() == 32 && heightmap.GetRed(0, 0) == before, "Failed encoding must preserve the caller's images");
 }
 
+
+static void TestNatureMask() {
+	wxImage image(32,32);image.SetRGB(wxRect(0,0,32,32),0,0,0);image.InitAlpha();
+	image.SetRGB(4,5,255,255,255);image.SetRGB(6,7,255,255,255);image.SetAlpha(6,7,0);
+	std::vector<uint8_t> mask;wxString error;
+	Check(WorldGen::DecodeNatureMask(image,32,32,mask,error) && mask[5*32+4]==1 && mask[7*32+6]==0,"White selects; black and transparent preserve");
+	const auto before=mask;image.SetAlpha(4,5,128);
+	Check(!WorldGen::DecodeNatureMask(image,32,32,mask,error) && mask==before,"Partial mask alpha fails without mutating the caller");
+	image.SetAlpha(4,5,255);image.SetRGB(4,5,255,0,0);
+	Check(!WorldGen::DecodeNatureMask(image,32,32,mask,error) && mask==before,"Unrecognized selection colors fail atomically");
+	Check(!WorldGen::DecodeNatureMask(image,64,64,mask,error),"Nature masks cannot be resized and accidentally affect another area");
+}
+
 int main() {
 	try {
+		TestNatureMask();
 		TestDiagnostics();
 		TestWorldInputs();
 		TestEditableInputs();

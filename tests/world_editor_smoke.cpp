@@ -803,6 +803,37 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		const auto description = WorldEditor::Describe(plan, &describedTiles);
 		Check(describedTiles == stats.changedTiles && description.Contains("Editor budget"), "Preview must report the actual whole-world tile count before application");
 		CheckTravel(editor, resolved, plan);
+
+		{
+			auto local=resolved;local.world.protectExisting=false;local.world.objectSeed=934521;
+			local.world.natureMask.assign(size_t(plan.settings.width)*plan.settings.height,0);
+			for(int y=12;y<plan.settings.height/2;++y)for(int x=12;x<plan.settings.width/2;++x)local.world.natureMask[size_t(y)*plan.settings.width+x]=1;
+			std::vector<std::pair<Position,Tile*>> untouched;
+			for(const auto& layer:plan.layers)for(int y=0;y<plan.settings.height;++y)for(int x=0;x<plan.settings.width;++x) {
+				const auto i=size_t(y)*plan.settings.width+x;const auto& cell=layer.cells[i];
+				const bool natural=cell.terrain==WorldGen::Terrain::Grass || cell.terrain==WorldGen::Terrain::Forest || cell.terrain==WorldGen::Terrain::Desert || cell.terrain==WorldGen::Terrain::Snow || cell.terrain==WorldGen::Terrain::Beach;
+				if(layer.offsetZ!=0 || !local.world.natureMask[i] || !natural || (cell.flags&WorldGen::Reserved)) {
+					Position pos(local.region.originX+x,local.region.originY+y,local.region.z+layer.offsetZ);untouched.push_back({pos,editor.map.getTile(pos)});
+				}
+			}
+			WorldEditor::ApplicationStats localStats;
+			const bool localApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);
+			Check(localApplied,"Local nature generation validates the combined map: "+nstr(error));
+			Check(localStats.changedTiles>0 && localStats.changedTiles<stats.changedTiles && localStats.furniture==0,"Local edit applies only selected natural tiles");
+			for(const auto& [pos,tile]:untouched)Check(editor.map.getTile(pos)==tile,"Every unselected tile, road, building and other floor retains its original tile object");
+			const auto localHash=MapHash(editor.map);
+			editor.actionQueue->undo();Check(MapHash(editor.map)==applied,"Local nature edit undoes as one transaction");
+			editor.actionQueue->redo();Check(MapHash(editor.map)==localHash,"Local nature edit redoes exactly");
+			editor.actionQueue->undo();
+			bool preserveVisited=false;
+			const bool cancelledLocal=WorldEditor::ApplyPlan(editor,local,plan,error,nullptr,[&](const char* stage,int) { if(std::string(stage)=="Preserving unselected tiles"){preserveVisited=true;return false;}return true; });
+			Check(!cancelledLocal && preserveVisited && MapHash(editor.map)==applied,"Cancellation while combining untouched tiles preserves the complete original map");
+			local.world.natureFloor=8;
+			Check(!WorldEditor::ApplyPlan(editor,local,plan,error) && MapHash(editor.map)==applied,"Missing mask floor fails without changing the map");
+			local.world.natureFloor=0;std::fill(local.world.natureMask.begin(),local.world.natureMask.end(),0);
+			Check(!WorldEditor::ApplyPlan(editor,local,plan,error) && MapHash(editor.map)==applied,"Empty effective mask fails atomically");
+		}
+
 		editor.actionQueue->undo();
 		Check(MapHash(editor.map) == before, "One undo must restore terrain, walls, travel and untouched tiles");
 		Check(!editor.actionQueue->canUndo(), "World generation must occupy one undo entry");

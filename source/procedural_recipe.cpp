@@ -188,6 +188,9 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	json::mArray stairs; for (int id : spec.world.stairItems) stairs.emplace_back(id); world["stairItems"] = json::mValue(stairs);
 	world["caveDepth"] = json::mValue(spec.world.settings.caveDepth);
 	world["caveEntrances"] = spec.world.settings.caveEntrances;
+	world["caveChambers"] = spec.world.settings.caveChambers;
+	world["mountainPasses"] = spec.world.settings.mountainPasses;
+	world["wildernessCaveEntry"] = spec.world.settings.wildernessCaveEntry;
 	world["caveFill"] = json::mValue(spec.world.settings.caveFill);
 	world["roadWidth"] = json::mValue(spec.world.settings.roadWidth);
 	world["layout"] = json::mValue(spec.world.settings.settlementLayout == WorldGen::SettlementLayout::Blocks ? "blocks" : "organic");
@@ -199,6 +202,8 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["heightmap"] = json::mValue(filename(spec.world.heightmapPath));
 	world["biomeHints"] = json::mValue(filename(spec.world.biomeHintsPath));
 	world["landMask"] = json::mValue(filename(spec.world.landMaskPath));
+	world["natureMask"] = json::mValue(filename(spec.world.natureMaskPath));
+	world["natureFloor"] = spec.world.natureFloor;
 	world["objectProfile"] = json::mValue(filename(spec.world.objectProfilePath));
 	if (spec.world.objectSeed) world["objectSeed"] = json::mValue(uint64_t(*spec.world.objectSeed));
 	if (spec.world.settings.caveSeed) world["caveSeed"] = json::mValue(uint64_t(*spec.world.settings.caveSeed));
@@ -474,6 +479,12 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		if (physical != world.end()) { if (physical->second.type() != json::bool_type) { error = "physicalStairs must be a boolean."; return false; } spec.world.settings.physicalStairs = physical->second.get_bool(); }
 		integer("caveDepth", spec.world.settings.caveDepth);
 		integer("caveEntrances", spec.world.settings.caveEntrances);
+		integer("caveChambers", spec.world.settings.caveChambers);
+		const auto passes=world.find("mountainPasses");
+		if(passes!=world.end()) {if(passes->second.type()!=json::bool_type){error="mountainPasses must be boolean.";return false;}spec.world.settings.mountainPasses=passes->second.get_bool();}
+		const auto wildEntry=world.find("wildernessCaveEntry");
+		if(wildEntry!=world.end()) { if(wildEntry->second.type()!=json::bool_type) {error="wildernessCaveEntry must be boolean.";return false;} spec.world.settings.wildernessCaveEntry=wildEntry->second.get_bool(); }
+		integer("natureFloor", spec.world.natureFloor);
 		integer("caveFill", spec.world.settings.caveFill);
 		integer("roadWidth", spec.world.settings.roadWidth);
 		integer("connectionItemId", spec.world.connectionItemId);
@@ -531,7 +542,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 			}
 			spec.world.catalogPath = wxString::FromUTF8(catalog->second.get_str());
 		}
-		for (const auto& field : { std::pair { "heightmap", &spec.world.heightmapPath }, std::pair { "biomeHints", &spec.world.biomeHintsPath }, std::pair { "landMask", &spec.world.landMaskPath }, std::pair { "objectProfile", &spec.world.objectProfilePath } }) {
+		for (const auto& field : { std::pair { "heightmap", &spec.world.heightmapPath }, std::pair { "biomeHints", &spec.world.biomeHintsPath }, std::pair { "landMask", &spec.world.landMaskPath }, std::pair { "objectProfile", &spec.world.objectProfilePath }, std::pair { "natureMask", &spec.world.natureMaskPath } }) {
 			const auto value = world.find(field.first);
 			if (value == world.end()) {
 				continue;
@@ -568,6 +579,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		settings.width = spec.region.width;
 		settings.height = spec.region.height;
 		std::string problem;
+		if (spec.world.natureFloor < -4 || spec.world.natureFloor > 8) { error="natureFloor must be a relative floor offset in -4..8."; return false; }
 		if (!WorldGen::ValidateSettings(settings, problem)) {
 			error = wxstr(problem);
 			return false;
@@ -592,7 +604,7 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		error = "Could not resolve recipe directory.";
 		return false;
 	}
-	for (wxString* value : { &spec.imageMask.imagePath, &spec.imageMask.legendPath, &spec.world.catalogPath, &spec.world.heightmapPath, &spec.world.biomeHintsPath, &spec.world.landMaskPath, &spec.world.objectProfilePath }) {
+	for (wxString* value : { &spec.imageMask.imagePath, &spec.imageMask.legendPath, &spec.world.catalogPath, &spec.world.heightmapPath, &spec.world.biomeHintsPath, &spec.world.landMaskPath, &spec.world.objectProfilePath, &spec.world.natureMaskPath }) {
 		const std::string bytes = nstr((*value));
 		if (value->find(wxUniChar(0)) != wxString::npos || bytes.size() > 32768 || bytes.find('\0') != std::string::npos) {
 			error = "Recipe paths must be valid strings of at most 32768 bytes.";

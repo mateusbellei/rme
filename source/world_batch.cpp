@@ -459,13 +459,15 @@ namespace WorldBatch {
 		json::mObject editableInputs;
 		if (options.exportEditableInputs) {
 			GenerationSpec editable = resolved;
+			wxString natureTemplate;
 			editable.world.settings = plan.settings;
-			if (!WorldGen::ExportGeographyInputs(plan, output + "inputs", editable.world.heightmapPath, editable.world.biomeHintsPath, error, &editable.world.landMaskPath) || !ProceduralRecipe::Save(output + "editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
+			if (!WorldGen::ExportGeographyInputs(plan, output + "inputs", editable.world.heightmapPath, editable.world.biomeHintsPath, error, &editable.world.landMaskPath, &natureTemplate) || !ProceduralRecipe::Save(output + "editable-recipe.json", editable, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
 				return false;
 			}
 			editableInputs["heightmap"] = "inputs_heightmap.png";
 			editableInputs["biomeHints"] = "inputs_biomes.png";
 			editableInputs["landMask"] = "inputs_land.png";
+			editableInputs["natureMaskTemplate"] = "inputs_nature.png";
 			editableInputs["recipe"] = "editable-recipe.json";
 		}
 		if (!ProceduralRecipe::Save(output + "recipe.json", resolved, error, ProceduralRecipe::PathMode::RelativeToRecipe)) {
@@ -493,6 +495,15 @@ namespace WorldBatch {
 		json::mObject brushUsage,patchUsage,rejected;
 		for(const auto& [name,count]:prepared.application.objectBrushUsage)brushUsage[name]=json::mValue(uint64_t(count));
 		for(const auto& [name,count]:prepared.application.objectPatchUsage)patchUsage[name]=json::mValue(uint64_t(count));
+		json::mObject sceneUsage;for(const auto& [name,count]:prepared.application.sceneUsage)sceneUsage[name]=json::mValue(uint64_t(count));
+		report["sceneUsage"]=sceneUsage;report["skippedScenes"]=json::mValue(uint64_t(prepared.application.skippedScenes));
+		json::mArray scenePlacements;
+		for(const auto& scene:prepared.application.scenePlacements) {
+			json::mObject entry;json::mArray position;
+			position.push_back(scene.position.x);position.push_back(scene.position.y);position.push_back(scene.position.z);
+			entry["id"]=scene.id;entry["position"]=position;entry["rotation"]=scene.rotation;entry["objects"]=json::mValue(uint64_t(scene.objects));scenePlacements.push_back(entry);
+		}
+		report["scenePlacements"]=scenePlacements;
 		report["objectBrushUsage"]=brushUsage;report["objectPatchUsage"]=patchUsage;
 		for(const auto& [name,count]:prepared.application.objectBrushRejected)rejected[name]=json::mValue(uint64_t(count));
 		report["objectBrushRejected"]=rejected;

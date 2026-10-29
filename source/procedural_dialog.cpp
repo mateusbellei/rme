@@ -12,6 +12,7 @@
 #include "world_editor.h"
 #include "world_export.h"
 #include "world_inputs.h"
+#include "world_decoration.h"
 #include <wx/imagpng.h>
 #include <wx/wfstream.h>
 #include "procedural_mask.h"
@@ -589,6 +590,8 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	grid->Add(new wxStaticText(content,wxID_ANY,"Mountain roads:"),0,wxALIGN_CENTER_VERTICAL);
 	auto* passes=new wxCheckBox(content,wxID_ANY,"Allow costly passes through ridges");
 	passes->SetValue(settings.mountainPasses);grid->Add(passes,0,wxEXPAND);
+    grid->Add(new wxStaticText(content,wxID_ANY,"Building sites:"),0,wxALIGN_CENTER_VERTICAL);
+    auto* terrainLots=new wxCheckBox(content,wxID_ANY,"Prefer flat dry sites");terrainLots->SetValue(settings.terrainAwareLots);grid->Add(terrainLots,0,wxEXPAND);
 	auto* streetVariation = spin("Street irregularity %:", 0, 60, settings.streetVariation);
 	grid->Add(new wxStaticText(content, wxID_ANY, "Vertical travel:"), 0, wxALIGN_CENTER_VERTICAL);
 	auto* physicalStairs = new wxCheckBox(content, wxID_ANY, "Physical directional stairs");
@@ -682,6 +685,7 @@ void ProceduralDialog::OnWorldSettings(wxCommandEvent& event) {
 	candidate.settings.mountainLevels = mountainLevels->GetValue();
 	candidate.settings.streetVariation = streetVariation->GetValue();
 	candidate.settings.mountainPasses = passes->GetValue();
+    candidate.settings.terrainAwareLots=terrainLots->GetValue();
 	candidate.settings.physicalStairs = physicalStairs->GetValue();
 	candidate.settings.caveDepth = depth->GetValue();
 	candidate.settings.caveEntrances = caveEntrances->GetValue();
@@ -737,7 +741,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	}
 	floors->SetSelection(0);
 	auto* views = new wxChoice(&preview, wxID_ANY);
-	for (const auto* label : { "Terrain", "Elevation", "Moisture", "Temperature", "Construction roles" }) {
+	for (const auto* label : { "Terrain", "Elevation", "Moisture", "Temperature", "Construction roles", "Path distance (32 tiles)" }) {
 		views->Append(label);
 	}
 	views->SetSelection(0);
@@ -762,6 +766,17 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	seedRow->Add(nextSeed, 0, wxRIGHT, 6);
 	seedRow->Add(rebuild, 0);
 	layout->Add(seedRow, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    auto* paintRow=new wxBoxSizer(wxHORIZONTAL);
+    auto* paintMode=new wxChoice(&preview,wxID_ANY);
+    for(const auto* label:{"Inspect", "Paint nature replacement", "Paint preservation"})paintMode->Append(label);
+    paintMode->SetSelection(0);paintRow->Add(paintMode,1,wxRIGHT,6);
+    paintRow->Add(new wxStaticText(&preview,wxID_ANY,"Radius:"),0,wxALIGN_CENTER_VERTICAL|wxRIGHT,4);
+    auto* paintRadius=new wxSpinCtrl(&preview,wxID_ANY,"6",wxDefaultPosition,wxSize(65,-1),wxSP_ARROW_KEYS,1,32,6);
+    paintRow->Add(paintRadius,0,wxRIGHT,6);
+    auto* saveMask=new wxButton(&preview,wxID_ANY,"Save mask + recipe...");paintRow->Add(saveMask,0);
+    layout->Add(paintRow,0,wxEXPAND|wxLEFT|wxRIGHT|wxBOTTOM,8);
+    paintMode->SetToolTip("Paint on the existing world plan. First stroke starts a black preservation mask on this floor. Only nature is replaced; buildings and travel stay protected. Save to reuse the selection.");
+    WorldGen::Point lastPaint{-1,-1};
 	auto* canvas = new wxScrolledWindow(&preview, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxHSCROLL | wxVSCROLL | wxFULL_REPAINT_ON_RESIZE);
 	canvas->SetMinSize(wxSize(120, 100));
 	canvas->SetScrollRate(16, 16);
@@ -781,9 +796,12 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	buttons->Add(new wxButton(&preview, wxID_CANCEL, "Close"));
 	layout->Add(buttons, 0, wxALIGN_RIGHT | wxALL, 8);
 	preview.SetSizer(layout);
-	auto updateDescription = [&]() {
-		size_t tiles = 0;
-		description->SetValue(WorldEditor::Describe(plan, &tiles));
+	wxString cachedDescription;
+    size_t completeTiles=0;
+    auto updateDescription = [&]() {
+        if(cachedDescription.empty())cachedDescription=WorldEditor::Describe(plan,&completeTiles);
+        size_t tiles=completeTiles;
+        description->SetValue(cachedDescription);
 		if(!resolved.world.natureMask.empty()) {
 			tiles=WorldEditor::ApplicationTileCount(resolved,plan);
 			description->AppendText(wxString::Format("\nLOCAL NATURE: %llu replaceable tiles on floor offset %d. Dimmed pixels are preserved. Existing complete world required; grounds and ordinary objects inside the white mask are replaced.",static_cast<unsigned long long>(tiles),resolved.world.natureFloor));
@@ -830,7 +848,41 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 			dc.DrawBitmap(rendered, 0, 0, true);
 		}
 	});
+    auto paintAt=[&](wxMouseEvent& event) {
+        if(paintMode->GetSelection()==0 || floors->GetSelection()<0)return;
+        const auto pixel=canvas->CalcUnscrolledPosition(event.GetPosition());
+        const WorldGen::Point point{int(std::floor(pixel.x/previewScale)),int(std::floor(pixel.y/previewScale))};
+        if(!plan.Contains(point)){lastPaint={-1,-1};return;}
+        const int floor=plan.layers[floors->GetSelection()].offsetZ;
+        if(!resolved.world.natureMask.empty() && resolved.world.natureFloor!=floor){inspection->SetLabel("The current mask belongs to another floor. Return to that floor or close and load a different local recipe.");return;}
+        if(resolved.world.natureMask.empty())resolved.world.natureMask.assign(size_t(plan.settings.width)*plan.settings.height,0);
+        resolved.world.natureFloor=floor;
+        resolved.world.natureMaskPath.clear(); // In-memory preview snapshot; save writes a portable mask reference.
+        resolved.world.protectExisting=false;
+        WorldGen::PaintNatureMask(resolved.world.natureMask,plan.settings.width,plan.settings.height,lastPaint.x<0?point:lastPaint,point,paintRadius->GetValue(),paintMode->GetSelection()==1);
+        lastPaint=point;rendered=wxNullBitmap;updateDescription();redraw();
+    };
+    canvas->Bind(wxEVT_LEFT_DOWN,[&](wxMouseEvent& event){lastPaint={-1,-1};paintAt(event);if(paintMode->GetSelection()!=0 && !canvas->HasCapture())canvas->CaptureMouse();event.Skip();});
+    canvas->Bind(wxEVT_LEFT_UP,[&](wxMouseEvent& event){lastPaint={-1,-1};if(canvas->HasCapture())canvas->ReleaseMouse();event.Skip();});
+    canvas->Bind(wxEVT_MOUSE_CAPTURE_LOST,[&](wxMouseCaptureLostEvent&){lastPaint={-1,-1};});
+    saveMask->Bind(wxEVT_BUTTON,[&](wxCommandEvent&){
+        if(resolved.world.natureMask.empty()){inspection->SetLabel("Paint a nature selection first.");return;}
+        wxFileDialog picker(&preview,"Save local nature recipe","","local-nature.json","JSON recipe (*.json)|*.json",wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
+        if(picker.ShowModal()!=wxID_OK)return;
+        wxFileName prefix(picker.GetPath());prefix.ClearExt();
+        const auto maskPath=prefix.GetFullPath()+"_nature.png";
+        if(wxFileExists(maskPath) && g_gui.PopupDialog(&preview,"Replace mask?","Replace the companion nature mask PNG?",wxYES_NO|wxICON_QUESTION)!=wxYES)return;
+        wxImage image(plan.settings.width,plan.settings.height);
+        if(!image.IsOk()){inspection->SetLabel("Could not allocate mask PNG.");return;}
+        for(int y=0;y<plan.settings.height;++y)for(int x=0;x<plan.settings.width;++x){const uint8_t value=resolved.world.natureMask[size_t(y)*plan.settings.width+x]?255:0;image.SetRGB(x,y,value,value,value);}
+        wxPNGHandler encoder;wxFileOutputStream stream(maskPath);
+        if(!stream.IsOk() || !encoder.SaveFile(&image,stream,false) || !stream.Close()){g_gui.PopupDialog(&preview,"Export failed","Could not write nature mask PNG.",wxOK|wxICON_ERROR);return;}
+        auto saved=resolved;saved.world.natureMaskPath=maskPath;
+        if(!ProceduralRecipe::Save(picker.GetPath(),saved,error,ProceduralRecipe::PathMode::RelativeToRecipe)){g_gui.PopupDialog(&preview,"Export failed",error,wxOK|wxICON_ERROR);return;}
+        inspection->SetLabel("Saved local nature recipe and PNG. Reuse them with this complete existing world.");
+    });
 	canvas->Bind(wxEVT_MOTION, [&](wxMouseEvent& event) {
+        if(event.LeftIsDown())paintAt(event);else lastPaint={-1,-1};
 		const wxPoint pixel = canvas->CalcUnscrolledPosition(event.GetPosition());
 		const WorldGen::Point point { int(std::floor(pixel.x / previewScale)), int(std::floor(pixel.y / previewScale)) };
 		const int index = floors->GetSelection();
@@ -842,6 +894,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		event.Skip();
 	});
 	auto regenerate = [&](uint32_t requestedSeed) {
+        if(!resolved.world.natureMask.empty()){seed->SetValue(double(plan.settings.seed));inspection->SetLabel("Local nature editing requires the same world plan. Close this preview to generate a different geography seed.");return;}
 		GenerationSpec candidate = resolved, candidateResolved;
 		candidate.seed = requestedSeed;
 		WorldGen::Plan candidatePlan;
@@ -860,6 +913,7 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 		const int selected = floors->GetSelection();
 		const int oldFloor = selected >= 0 ? plan.layers[selected].offsetZ : 0;
 		plan = std::move(candidatePlan);
+        cachedDescription.clear();
 		resolved = std::move(candidateResolved);
 		rendered = wxNullBitmap;
 		floors->Clear();
@@ -903,10 +957,10 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 			g_gui.PopupDialog(&preview, "Export failed", error, wxOK | wxICON_ERROR);
 			return;
 		}
-		const char* names[] = { "terrain", "elevation", "moisture", "temperature", "roles" };
+		const char* names[] = { "terrain", "elevation", "moisture", "temperature", "roles", "path-distance" };
 		wxPNGHandler encoder;
 		for (const auto& layer : plan.layers) {
-			for (int view = 0; view < 5; ++view) {
+			for (int view = 0; view < 6; ++view) {
 				const wxString filename = prefix.GetFullPath() + wxString::Format("_z%d_%s.png", layer.offsetZ, wxString::FromUTF8(names[view]));
 				wxImage image = WorldEditor::Render(plan, layer.offsetZ, static_cast<WorldEditor::PreviewLayer>(view));
 				wxFileOutputStream stream(filename);

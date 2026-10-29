@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "world_editor.h"
+#include "world_decoration.h"
 #include "procedural_recipe.h"
 #include "procedural_common.h"
 #include "world_batch.h"
@@ -810,6 +811,8 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			auto local=resolved;local.world.protectExisting=false;local.world.objectSeed=934521;
 			local.world.natureMask.assign(size_t(plan.settings.width)*plan.settings.height,0);
 			for(int y=12;y<plan.settings.height/2;++y)for(int x=12;x<plan.settings.width/2;++x)local.world.natureMask[size_t(y)*plan.settings.width+x]=1;
+            Check(WorldGen::PaintNatureMask(local.world.natureMask,plan.settings.width,plan.settings.height,{12,12},{plan.settings.width/2,plan.settings.height/2},6,true),"Paint a continuous local selection using the preview brush engine");
+            Check(WorldGen::PaintNatureMask(local.world.natureMask,plan.settings.width,plan.settings.height,{24,24},{40,24},3,false),"Erase a preservation stroke before applying the local selection");
 			std::vector<std::pair<Position,Tile*>> untouched;
 			for(const auto& layer:plan.layers)for(int y=0;y<plan.settings.height;++y)for(int x=0;x<plan.settings.width;++x) {
 				const auto i=size_t(y)*plan.settings.width+x;const auto& cell=layer.cells[i];
@@ -821,6 +824,8 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			WorldEditor::ApplicationStats localStats;
 			const auto basePreview=WorldEditor::Render(plan,0);
 			const auto scopedPreview=WorldEditor::Render(plan,0,WorldEditor::PreviewLayer::Terrain,&local);
+            const auto accessPreview=WorldEditor::Render(plan,0,WorldEditor::PreviewLayer::PathDistance,&local);
+            Check(accessPreview.IsOk() && accessPreview.GetWidth()==plan.settings.width,"Path-access diagnostic renders the complete selected floor");
 			Check(scopedPreview.IsOk() && scopedPreview.GetBlue(0,0)==basePreview.GetBlue(0,0)/4,"Local preview dims preserved cells");
 			const auto surfaceStart=std::chrono::steady_clock::now();
 			const bool localApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);

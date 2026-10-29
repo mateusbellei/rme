@@ -2,8 +2,52 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 
 namespace WorldGen {
+	bool PaintNatureMask(std::vector<uint8_t>& mask,int width,int height,Point from,Point to,int radius,bool replace) {
+		if(width<=0 || height<=0 || int64_t(width)*height>8*1024*1024 || mask.size()!=size_t(width)*height || radius<1 || radius>32 || from.x<0 || from.y<0 || from.x>=width || from.y>=height || to.x<0 || to.y<0 || to.x>=width || to.y>=height)return false;
+		const int dx=std::abs(to.x-from.x),dy=-std::abs(to.y-from.y),sx=from.x<to.x?1:-1,sy=from.y<to.y?1:-1;
+		int error=dx+dy;
+		for(;;) {
+			for(int y=std::max(0,from.y-radius);y<=std::min(height-1,from.y+radius);++y)for(int x=std::max(0,from.x-radius);x<=std::min(width-1,from.x+radius);++x)if((x-from.x)*(x-from.x)+(y-from.y)*(y-from.y)<=radius*radius)mask[size_t(y)*width+x]=replace?1:0;
+			if(from==to)break;
+			const int twice=2*error;
+			if(twice>=dy){error+=dy;from.x+=sx;}
+			if(twice<=dx){error+=dx;from.y+=sy;}
+		}
+		return true;
+	}
+
+	bool BuildDecorationEnvironment(const Layer& layer, int width, int height, DecorationEnvironment& result) {
+		if(width<=0 || height<=0 || int64_t(width)*height>8*1024*1024 || layer.cells.size()!=size_t(width)*height)return false;
+		DecorationEnvironment next;
+		const auto count=layer.cells.size();
+		next.water.assign(count,33);next.path.assign(count,33);next.forestEdge.assign(count,33);next.slope.assign(count,0);
+		for(int y=0;y<height;++y)for(int x=0;x<width;++x) {
+			const size_t i=size_t(y)*width+x;const auto& cell=layer.cells[i];
+			if(IsWater(cell.terrain))next.water[i]=0;
+			if(cell.terrain==Terrain::Road || cell.terrain==Terrain::Bridge || cell.terrain==Terrain::Plaza)next.path[i]=0;
+			for(const auto [dx,dy]:{std::pair{1,0},std::pair{-1,0},std::pair{0,1},std::pair{0,-1}}) {
+				if(x+dx<0 || y+dy<0 || x+dx>=width || y+dy>=height)continue;
+				const auto& other=layer.cells[size_t(y+dy)*width+x+dx];
+				if(other.terrain!=Terrain::Void)next.slope[i]=std::max(next.slope[i],uint16_t(std::abs(int(cell.elevation)-int(other.elevation))));
+				if((cell.terrain==Terrain::Forest && other.terrain==Terrain::Grass) || (cell.terrain==Terrain::Grass && other.terrain==Terrain::Forest))next.forestEdge[i]=0;
+			}
+		}
+		// Two raster passes compute exact bounded L1 distance without a large queue.
+		for(auto* distances:{&next.water,&next.path,&next.forestEdge}) {
+			auto& d=*distances;
+			for(int y=0;y<height;++y)for(int x=0;x<width;++x){const size_t i=size_t(y)*width+x;if(x)d[i]=std::min(int(d[i]),int(d[i-1])+1);if(y)d[i]=std::min(int(d[i]),int(d[i-width])+1);}
+			for(int y=height-1;y>=0;--y)for(int x=width-1;x>=0;--x){const size_t i=size_t(y)*width+x;if(x+1<width)d[i]=std::min(int(d[i]),int(d[i+1])+1);if(y+1<height)d[i]=std::min(int(d[i]),int(d[i+width])+1);}
+		}
+		result=std::move(next);return true;
+	}
+
+	int TransitionDensity(int distance, int width, int edgeDensity) {
+		if(width<=0)return 100;
+		return std::clamp(edgeDensity,0,100)+(100-std::clamp(edgeDensity,0,100))*std::clamp(distance,0,width)/width;
+	}
 
 	bool CanPlaceDecoration(const DecorationGrid& grid, Point anchor, const std::vector<DecorationCell>& footprint, std::string* reason) {
 		auto fail = [&](const char* message) {if(reason){*reason=message;

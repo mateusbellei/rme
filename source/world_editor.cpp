@@ -100,7 +100,7 @@ namespace WorldEditor {
 
 		struct ObjectPatch {
 			std::string id;
-			int weight=1, density=100, minElevation=0, maxElevation=10000, minMoisture=0, maxMoisture=10000, maxWaterDistance=-1;
+			int weight=1, density=100, minElevation=0, maxElevation=10000, minMoisture=0, maxMoisture=10000, maxWaterDistance=-1, minWaterDistance=0, maxPathDistance=-1, maxEdgeDistance=-1, minSlope=0, maxSlope=10000;
 			std::vector<DoodadBrush*> brushes;
 		};
 		constexpr const char* ObjectHabitats[] = {"none","forest","desert","ice","cave","coast","highland"};
@@ -150,8 +150,8 @@ namespace WorldEditor {
 							if(id==fields.end() || id->second.type()!=json::str_type) {error="Ecology patch needs an id.";return false;}
 							patch.id=id->second.get_str();
 							if(patch.id.empty() || patch.id.size()>40 || patch.id=="base" || patch.id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-")!=std::string::npos || !ids.insert(patch.id).second) {error="Ecology patch IDs must be unique bounded identifiers.";return false;}
-							if(!integer(fields,"weight",patch.weight,1,100) || !integer(fields,"density",patch.density,0,200) || !integer(fields,"minElevation",patch.minElevation,0,10000) || !integer(fields,"maxElevation",patch.maxElevation,0,10000) || !integer(fields,"minMoisture",patch.minMoisture,0,10000) || !integer(fields,"maxMoisture",patch.maxMoisture,0,10000) || !integer(fields,"maxWaterDistance",patch.maxWaterDistance,0,32))return false;
-							if(patch.minElevation>patch.maxElevation || patch.minMoisture>patch.maxMoisture || palette==fields.end()) {error="Invalid ecology ranges or missing brushes.";return false;}
+							if(!integer(fields,"weight",patch.weight,1,100) || !integer(fields,"density",patch.density,0,200) || !integer(fields,"minElevation",patch.minElevation,0,10000) || !integer(fields,"maxElevation",patch.maxElevation,0,10000) || !integer(fields,"minMoisture",patch.minMoisture,0,10000) || !integer(fields,"maxMoisture",patch.maxMoisture,0,10000) || !integer(fields,"maxWaterDistance",patch.maxWaterDistance,0,32) || !integer(fields,"minWaterDistance",patch.minWaterDistance,0,32) || !integer(fields,"maxPathDistance",patch.maxPathDistance,0,32) || !integer(fields,"maxEdgeDistance",patch.maxEdgeDistance,0,32) || !integer(fields,"minSlope",patch.minSlope,0,10000) || !integer(fields,"maxSlope",patch.maxSlope,0,10000))return false;
+							if(patch.minElevation>patch.maxElevation || patch.minMoisture>patch.maxMoisture || patch.minSlope>patch.maxSlope || (patch.maxWaterDistance>=0 && patch.minWaterDistance>patch.maxWaterDistance) || palette==fields.end()) {error="Invalid ecology ranges or missing brushes.";return false;}
 							if(!ReadObjectPalette(palette->second,patch.brushes,error))return false;
 							patches[index].push_back(std::move(patch));
 						}
@@ -379,6 +379,12 @@ namespace WorldEditor {
 		}
 
 
+		struct SceneVariant {
+			std::string id;
+			int weight=1;
+			std::vector<WorldGen::BlueprintProp> objects;
+		};
+
 		struct ObjectScene {
 			std::string id;
 			std::vector<int> habitats, settlements;
@@ -386,6 +392,7 @@ namespace WorldEditor {
 			int minElevation=0,maxElevation=10000,minMoisture=0,maxMoisture=10000;
 			bool rotate=true;
 			std::vector<WorldGen::BlueprintProp> objects;
+			std::vector<SceneVariant> variants;
 		};
 
 		bool ReadScenes(const GenerationSpec& spec,const json::mValue& root,std::vector<ObjectScene>& scenes,wxString& error) {
@@ -423,9 +430,10 @@ namespace WorldEditor {
 					if(!index || std::find(scene.habitats.begin(),scene.habitats.end(),index)!=scene.habitats.end()) {error="Unknown or duplicate scene habitat.";return false;}
 					scene.habitats.push_back(index);
 				}
-				if(objects==fields.end() || objects->second.type()!=json::array_type || objects->second.get_array().empty() || objects->second.get_array().size()>24) {error="Scene needs 1..24 object anchors.";return false;}
+				auto readObjects=[&](const json::mValue& value,std::vector<WorldGen::BlueprintProp>& target) {
+				if(value.type()!=json::array_type || value.get_array().empty() || value.get_array().size()>24) {error="Scene needs 1..24 object anchors.";return false;}
 				std::set<std::pair<int,int>> positions;
-				for(const auto& object:objects->second.get_array()) {
+				for(const auto& object:value.get_array()) {
 					if(object.type()!=json::obj_type){error="Scene objects must be objects.";return false;}
 					const auto& f=object.get_obj();WorldGen::BlueprintProp prop;
 					if(f.find("x")==f.end() || f.find("y")==f.end() || !integer(f,"x",prop.x,-12,12) || !integer(f,"y",prop.y,-12,12) || std::abs(prop.x)>scene.radius || std::abs(prop.y)>scene.radius || !positions.insert({prop.x,prop.y}).second) {error="Scene object anchors must be distinct and inside radius.";return false;}
@@ -436,14 +444,37 @@ namespace WorldEditor {
 						const auto* brush=g_brushes.getBrush(name.get_str());if(!brush || !brush->isDoodad()) {error="Missing exact scene doodad brush: "+wxString::FromUTF8(name.get_str());return false;}
 						prop.brushes.push_back(name.get_str());
 					}
-					scene.objects.push_back(std::move(prop));
+					target.push_back(std::move(prop));
 				}
+                    return true;
+                };
+                const auto variants=fields.find("variants");
+                if((objects==fields.end())==(variants==fields.end())) {error="A scene needs exactly one of objects or variants.";return false;}
+                if(objects!=fields.end()) {if(!readObjects(objects->second,scene.objects))return false;}
+                else {
+                    if(variants->second.type()!=json::array_type || variants->second.get_array().empty() || variants->second.get_array().size()>8) {error="Scene variants must contain 1..8 compositions.";return false;}
+                    std::set<std::string> variantIds;
+                    for(const auto& value:variants->second.get_array()) {
+                        if(value.type()!=json::obj_type){error="Scene variants must be objects.";return false;}
+                        const auto& f=value.get_obj();const auto id=f.find("id"),props=f.find("objects");SceneVariant variant;
+                        if(id==f.end() || id->second.type()!=json::str_type){error="Scene variant needs an id.";return false;}
+                        variant.id=id->second.get_str();
+                        if(variant.id.empty() || variant.id.size()>40 || variant.id.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-")!=std::string::npos || !variantIds.insert(variant.id).second || !integer(f,"weight",variant.weight,1,100)) {error="Invalid scene variant identifier or weight.";return false;}
+                        if(props==f.end() || !readObjects(props->second,variant.objects)){if(error.empty())error="Scene variant needs objects.";return false;}
+                        scene.variants.push_back(std::move(variant));
+                    }
+                }
 				scenes.push_back(std::move(scene));
 			}
 			return true;
 		}
 
-		bool PlaceScenes(const GenerationSpec& spec,const WorldGen::Plan& plan,const WorldGen::Layer& layer,const std::vector<ObjectScene>& scenes,WorldGen::DecorationGrid& grid,BaseMap& scratch,std::set<Position>& blocking,ApplicationStats& stats,const WorldGen::ProgressCallback& progress,wxString& error) {
+        void CountDecoration(ApplicationStats& stats,size_t regionStart,int width,int x,int y) {
+            const size_t region=regionStart+size_t(y/32)*((width+31)/32)+x/32;
+            ++stats.decorationRegions[region].objectAnchors;
+        }
+
+		bool PlaceScenes(const GenerationSpec& spec,const WorldGen::Plan& plan,const WorldGen::Layer& layer,const std::vector<ObjectScene>& scenes,WorldGen::DecorationGrid& grid,BaseMap& scratch,std::set<Position>& blocking,ApplicationStats& stats,const WorldGen::ProgressCallback& progress,wxString& error,size_t regionStart) {
 			const auto seed=spec.world.objectSeed.value_or(spec.seed);
 			for(size_t sceneIndex=0;sceneIndex<scenes.size();++sceneIndex) {
 				const auto& scene=scenes[sceneIndex];
@@ -469,11 +500,18 @@ namespace WorldEditor {
 							if(std::find(scene.settlements.begin(),scene.settlements.end(),nearest)==scene.settlements.end())continue;
 						}
 						if(!WorldGen::CanPlaceDecoration(grid,{x,y},clearance)) {++stats.skippedScenes;continue;}
-						const int turn=scene.rotate?int(CellSeed(key,0,0,0,204)%4):0;
+						const std::vector<WorldGen::BlueprintProp>* objects=&scene.objects;
+                        std::string variantId;
+                        if(!scene.variants.empty()) {
+                            int total=0;for(const auto& variant:scene.variants)total+=variant.weight;
+                            int roll=int(CellSeed(key,0,0,0,208)%uint32_t(total));
+                            for(const auto& variant:scene.variants){if(roll<variant.weight){objects=&variant.objects;variantId=variant.id;break;}roll-=variant.weight;}
+                        }
+                        const int turn=scene.rotate?int(CellSeed(key,0,0,0,204)%4):0;
 						std::vector<DoodadSample> samples;std::vector<WorldGen::Point> offsets;std::vector<std::string> names;
 						std::map<std::pair<int,int>,bool> footprint;bool valid=true;
-						for(size_t n=0;n<scene.objects.size();++n) {
-							const auto& object=scene.objects[n];WorldGen::Point offset{object.x,object.y};
+						for(size_t n=0;n<objects->size();++n) {
+							const auto& object=(*objects)[n];WorldGen::Point offset{object.x,object.y};
 							for(int t=0;t<turn;++t)offset={-offset.y,offset.x};
 							const Position anchor=PositionFor(spec,{x+offset.x,y+offset.y},layer.offsetZ);
 							if(!scratch.getTile(anchor)) {valid=false;break;}
@@ -495,11 +533,14 @@ namespace WorldEditor {
 						for(size_t n=0;n<samples.size();++n) {
 							PlaceDoodad(samples[n],scratch,PositionFor(spec,{x+offsets[n].x,y+offsets[n].y},layer.offsetZ),blocking);
 							++stats.doodads;++stats.objectBrushUsage[names[n]];
+                            CountDecoration(stats,regionStart,grid.width,x+offsets[n].x,y+offsets[n].y);
 						}
 						WorldGen::MarkDecoration(grid,{x,y},combined);
 						for(int dy=-scene.radius;dy<=scene.radius;++dy)for(int dx=-scene.radius;dx<=scene.radius;++dx)grid.reserved[size_t(y+dy)*grid.width+x+dx]=1;
+						++stats.decorationRegions[regionStart+size_t(y/32)*((grid.width+31)/32)+x/32].scenes;
 						++stats.sceneUsage[scene.id];
-						if(stats.scenePlacements.size()<4096)stats.scenePlacements.push_back({scene.id,PositionFor(spec,{x,y},layer.offsetZ),turn,samples.size()});
+						if(!variantId.empty())++stats.sceneVariantUsage[scene.id+"/"+variantId];
+						if(stats.scenePlacements.size()<4096)stats.scenePlacements.push_back({scene.id,PositionFor(spec,{x,y},layer.offsetZ),turn,samples.size(),variantId});
 					}
 				}
 			}
@@ -520,7 +561,20 @@ namespace WorldEditor {
 			}
 			if (!DecorationBrushes(spec, profile, brushes, densityScale, patches, patchSizes, baseWeights, stats, error)) return false;
 			std::vector<ObjectScene> scenes;if(!ReadScenes(spec,profile,scenes,error))return false;
-			int waterLimit=-1;for(const auto& biome:patches)for(const auto& patch:biome)waterLimit=std::max(waterLimit,patch.maxWaterDistance);
+			bool environmentNeeded=false;
+            for(const auto& biome:patches)for(const auto& p:biome)environmentNeeded|=p.maxWaterDistance>=0 || p.minWaterDistance>0 || p.maxPathDistance>=0 || p.maxEdgeDistance>=0 || p.minSlope>0 || p.maxSlope<10000;
+            int edgeWidth=0,edgeDensity=100,pathWidth=0,pathDensity=100,slopeThreshold=0,slopeDensity=100;
+            if(profile.type()==json::obj_type) {
+                const auto transitions=profile.get_obj().find("transitions");
+                if(transitions!=profile.get_obj().end()) {
+                    if(transitions->second.type()!=json::obj_type){error="transitions must be an object.";return false;}
+                    const auto& fields=transitions->second.get_obj();
+                    for(const auto& [name,value]:fields)if(name!="forestEdgeWidth" && name!="forestEdgeDensity" && name!="pathWidth" && name!="pathDensity" && name!="slopeThreshold" && name!="slopeDensity"){error="Unknown transition field: "+wxString::FromUTF8(name);return false;}
+                    auto integer=[&](const char* name,int& target,int high) {const auto f=fields.find(name);if(f==fields.end())return true;if(f->second.type()!=json::int_type || f->second.get_int64()<0 || f->second.get_int64()>high){error="Invalid transition field: "+wxString::FromUTF8(name);return false;}target=int(f->second.get_int64());return true;};
+                    if(!integer("forestEdgeWidth",edgeWidth,32) || !integer("forestEdgeDensity",edgeDensity,100) || !integer("pathWidth",pathWidth,32) || !integer("pathDensity",pathDensity,100) || !integer("slopeThreshold",slopeThreshold,10000) || !integer("slopeDensity",slopeDensity,100))return false;
+                    environmentNeeded|=edgeWidth>0 || pathWidth>0 || slopeThreshold>0;
+                }
+            }
 			const uint32_t objectSeed = spec.world.objectSeed.value_or(spec.seed);
 			std::array<bool, 7> used {};
 			for (const auto& layer : plan.layers) {
@@ -540,25 +594,9 @@ namespace WorldEditor {
 				grid.reserved.resize(count);
 				grid.occupied.assign(count, 0);
 				grid.habitat.resize(count);
-				std::vector<uint8_t> waterDistance;
-				if(waterLimit>=0) {
-					waterDistance.assign(count,33);std::deque<size_t> queue;
-					for(int y=0;y<grid.height;++y)for(int x=0;x<grid.width;++x) {
-						const size_t i=size_t(y)*grid.width+x;if(!WorldGen::IsWater(layer.cells[i].terrain))continue;
-						waterDistance[i]=0;bool shore=false;
-						for(const auto [dx,dy]:{std::pair{1,0},std::pair{-1,0},std::pair{0,1},std::pair{0,-1}})if(x+dx>=0 && y+dy>=0 && x+dx<grid.width && y+dy<grid.height)shore|=!WorldGen::IsWater(layer.cells[size_t(y+dy)*grid.width+x+dx].terrain);
-						if(shore)queue.push_back(i);
-					}
-					while(!queue.empty()) {
-						const auto i=queue.front();queue.pop_front();if(waterDistance[i]>=waterLimit)continue;
-						const int x=int(i%grid.width),y=int(i/grid.width);
-						for(const auto [dx,dy]:{std::pair{1,0},std::pair{-1,0},std::pair{0,1},std::pair{0,-1}}) {
-							if(x+dx<0 || y+dy<0 || x+dx>=grid.width || y+dy>=grid.height)continue;
-							const size_t n=size_t(y+dy)*grid.width+x+dx;
-							if(waterDistance[n]>waterDistance[i]+1) {waterDistance[n]=waterDistance[i]+1;queue.push_back(n);}
-						}
-					}
-				}
+                WorldGen::DecorationEnvironment environment;
+                if(environmentNeeded && !WorldGen::BuildDecorationEnvironment(layer,grid.width,grid.height,environment)){error="Invalid decoration environment.";return false;}
+
 				for (int y = 0; y < grid.height; ++y) {
 					for (int x = 0; x < grid.width; ++x) {
 						const size_t index = size_t(y) * grid.width + x;
@@ -572,7 +610,10 @@ namespace WorldEditor {
 						}
 					}
 				}
-				if(!PlaceScenes(spec,plan,layer,scenes,grid,scratch,blocking,stats,progress,error))return false;
+				const size_t regionStart=stats.decorationRegions.size();
+                for(int y=0;y<grid.height;y+=32)for(int x=0;x<grid.width;x+=32)stats.decorationRegions.push_back({PositionFor(spec,{x,y},layer.offsetZ),std::min(32,grid.width-x),std::min(32,grid.height-y),0,0,0});
+                for(int y=0;y<grid.height;++y)for(int x=0;x<grid.width;++x){const size_t i=size_t(y)*grid.width+x;if(grid.habitat[i] && !grid.reserved[i] && grid.walkable[i])++stats.decorationRegions[regionStart+size_t(y/32)*((grid.width+31)/32)+x/32].naturalTiles;}
+                if(!PlaceScenes(spec,plan,layer,scenes,grid,scratch,blocking,stats,progress,error,regionStart))return false;
 				for (int y = 1; y < grid.height - 1; ++y) {
 					if ((y & 15) == 0 && !Update(progress, "Decorating biomes", 65, error)) {
 						return false;
@@ -586,7 +627,7 @@ namespace WorldEditor {
 						const auto& cell=layer.cells[index];
 						const auto* palette=&brushes[habitat];const ObjectPatch* selected=nullptr;
 						if(!patches[habitat].empty()) {
-							auto eligible=[&](const ObjectPatch& p){return cell.elevation>=p.minElevation && cell.elevation<=p.maxElevation && cell.moisture>=p.minMoisture && cell.moisture<=p.maxMoisture && (p.maxWaterDistance<0 || waterDistance[index]<=p.maxWaterDistance);};
+							auto eligible=[&](const ObjectPatch& p){return cell.elevation>=p.minElevation && cell.elevation<=p.maxElevation && cell.moisture>=p.minMoisture && cell.moisture<=p.maxMoisture && (p.maxWaterDistance<0 || environment.water[index]<=p.maxWaterDistance) && (p.minWaterDistance==0 || environment.water[index]>=p.minWaterDistance) && (p.maxPathDistance<0 || environment.path[index]<=p.maxPathDistance) && (p.maxEdgeDistance<0 || environment.forestEdge[index]<=p.maxEdgeDistance) && (p.minSlope==0 || environment.slope[index]>=p.minSlope) && (p.maxSlope==10000 || environment.slope[index]<=p.maxSlope);};
 							int total=baseWeights[habitat];for(const auto& p:patches[habitat])if(eligible(p))total+=p.weight;
 							if(!total)continue;
 							int roll=int(CellSeed(objectSeed,x/patchSizes[habitat],y/patchSizes[habitat],layer.offsetZ,41)%uint32_t(total))-baseWeights[habitat];
@@ -597,7 +638,12 @@ namespace WorldEditor {
 						const auto terrain = layer.cells[index].terrain;
 						const int factor = terrain == WorldGen::Terrain::Forest ? 180 : (terrain == WorldGen::Terrain::Grass ? 40 : (habitat == 4 ? 60 : 80));
 						const int patch = 60 + int(CellSeed(objectSeed, x / 12, y / 12, layer.offsetZ, 12) % 81);
-						const int density = std::min(80, std::clamp(spec.doodads.density, 0, 100) * factor * patch * (densityScale[habitat] * (selected?selected->density:100) / 100) / 1000000);
+						int density = std::min(80, std::clamp(spec.doodads.density, 0, 100) * factor * patch * (densityScale[habitat] * (selected?selected->density:100) / 100) / 1000000);
+                        int transition=100;
+                        if(edgeWidth>0 && terrain==WorldGen::Terrain::Forest)transition=std::min(transition,WorldGen::TransitionDensity(environment.forestEdge[index],edgeWidth,edgeDensity));
+                        if(pathWidth>0)transition=std::min(transition,WorldGen::TransitionDensity(environment.path[index],pathWidth,pathDensity));
+                        if(slopeThreshold>0 && environment.slope[index]>slopeThreshold)transition=std::min(transition,WorldGen::TransitionDensity(10000-environment.slope[index],10000-slopeThreshold,slopeDensity));
+                        density=density*transition/100;
 						if (choice % 100 >= uint32_t(density)) {
 							continue;
 						}
@@ -616,6 +662,7 @@ namespace WorldEditor {
 						WorldGen::MarkDecoration(grid, { x, y }, sample.footprint);
 						++stats.doodads;
 						++stats.objectBrushUsage[brush->getName()];
+                        CountDecoration(stats,regionStart,grid.width,x,y);
 						if(selected)++stats.objectPatchUsage[std::string(ObjectHabitats[habitat])+"/"+selected->id];
 					}
 				}
@@ -1247,7 +1294,7 @@ namespace WorldEditor {
 	size_t ApplicationTileCount(const GenerationSpec& spec,const WorldGen::Plan& plan) {
 		if(!spec.world.natureMask.empty() && spec.world.natureMask.size()!=size_t(plan.settings.width)*plan.settings.height)return 0;
 		size_t count=0;
-		for(const auto& layer:plan.layers)for(int y=0;y<plan.settings.height;++y)for(int x=0;x<plan.settings.width;++x)if(layer.cells[size_t(y)*plan.settings.width+x].terrain!=WorldGen::Terrain::Void && SelectedNature(spec,plan,x,y,layer.offsetZ))++count;
+		for(const auto& layer:plan.layers){if(!spec.world.natureMask.empty() && layer.offsetZ!=spec.world.natureFloor)continue;for(int y=0;y<plan.settings.height;++y)for(int x=0;x<plan.settings.width;++x)if(layer.cells[size_t(y)*plan.settings.width+x].terrain!=WorldGen::Terrain::Void && SelectedNature(spec,plan,x,y,layer.offsetZ))++count;}
 		return count;
 	}
 
@@ -1260,6 +1307,8 @@ namespace WorldEditor {
 		if (!image.IsOk()) return wxImage();
 		image.InitAlpha();
 		if (!image.HasAlpha()) return wxImage();
+        WorldGen::DecorationEnvironment environment;
+        if(view==PreviewLayer::PathDistance && !WorldGen::BuildDecorationEnvironment(*layer,plan.settings.width,plan.settings.height,environment))return wxImage();
 		for (int y = 0; y < plan.settings.height; ++y) {
 			for (int x = 0; x < plan.settings.width; ++x) {
 				const auto& cell = layer->cells[size_t(y) * plan.settings.width + x];
@@ -1275,7 +1324,10 @@ namespace WorldEditor {
 					if (cell.flags & WorldGen::Connection) {
 						color = 0xFFFF00;
 					}
-				} else if (view == PreviewLayer::ConstructionRoles) {
+				} else if(view==PreviewLayer::PathDistance) {
+                    if(WorldGen::IsWalkable(cell)){const int distance=environment.path[size_t(y)*plan.settings.width+x];
+                    color=distance>32?0xC050A0:(uint32_t(distance*7)<<16)|(uint32_t(220-distance*5)<<8)|40;}
+                } else if (view == PreviewLayer::ConstructionRoles) {
 					color = ((color >> 2) & 0x3F3F3F) + 0x202020;
 				} else {
 					const int value = view == PreviewLayer::Elevation ? cell.elevation : (view == PreviewLayer::Moisture ? cell.moisture : cell.temperature);

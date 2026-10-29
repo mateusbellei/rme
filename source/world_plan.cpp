@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <queue>
 #include <set>
@@ -673,7 +674,25 @@ namespace WorldGen {
 					return false;
 				}
 				// Organic radial lots or compact street blocks, always connected to the plaza.
-				for (const auto& slot : SettlementLots(plan, town, t + 1)) {
+				auto lots=SettlementLots(plan,town,t+1);
+                if(s.terrainAwareLots) {
+                    // Snapshot scores before placing any building in this town. Avoid
+                    // water and steep patches without bypassing footprint/route checks.
+                    std::map<uint32_t,int> scores;
+                    for(const auto& slot:lots) {
+                        int low=10000,high=0,wet=0;
+                        for(int dy=-4;dy<=4;dy+=2)for(int dx=-4;dx<=4;dx+=2) {
+                            const Point p{slot.center.x+dx,slot.center.y+dy};
+                            if(!plan.Contains(p)){++wet;continue;}
+                            const auto& cell=cells[plan.Index(p)];
+                            low=std::min(low,int(cell.elevation));high=std::max(high,int(cell.elevation));
+                            wet+=IsWater(cell.terrain) || cell.terrain==Terrain::Void;
+                        }
+                        scores[slot.serial]=std::abs(slot.center.x-town.center.x)+std::abs(slot.center.y-town.center.y)+(high-low)/40+wet*30;
+                    }
+                    std::stable_sort(lots.begin(),lots.end(),[&](const LotSlot& a,const LotSlot& b){return scores.at(a.serial)<scores.at(b.serial);});
+                }
+                for (const auto& slot : lots) {
 					if (int(town.buildings.size()) >= s.buildingsPerSettlement) {
 						break;
 					}
@@ -1677,6 +1696,7 @@ namespace WorldGen {
 		if (plan.settings.streetVariation) { string("street-variation"); add(plan.settings.streetVariation); }
 		if (plan.settings.physicalStairs) { string("physical-stairs"); }
 		if (plan.settings.mountainPasses) string("mountain-passes");
+		if (plan.settings.terrainAwareLots) string("terrain-aware-lots");
 		if (plan.settings.caveChambers) { string("cave-chambers"); add(plan.settings.caveChambers); }
 		if (plan.settings.wildernessCaveEntry) string("wilderness-cave-entry");
 		add(plan.settings.caveDepth);

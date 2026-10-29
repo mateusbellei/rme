@@ -890,3 +890,6 @@ remain developer workspaces and can have different configurations/data.
 ## Original city geography studies
 
 See [CITY_GEOGRAPHY_STUDY.md](CITY_GEOGRAPHY_STUDY.md) for coastal/wetland profiles, fixed settlement centers, civic minimum priorities and the scenario compiler. These are executable first-pass studies, not complete copies of official cities or finished NPC/service systems.
+
+Composed scenes, district affinities, directional roof silhouettes, cave rooms and
+local nature PNG transactions: [WORLD_COMPOSED_PLACES.md](WORLD_COMPOSED_PLACES.md).

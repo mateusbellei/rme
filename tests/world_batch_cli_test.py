@@ -172,6 +172,7 @@ def main():
         assert diversity_report["editableInputs"] == {"heightmap": "inputs_heightmap.png",
                                                        "biomeHints": "inputs_biomes.png",
                                                        "landMask": "inputs_land.png",
+                                                       "natureMaskTemplate": "inputs_nature.png",
                                                        "recipe": "editable-recipe.json"}
         editable = json.loads((diversity_output / "editable-recipe.json").read_text(encoding="utf-8"))
         assert editable["world"]["heightmap"] == "inputs_heightmap.png"
@@ -381,6 +382,67 @@ def main():
             object_reports.append(result)
             object_bytes.append((folder / "world.otbm").read_bytes())
         assert object_bytes[0] == object_bytes[2] and object_bytes[0] != object_bytes[1]
+        # Scene groups commit all their anchors together, retain seed isolation and reject malformed data.
+        scene_path = Path(temporary) / "scenes.json"
+        scene = dict(id="test_grove", habitats=["forest"], spacing=16, radius=3, chance=100,
+                     settlements=[1],objects=[dict(x=-1,y=0,brushes=["grass tufts"]),dict(x=1,y=0,brushes=["grass tufts"])])
+        scene_profile = dict(version=1, biomes={"forest":dict(brushes=[])}, scenes=[scene])
+        scene_bytes=[]
+        for attempt, seed in enumerate((123,456,123)):
+            scene_path.write_text(json.dumps(scene_profile),encoding="utf-8")
+            object_recipe["world"].update(objectProfile=str(scene_path),objectSeed=seed)
+            object_path.write_text(json.dumps(object_recipe),encoding="utf-8")
+            object_command[6]=str(Path(temporary)/f"scene-{attempt}")
+            generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+            assert generated.returncode==0,generated.stdout+generated.stderr
+            folder=Path(object_command[6]);result=json.loads((folder/"generation.json").read_text())
+            assert result["sceneUsage"]["test_grove"]>0 and result["doodads"]==result["sceneUsage"]["test_grove"]*2
+            assert len(result["scenePlacements"])==result["sceneUsage"]["test_grove"] and all(s["objects"]==2 and len(s["position"])==3 and 0<=s["rotation"]<=3 for s in result["scenePlacements"])
+            assert result["objectBrushRejected"]=={} and result["planFingerprint"]==ridged_report["planFingerprint"]
+            scene_bytes.append((folder/"world.otbm").read_bytes())
+        assert scene_bytes[0]==scene_bytes[2] and scene_bytes[0]!=scene_bytes[1]
+        other_region=json.loads(json.dumps(scene_profile));other_region["scenes"][0]["settlements"]=[2]
+        scene_path.write_text(json.dumps(other_region),encoding="utf-8");object_command[6]=str(Path(temporary)/"scene-other-region")
+        generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+        assert generated.returncode==0,generated.stdout+generated.stderr
+        result=json.loads((Path(object_command[6])/"generation.json").read_text())
+        assert result["sceneUsage"]=={} and result["doodads"]==0
+        # Distinct anchors whose composite footprints overlap must leave no partial objects.
+        overlap=json.loads(json.dumps(scene_profile))
+        overlap["scenes"][0]["objects"]=[dict(x=0,y=0,brushes=["world table 0"]),dict(x=1,y=0,brushes=["world table 0"])]
+        scene_path.write_text(json.dumps(overlap),encoding="utf-8")
+        object_command[6]=str(Path(temporary)/"scene-overlap")
+        generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+        assert generated.returncode==0,generated.stdout+generated.stderr
+        result=json.loads((Path(object_command[6])/"generation.json").read_text())
+        assert result["sceneUsage"]=={} and result["doodads"]==0 and result["skippedScenes"]>0
+        for index,patch in enumerate([dict(radius=1),dict(spacing=16,radius=12),dict(minMoisture=9000,maxMoisture=1000),dict(rotate=1),dict(settlements=[0]),dict(habitats=["unknown"]),dict(objects=[dict(x=0,y=0,brushes=["missing scene brush"])])]):
+            invalid=json.loads(json.dumps(scene_profile));invalid["scenes"][0].update(patch)
+            scene_path.write_text(json.dumps(invalid),encoding="utf-8")
+            object_command[6]=str(Path(temporary)/f"scene-invalid-{index}")
+            generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=30)
+            assert generated.returncode==1 and not Path(object_command[6]).exists(),generated.stdout+generated.stderr
+        print("PASS: atomic scene compositions, no partial overlap placement, seeded replay, climate and malformed scene rejection")
+        # Public composed village exercises actual directional roof IDs, districts and cave rooms.
+        composed_command=command.copy();composed_command[2]=str(source/"data/procedural/recipes/example_composed_town_1098.json")
+        composed_command[6]=str(Path(temporary)/"composed-town");composed_command.extend(["--no-previews"])
+        generated=subprocess.run(composed_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+        assert generated.returncode==0,generated.stdout+generated.stderr
+        folder=Path(composed_command[6]);result=json.loads((folder/"generation.json").read_text());composed_plan=json.loads((folder/"plan.json").read_text())
+        assert result["verifiedOTBM"] and result["sceneUsage"] and not result["objectBrushRejected"] and not result["skippedFurniture"]
+        assert len(composed_plan["layers"])==6 and any(b["district"]=="civic" for b in composed_plan["buildings"])
+        roof_ids=set()
+        for node, ancestors in otbm_nodes((folder/"world.otbm").read_bytes()):
+            if node[0]==5:
+                offset=3
+                while offset<len(node):
+                    attr=node[offset];offset+=1
+                    if attr==3:offset+=4
+                    elif attr==9:roof_ids.add(struct.unpack_from("<H",node,offset)[0]);offset+=2
+                    else:raise AssertionError(f"Unexpected tile attribute {attr}")
+            elif node[0]==6:roof_ids.add(struct.unpack_from("<H",node,1)[0])
+        assert len(roof_ids & {926,927,929,936,937,939,946,947,948,956,957,958})>=3
+        print("PASS: composed village, role districts, directional roof materials and connected multi-floor caverns")
         # Patch constraints must affect actual placement, including shoreline distance.
         constraint_profile = Path(temporary) / "constrained-objects.json"
         for limit in (0, 5):

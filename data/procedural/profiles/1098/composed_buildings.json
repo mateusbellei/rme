@@ -1,0 +1,869 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "townhouse",
+      "role": "residential",
+      "weight": 3,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "objects": [
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        }
+      ],
+      "roof": "flat roof",
+      "windowChance": 45,
+      "materials": {
+        "floor": "wooden floor",
+        "wall": "wooden wall"
+      },
+      "minPerSettlement": 0,
+      "maxPerSettlement": 0,
+      "district": "residential",
+      "minimumPriority": 0,
+      "roofRows": [
+        " nnnnnnnnnnn ",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "hhhhhhhhhhhhh",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        " sssssssssss "
+      ],
+      "roofMaterials": {
+        "north": "wooden roof, up",
+        "east": "wooden roof, right",
+        "south": "wooden roof, down",
+        "west": "wooden roof, left",
+        "horizontal": "wooden roof, horizontal",
+        "vertical": "wooden roof, vertical"
+      }
+    },
+    {
+      "id": "market_hall",
+      "role": "commercial",
+      "weight": 2,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "objects": [
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        }
+      ],
+      "roof": "flat roof",
+      "windowChance": 45,
+      "materials": {
+        "floor": "stone floor",
+        "wall": "stone wall"
+      },
+      "minPerSettlement": 0,
+      "maxPerSettlement": 0,
+      "district": "market",
+      "minimumPriority": 0,
+      "roofRows": [
+        " nnnnnnnnnnn ",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "hhhhhhhhhhhhh",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        " sssssssssss "
+      ],
+      "roofMaterials": {
+        "north": "brick roof, up",
+        "east": "brick roof, right",
+        "south": "brick roof, down",
+        "west": "brick roof, left",
+        "horizontal": "brick roof, horizontal",
+        "vertical": "brick roof, vertical"
+      }
+    },
+    {
+      "id": "civic_hall",
+      "role": "administrative",
+      "weight": 2,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "objects": [
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        }
+      ],
+      "roof": "flat roof",
+      "windowChance": 45,
+      "materials": {
+        "floor": "wooden floor",
+        "wall": "wooden wall"
+      },
+      "minPerSettlement": 1,
+      "maxPerSettlement": 1,
+      "district": "civic",
+      "minimumPriority": 100,
+      "roofRows": [
+        " nnnnnnnnnnn ",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "hhhhhhhhhhhhh",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        " sssssssssss "
+      ],
+      "roofMaterials": {
+        "north": "brick roof, up",
+        "east": "brick roof, right",
+        "south": "brick roof, down",
+        "west": "brick roof, left",
+        "horizontal": "brick roof, horizontal",
+        "vertical": "brick roof, vertical"
+      }
+    },
+    {
+      "id": "training_pavilion",
+      "role": "training",
+      "weight": 2,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#....,,,....#",
+        "#....,,,....#",
+        "#....,,,....#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#....   ....#",
+        "#....   ....#",
+        "#....   ....#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "objects": [
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        }
+      ],
+      "roof": "flat roof",
+      "windowChance": 45,
+      "materials": {
+        "floor": "stone floor",
+        "wall": "stone wall"
+      },
+      "minPerSettlement": 0,
+      "maxPerSettlement": 0,
+      "district": "training",
+      "minimumPriority": 0,
+      "roofRows": [
+        " nnnnnnnnnnn ",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "hhhhh   hhhhh",
+        "sssss   sssss",
+        "sssss   sssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        " sssssssssss "
+      ],
+      "roofMaterials": {
+        "north": "wooden roof, up",
+        "east": "wooden roof, right",
+        "south": "wooden roof, down",
+        "west": "wooden roof, left",
+        "horizontal": "wooden roof, horizontal",
+        "vertical": "wooden roof, vertical"
+      }
+    },
+    {
+      "id": "rural_lodge",
+      "role": "agricultural",
+      "weight": 2,
+      "maxLevels": 3,
+      "rotate": true,
+      "rows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "######+######"
+      ],
+      "upperRows": [
+        "#############",
+        "#...........#",
+        "#...........#",
+        "#...a...b...#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#############"
+      ],
+      "objects": [
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 0,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 0,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 1,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 1,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 3,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world bed 0",
+            "world bed 1",
+            "world bed 2",
+            "world bed 3"
+          ],
+          "required": true
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "floor": 2,
+          "brushes": [
+            "world chair south",
+            "world chair west",
+            "world chair north",
+            "world chair east"
+          ],
+          "required": true
+        },
+        {
+          "x": 6,
+          "y": 9,
+          "floor": 2,
+          "brushes": [
+            "world table 0",
+            "world table 1",
+            "world table 2",
+            "world table 3"
+          ],
+          "required": true
+        }
+      ],
+      "roof": "flat roof",
+      "windowChance": 45,
+      "materials": {
+        "floor": "wooden floor",
+        "wall": "wooden wall"
+      },
+      "minPerSettlement": 0,
+      "maxPerSettlement": 0,
+      "district": "rural",
+      "minimumPriority": 0,
+      "roofRows": [
+        " nnnnnnnnnnn ",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "nnnnnnnnnnnnn",
+        "hhhhhhhhhhhhh",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        "sssssssssssss",
+        " sssssssssss "
+      ],
+      "roofMaterials": {
+        "north": "wooden roof, up",
+        "east": "wooden roof, right",
+        "south": "wooden roof, down",
+        "west": "wooden roof, left",
+        "horizontal": "wooden roof, horizontal",
+        "vertical": "wooden roof, vertical"
+      }
+    }
+  ]
+}

@@ -156,3 +156,6 @@ choose roof palettes and court layouts per region, and author wilderness scenes
 with the custom client's own validated props. Keep themed recipes and private
 client assets outside the public repository. The local package demonstrates this
 separately from the generic OT example; no DAT/SPR is bundled or modified.
+
+Natural transitions, scene variants, terrain-sensitive lots, the preview painter and
+regional review reports are documented in [WORLD_NATURAL_PLACES.md](WORLD_NATURAL_PLACES.md).

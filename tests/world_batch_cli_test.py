@@ -401,6 +401,35 @@ def main():
             assert result["objectBrushRejected"]=={} and result["planFingerprint"]==ridged_report["planFingerprint"]
             scene_bytes.append((folder/"world.otbm").read_bytes())
         assert scene_bytes[0]==scene_bytes[2] and scene_bytes[0]!=scene_bytes[1]
+        # Variants select one complete composition, with independent seeded replay.
+        variants=json.loads(json.dumps(scene_profile));family=variants["scenes"][0]
+        props=family.pop("objects")
+        family["variants"]=[dict(id="rest",weight=1,objects=props),dict(id="overgrown",weight=1,objects=[props[0]])]
+        variant_bytes=[]
+        for attempt,seed in enumerate((123,456,123)):
+            scene_path.write_text(json.dumps(variants),encoding="utf-8")
+            object_recipe["world"]["objectSeed"]=seed;object_path.write_text(json.dumps(object_recipe),encoding="utf-8")
+            object_command[6]=str(Path(temporary)/f"variant-{attempt}")
+            generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+            assert generated.returncode==0,generated.stdout+generated.stderr
+            result=json.loads((Path(object_command[6])/"generation.json").read_text())
+            assert sum(r["objectAnchors"] for r in result["decorationRegions"])==result["doodads"]
+            assert sum(r["scenes"] for r in result["decorationRegions"])==sum(result["sceneUsage"].values())
+            counts=result["sceneVariantUsage"]
+            assert counts["test_grove/rest"]>0 and counts["test_grove/overgrown"]>0
+            assert result["doodads"]==2*counts["test_grove/rest"]+counts["test_grove/overgrown"]
+            assert all(s["objects"]==(2 if s["variant"]=="rest" else 1) for s in result["scenePlacements"])
+            assert result["planFingerprint"]==ridged_report["planFingerprint"] and result["verifiedOTBM"]
+            variant_bytes.append((Path(object_command[6])/"world.otbm").read_bytes())
+        assert variant_bytes[0]==variant_bytes[2] and variant_bytes[0]!=variant_bytes[1]
+        for index,patch in enumerate([dict(variants=[]),dict(objects=props),dict(variants=[dict(id="x",weight=0,objects=props)]),dict(variants=[dict(id="x",objects=props)]*2),dict(variants=[dict(id="x",objects=[dict(x=0,y=0,brushes=["unknown"])])]),dict(transitions=None)]):
+            invalid=json.loads(json.dumps(variants))
+            if "transitions" in patch:invalid["transitions"]=[]
+            else:invalid["scenes"][0].update(patch)
+            scene_path.write_text(json.dumps(invalid),encoding="utf-8");object_command[6]=str(Path(temporary)/f"bad-variant-{index}")
+            generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=30)
+            assert generated.returncode==1 and not Path(object_command[6]).exists(),generated.stdout+generated.stderr
+        object_recipe["world"]["objectSeed"]=123;object_path.write_text(json.dumps(object_recipe),encoding="utf-8")
         other_region=json.loads(json.dumps(scene_profile));other_region["scenes"][0]["settlements"]=[2]
         scene_path.write_text(json.dumps(other_region),encoding="utf-8");object_command[6]=str(Path(temporary)/"scene-other-region")
         generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
@@ -423,6 +452,16 @@ def main():
             generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=30)
             assert generated.returncode==1 and not Path(object_command[6]).exists(),generated.stdout+generated.stderr
         print("PASS: atomic scene compositions, no partial overlap placement, seeded replay, climate and malformed scene rejection")
+        # Region counters reconcile actual placement and the offline report safely handles names.
+        regions=result.get("decorationRegions",[])
+        assert sum(r["objectAnchors"] for r in regions)==result["doodads"]
+        assert sum(r["scenes"] for r in regions)==sum(result["sceneUsage"].values())
+        import importlib.util
+        module_spec=importlib.util.spec_from_file_location("quality",source/"tools/world_quality.py")
+        quality=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(quality)
+        dangerous=json.loads(json.dumps(result));dangerous["objectBrushUsage"]={"</script><script>alert(1)</script>":1}
+        page=quality.render(dangerous)
+        assert "</script><script>alert(1)</script>" not in page and "\\u003c/script" in page
         # Public composed village exercises actual directional roof IDs, districts and cave rooms.
         composed_command=command.copy();composed_command[2]=str(source/"data/procedural/recipes/example_composed_town_1098.json")
         composed_command[6]=str(Path(temporary)/"composed-town");composed_command.extend(["--no-previews"])
@@ -458,9 +497,16 @@ def main():
                 assert constrained["doodads"] == 0 and constrained["objectPatchUsage"] == {}
             else:
                 assert constrained["doodads"] > 0 and set(constrained["objectBrushUsage"]) == {"grass tufts"}
+        # A path margin with zero density suppresses all selected near-path anchors.
+        profile=dict(version=1,transitions=dict(pathWidth=32,pathDensity=0),biomes={"forest":dict(density=150,brushes=[],baseWeight=0,patches=[dict(id="verge",maxPathDistance=0,brushes=[dict(name="grass tufts")])])})
+        constraint_profile.write_text(json.dumps(profile),encoding="utf-8");object_command[6]=str(Path(temporary)/"zero-verge")
+        generated=subprocess.run(object_command,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+        assert generated.returncode==0,generated.stdout+generated.stderr
+        suppressed=json.loads((Path(object_command[6])/"generation.json").read_text())
+        assert suppressed["doodads"]==0 and suppressed["planFingerprint"]==ridged_report["planFingerprint"]
         # Malformed patch groups fail atomically, even when another palette is usable.
         for invalid in ({"id":"bad","weight":0}, {"id":"bad","minElevation":9000,"maxElevation":1000},
-                        {"id":"bad","maxWaterDistance":33}, {"id":"bad","minMoisture":False}, {"id":"base"}):
+                        {"id":"bad","maxWaterDistance":33}, {"id":"bad","minWaterDistance":5,"maxWaterDistance":2}, {"id":"bad","minSlope":9000,"maxSlope":20}, {"id":"bad","maxEdgeDistance":33}, {"id":"bad","maxPathDistance":-1}, {"id":"bad","minMoisture":False}, {"id":"base"}):
             invalid["brushes"] = [{"name":"grass tufts"}]
             constraint_profile.write_text(json.dumps({"version":1,"biomes":{"forest":{"brushes":[{"name":"green trees"}],"patches":[invalid]}}}), encoding="utf-8")
             object_command[6] = str(Path(temporary) / "invalid-patch")

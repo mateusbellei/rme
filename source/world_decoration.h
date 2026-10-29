@@ -18,6 +18,17 @@ namespace WorldGen {
 		std::vector<uint8_t> walkable, reserved, occupied, habitat;
 	};
 
+	// Bounded Manhattan distances on the immutable plan, independent of scatter
+	// order and selection masks. 33 means no source within the supported radius.
+	struct DecorationEnvironment {
+		std::vector<uint8_t> water, path, forestEdge;
+		std::vector<uint16_t> slope;
+	};
+	bool BuildDecorationEnvironment(const Layer& layer, int width, int height, DecorationEnvironment& result);
+	int TransitionDensity(int distance, int width, int edgeDensity);
+	// Paint an interpolated circular stroke, clipped to raster boundaries.
+	bool PaintNatureMask(std::vector<uint8_t>& mask, int width, int height, Point from, Point to, int radius, bool replace);
+
 	// The expanded rectangle must be free, in one compatible habitat, and all
 	// remaining walkable cells must still reach its perimeter after placement.
 	// Thus a decoration cannot sever a corridor or create an isolated floor pocket.

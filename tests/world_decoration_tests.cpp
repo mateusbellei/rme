@@ -30,6 +30,35 @@ static void Check(bool condition, const char* message) {
 
 int main() {
 	try {
+
+        std::vector<uint8_t> mask(100,0);
+        Check(WorldGen::PaintNatureMask(mask,10,10,{0,0},{9,9},1,true),"Interpolated mask stroke clips at corners");
+        for(int i=0;i<10;++i)Check(mask[i*10+i]==1,"Fast diagonal stroke leaves no gaps");
+        const auto painted=mask;
+        Check(!WorldGen::PaintNatureMask(mask,10,10,{-1,0},{5,5},1,true) && mask==painted,"Invalid stroke is atomic");
+        Check(WorldGen::PaintNatureMask(mask,10,10,{5,5},{5,5},2,false) && mask[55]==0 && mask[0]==1,"Preservation brush erases only its circle");
+        // Compare every bounded transform with independent brute-force Manhattan distance.
+        WorldGen::Layer layer;layer.cells.resize(13*11);
+        for(auto& c:layer.cells){c.terrain=WorldGen::Terrain::Grass;c.elevation=1000;}
+        layer.cells[3*13+4].terrain=WorldGen::Terrain::River;
+        layer.cells[8*13+9].terrain=WorldGen::Terrain::Road;
+        layer.cells[5*13+6].terrain=WorldGen::Terrain::Forest;
+        layer.cells[5*13+6].elevation=7000;
+        WorldGen::DecorationEnvironment environment;
+        Check(WorldGen::BuildDecorationEnvironment(layer,13,11,environment),"Build immutable ecology distances");
+        for(int y=0;y<11;++y)for(int x=0;x<13;++x) {
+            const auto i=y*13+x;
+            Check(environment.water[i]==std::abs(x-4)+std::abs(y-3),"Water transform equals independent distance");
+            Check(environment.path[i]==std::abs(x-9)+std::abs(y-8),"Path transform equals independent distance");
+            const int forest=std::max(0,std::abs(x-6)+std::abs(y-5)-1);
+            Check(environment.forestEdge[i]==forest,"Both sides of forest margin seed the transform");
+            Check(environment.slope[i]==((std::abs(x-6)+std::abs(y-5)<=1)?6000:0),"Slope uses cardinal elevation differences");
+        }
+        layer.cells[3*13+4].terrain=WorldGen::Terrain::Grass;
+        Check(WorldGen::BuildDecorationEnvironment(layer,13,11,environment) && environment.water[0]==33,"Missing source uses bounded sentinel");
+        Check(!WorldGen::BuildDecorationEnvironment(layer,0,11,environment) && environment.water[0]==33,"Invalid input leaves output untouched");
+        for(int d=0;d<=8;++d)Check(WorldGen::TransitionDensity(d,8,20)==20+10*d,"Density interpolates monotonically");
+        Check(WorldGen::TransitionDensity(33,8,20)==100 && WorldGen::TransitionDensity(0,0,20)==100,"Transitions clamp or disable cleanly");
 		WorldGen::DecorationGrid grid;
 		grid.width = grid.height = 32;
 		grid.walkable.assign(1024, 1);

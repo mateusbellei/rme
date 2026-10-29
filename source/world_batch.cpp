@@ -498,14 +498,24 @@ namespace WorldBatch {
 		for(const auto& [name,count]:prepared.application.objectBrushUsage)brushUsage[name]=json::mValue(uint64_t(count));
 		for(const auto& [name,count]:prepared.application.objectPatchUsage)patchUsage[name]=json::mValue(uint64_t(count));
 		json::mObject sceneUsage;for(const auto& [name,count]:prepared.application.sceneUsage)sceneUsage[name]=json::mValue(uint64_t(count));
+		json::mObject variantUsage;for(const auto& [name,count]:prepared.application.sceneVariantUsage)variantUsage[name]=json::mValue(uint64_t(count));
+		report["sceneVariantUsage"]=variantUsage;
 		report["sceneUsage"]=sceneUsage;report["skippedScenes"]=json::mValue(uint64_t(prepared.application.skippedScenes));
 		json::mArray scenePlacements;
 		for(const auto& scene:prepared.application.scenePlacements) {
 			json::mObject entry;json::mArray position;
 			position.push_back(scene.position.x);position.push_back(scene.position.y);position.push_back(scene.position.z);
-			entry["id"]=scene.id;entry["position"]=position;entry["rotation"]=scene.rotation;entry["objects"]=json::mValue(uint64_t(scene.objects));scenePlacements.push_back(entry);
+			entry["variant"]=scene.variant;entry["id"]=scene.id;entry["position"]=position;entry["rotation"]=scene.rotation;entry["objects"]=json::mValue(uint64_t(scene.objects));scenePlacements.push_back(entry);
 		}
 		report["scenePlacements"]=scenePlacements;
+        json::mArray decorationRegions;
+        for(const auto& region:prepared.application.decorationRegions) {
+            json::mObject entry;json::mArray position;
+            position.push_back(region.position.x);position.push_back(region.position.y);position.push_back(region.position.z);
+            entry["position"]=position;entry["width"]=region.width;entry["height"]=region.height;
+            entry["naturalTiles"]=json::mValue(uint64_t(region.naturalTiles));entry["objectAnchors"]=json::mValue(uint64_t(region.objectAnchors));entry["scenes"]=json::mValue(uint64_t(region.scenes));decorationRegions.push_back(entry);
+        }
+        report["decorationRegions"]=decorationRegions;
 		report["objectBrushUsage"]=brushUsage;report["objectPatchUsage"]=patchUsage;
 		for(const auto& [name,count]:prepared.application.objectBrushRejected)rejected[name]=json::mValue(uint64_t(count));
 		report["objectBrushRejected"]=rejected;

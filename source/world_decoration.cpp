@@ -1,7 +1,7 @@
 #include "world_decoration.h"
 
 #include <algorithm>
-#include <queue>
+#include <array>
 
 namespace WorldGen {
 
@@ -51,26 +51,38 @@ namespace WorldGen {
 		if (!blocking) {
 			return true;
 		}
+		// With a clear halo, every free cell in a one/two-cell-wide footprint
+		// touches that halo directly. Such a footprint cannot enclose a pocket.
+		if (maxX - minX < 2 || maxY - minY < 2) {
+			return true;
+		}
 		const int width = right - left + 1, height = bottom - top + 1;
-		std::vector<uint8_t> blocked(size_t(width) * height), seen(blocked.size());
+		// The validated footprint spans at most 32 cells; its halo fits in 34.
+		// Reuse bounded stack storage instead of allocating vectors and a deque
+		// for each sampled decoration. Only initialize the active rectangle.
+		constexpr size_t capacity = 34 * 34;
+		const size_t area = size_t(width) * height;
+		std::array<uint8_t, capacity> blocked, seen;
+		std::fill_n(blocked.begin(), area, uint8_t(0));
+		std::fill_n(seen.begin(), area, uint8_t(0));
 		for (const auto& cell : footprint) {
 			if (cell.blocking) {
 				blocked[size_t(anchor.y + cell.offset.y - top) * width + anchor.x + cell.offset.x - left] = 1;
 			}
 		}
-		std::queue<int> open;
+		std::array<int, capacity> open;
+		size_t head = 0, tail = 0;
 		for (int y = 0; y < height; ++y) {
 			for (int x = 0; x < width; ++x) {
 				if (x == 0 || y == 0 || x == width - 1 || y == height - 1) {
 					const int index = y * width + x;
-					open.push(index);
+					open[tail++] = index;
 					seen[index] = 1;
 				}
 			}
 		}
-		while (!open.empty()) {
-			const int current = open.front();
-			open.pop();
+		while (head < tail) {
+			const int current = open[head++];
 			for (const auto [dx, dy] : { std::pair { 1, 0 }, std::pair { -1, 0 }, std::pair { 0, 1 }, std::pair { 0, -1 } }) {
 				const int x = current % width + dx, y = current / width + dy;
 				if (x < 0 || y < 0 || x >= width || y >= height) {
@@ -79,11 +91,11 @@ namespace WorldGen {
 				const int next = y * width + x;
 				if (!blocked[next] && !seen[next]) {
 					seen[next] = 1;
-					open.push(next);
+					open[tail++] = next;
 				}
 			}
 		}
-		for (size_t i = 0; i < blocked.size(); ++i) {
+		for (size_t i = 0; i < area; ++i) {
 			if (!blocked[i] && !seen[i]) {
 				return fail("Decoration would enclose an unreachable walkable pocket.");
 			}

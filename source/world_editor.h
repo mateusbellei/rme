@@ -18,6 +18,7 @@ namespace WorldEditor {
 	inline constexpr size_t MaximumTileBudget = sizeof(void*) >= 8 ? 4 * 1024 * 1024 : DefaultTileBudget;
 	struct ApplicationStats {
 		size_t changedTiles = 0, doodads = 0, skippedDoodads = 0;
+		size_t preparedTiles = 0, contextCopies = 0;
 		size_t furniture = 0, skippedFurniture = 0;
 		size_t prefabTiles = 0, prefabBuildings = 0;
 		size_t roofTiles = 0, windows = 0, stairEndpoints = 0;

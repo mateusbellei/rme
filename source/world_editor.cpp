@@ -116,13 +116,11 @@ namespace WorldEditor {
 			}
 			return true;
 		}
-		bool DecorationBrushes(const GenerationSpec& spec, std::array<std::vector<DoodadBrush*>, 7>& brushes, std::array<int, 7>& density, std::array<std::vector<ObjectPatch>,7>& patches, std::array<int,7>& patchSizes, std::array<int,7>& baseWeights, ApplicationStats& stats, wxString& error) {
+		bool DecorationBrushes(const GenerationSpec& spec, const json::mValue& objectProfile, std::array<std::vector<DoodadBrush*>, 7>& brushes, std::array<int, 7>& density, std::array<std::vector<ObjectPatch>,7>& patches, std::array<int,7>& patchSizes, std::array<int,7>& baseWeights, ApplicationStats& stats, wxString& error) {
 			density.fill(100);
 			patchSizes.fill(16);baseWeights.fill(100);
 			if (!spec.world.objectProfilePath.empty()) {
-				json::mValue root; std::string problem;
-				if (!ProceduralJSON::ReadFile(nstr(spec.world.objectProfilePath), 1024 * 1024, root, problem) || root.type() != json::obj_type) { error = "Invalid biome object profile: " + wxString::FromUTF8(problem); return false; }
-				const auto& object = root.get_obj();
+				const auto& object = objectProfile.get_obj();
 				const auto version = object.find("version"), biomes = object.find("biomes");
 				if (version == object.end() || version->second.type() != json::int_type || version->second.get_int64() != 1 || biomes == object.end() || biomes->second.type() != json::obj_type || biomes->second.get_obj().size() > 6) { error = "Object profiles require version 1 and a biomes object."; return false; }
 				const std::array<std::string, 7> names { "", "forest", "desert", "ice", "cave", "coast", "highland" };
@@ -390,10 +388,8 @@ namespace WorldEditor {
 			std::vector<WorldGen::BlueprintProp> objects;
 		};
 
-		bool ReadScenes(const GenerationSpec& spec,std::vector<ObjectScene>& scenes,wxString& error) {
+		bool ReadScenes(const GenerationSpec& spec,const json::mValue& root,std::vector<ObjectScene>& scenes,wxString& error) {
 			if(spec.world.objectProfilePath.empty())return true;
-			json::mValue root;std::string problem;
-			if(!ProceduralJSON::ReadFile(nstr(spec.world.objectProfilePath),1024*1024,root,problem) || root.type()!=json::obj_type) {error="Invalid scene profile.";return false;}
 			const auto list=root.get_obj().find("scenes");if(list==root.get_obj().end())return true;
 			if(list->second.type()!=json::array_type || list->second.get_array().size()>32) {error="scenes must contain at most 32 bounded compositions.";return false;}
 			std::set<std::string> ids;
@@ -517,12 +513,25 @@ namespace WorldEditor {
 			std::array<std::vector<DoodadBrush*>, 7> brushes;
 			std::array<int, 7> densityScale, patchSizes, baseWeights;
 			std::array<std::vector<ObjectPatch>,7> patches;
-			if (!DecorationBrushes(spec, brushes, densityScale, patches, patchSizes, baseWeights, stats, error)) return false;
-			std::vector<ObjectScene> scenes;if(!ReadScenes(spec,scenes,error))return false;
+			json::mValue profile;
+			if(!spec.world.objectProfilePath.empty()) {
+				std::string problem;
+				if(!ProceduralJSON::ReadFile(nstr(spec.world.objectProfilePath),1024*1024,profile,problem) || profile.type()!=json::obj_type) {error="Invalid biome object profile: "+wxString::FromUTF8(problem);return false;}
+			}
+			if (!DecorationBrushes(spec, profile, brushes, densityScale, patches, patchSizes, baseWeights, stats, error)) return false;
+			std::vector<ObjectScene> scenes;if(!ReadScenes(spec,profile,scenes,error))return false;
 			int waterLimit=-1;for(const auto& biome:patches)for(const auto& patch:biome)waterLimit=std::max(waterLimit,patch.maxWaterDistance);
 			const uint32_t objectSeed = spec.world.objectSeed.value_or(spec.seed);
 			std::array<bool, 7> used {};
 			for (const auto& layer : plan.layers) {
+				if(!spec.world.natureMask.empty() && layer.offsetZ!=spec.world.natureFloor)continue;
+				bool eligible=false;
+				for(size_t i=0;i<layer.cells.size();++i) {
+					const auto& cell=layer.cells[i];
+					const bool habitat=((cell.flags & WorldGen::Highland) && WorldGen::IsWalkable(cell) && cell.terrain!=WorldGen::Terrain::Snow) || Habitat(cell.terrain);
+					if(habitat && !(cell.flags & WorldGen::Reserved) && (spec.world.natureMask.empty() || spec.world.natureMask[i])){eligible=true;break;}
+				}
+				if(!eligible)continue;
 				WorldGen::DecorationGrid grid;
 				grid.width = plan.settings.width;
 				grid.height = plan.settings.height;
@@ -840,6 +849,7 @@ namespace WorldEditor {
 						Tile* copy = original->deepCopy(scratch);
 						copy->setLocation(scratch.createTileL(pos));
 						scratch.setTile(pos, copy);
+						++stats.contextCopies;
 					}
 				}
 			}
@@ -850,10 +860,11 @@ namespace WorldEditor {
 					}
 					for (int x = 0; x < spec.region.width; ++x) {
 						const auto& cell = layer.cells[size_t(y) * spec.region.width + x];
-						if (cell.terrain == WorldGen::Terrain::Void) {
+						if (cell.terrain == WorldGen::Terrain::Void || !SelectedNature(spec,plan,x,y,layer.offsetZ)) {
 							continue;
 						}
 						const auto pos = PositionFor(spec, { x, y }, layer.offsetZ);
+						++stats.preparedTiles;
 						if (Tile* authored = prefabs.TileAt(plan, x, y, layer.offsetZ)) {
 							Tile* tile = authored->deepCopy(scratch);
 							tile->setLocation(scratch.createTileL(pos));
@@ -897,7 +908,7 @@ namespace WorldEditor {
 					}
 					for (int x = 0; x < spec.region.width; ++x) {
 						const auto& cell = layer.cells[size_t(y) * spec.region.width + x];
-						if (cell.terrain == WorldGen::Terrain::Void) {
+						if (cell.terrain == WorldGen::Terrain::Void || !SelectedNature(spec,plan,x,y,layer.offsetZ)) {
 							continue;
 						}
 						if (prefabs.Covers(plan, x, y, layer.offsetZ)) continue;
@@ -916,7 +927,7 @@ namespace WorldEditor {
 			DoorBrush windows(WALL_WINDOW);
 			for (const auto& b : plan.buildings) {
 				const auto blueprint=WorldGen::RotateBlueprint(plan.catalog[b.blueprint], b.rotation);
-				if (!blueprint.windowChance || !blueprint.prefabPath.empty()) continue;
+				if (!spec.world.natureMask.empty() || !blueprint.windowChance || !blueprint.prefabPath.empty()) continue;
 				for (int level=0; level<b.levels; ++level) {
 					const auto& rows=WorldGen::BlueprintRowsForFloor(blueprint, level);
 					for (int y=0; y<b.height; ++y) for (int x=0; x<b.width; ++x) {
@@ -937,11 +948,14 @@ namespace WorldEditor {
 				const auto upperArrival = PositionFor(spec, link.upperArrival, link.upperOffsetZ), lowerArrival = PositionFor(spec, link.lowerArrival, link.lowerOffsetZ);
 				if (plan.settings.physicalStairs) {
 					physicalTravel[upper]=stairIds[0]; physicalTravel[lower]=stairIds[size_t(link.stairDirection+1)];
-					scratch.getTile(upper)->addItem(Item::Create(uint16_t(physicalTravel[upper])));
-					scratch.getTile(lower)->addItem(Item::Create(uint16_t(physicalTravel[lower])));
-					stats.stairEndpoints += 2;
+					if(spec.world.natureMask.empty()) {
+						scratch.getTile(upper)->addItem(Item::Create(uint16_t(physicalTravel[upper])));
+						scratch.getTile(lower)->addItem(Item::Create(uint16_t(physicalTravel[lower])));
+						stats.stairEndpoints += 2;
+					}
 					continue;
 				}
+				if(!spec.world.natureMask.empty())continue;
 				Teleport* down = newd Teleport(uint16_t(teleportId));
 				down->setDestination(lowerArrival);
 				scratch.getTile(upper)->addItem(down);
@@ -953,13 +967,13 @@ namespace WorldEditor {
 				return false;
 			}
 			if (!spec.world.natureMask.empty()) {
-				// Validate the actual merged result; untouched tiles are not re-bordered or committed.
+				// Validate original context retained from the first copy. Untouched tiles
+				// were never rebuilt, re-bordered or re-furnished in this transaction.
 				for(const auto& layer:plan.layers)for(int y=0;y<spec.region.height;++y)for(int x=0;x<spec.region.width;++x) {
 					if(x==0 && (y&15)==0 && !Update(progress,"Preserving unselected tiles",82,error))return false;
 					if(layer.cells[size_t(y)*spec.region.width+x].terrain==WorldGen::Terrain::Void || SelectedNature(spec,plan,x,y,layer.offsetZ))continue;
-					const auto pos=PositionFor(spec,{x,y},layer.offsetZ);auto* original=editor.map.getTile(pos);
-					if(!original || !original->ground) {error="Localized regeneration requires the complete original world at the same origin and floors.";return false;}
-					auto* copy=original->deepCopy(scratch);copy->setLocation(scratch.createTileL(pos));scratch.setTile(pos,copy,true);
+					const auto pos=PositionFor(spec,{x,y},layer.offsetZ);const auto* copy=scratch.getTile(pos);
+					if(!copy || !copy->ground) {error="Localized regeneration requires the complete original world at the same origin and floors.";return false;}
 					decorativeBlocking.erase(pos);
 					const auto& cell=layer.cells[size_t(y)*spec.region.width+x];
 					const bool ordinaryInterior=cell.terrain==WorldGen::Terrain::BuildingFloor && !(cell.flags & (WorldGen::Wall | WorldGen::Entrance | WorldGen::Connection));

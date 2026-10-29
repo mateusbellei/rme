@@ -491,6 +491,8 @@ namespace WorldBatch {
 		report["objectSeed"] = json::mValue(uint64_t(resolved.world.objectSeed.value_or(resolved.seed)));
 		report["planFingerprint"] = std::to_string(prepared.fingerprint);
 		report["tiles"] = json::mValue(uint64_t(prepared.application.changedTiles));
+		report["preparedTiles"] = json::mValue(uint64_t(prepared.application.preparedTiles));
+		report["contextCopies"] = json::mValue(uint64_t(prepared.application.contextCopies));
 		report["doodads"] = json::mValue(uint64_t(prepared.application.doodads));
 		json::mObject brushUsage,patchUsage,rejected;
 		for(const auto& [name,count]:prepared.application.objectBrushUsage)brushUsage[name]=json::mValue(uint64_t(count));

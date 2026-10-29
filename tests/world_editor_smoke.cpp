@@ -23,6 +23,8 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
+#include <chrono>
+#include <cstdlib>
 
 namespace {
 	void Check(bool condition, const std::string& message) {
@@ -820,8 +822,11 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			const auto basePreview=WorldEditor::Render(plan,0);
 			const auto scopedPreview=WorldEditor::Render(plan,0,WorldEditor::PreviewLayer::Terrain,&local);
 			Check(scopedPreview.IsOk() && scopedPreview.GetBlue(0,0)==basePreview.GetBlue(0,0)/4,"Local preview dims preserved cells");
+			const auto surfaceStart=std::chrono::steady_clock::now();
 			const bool localApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);
+			if(std::getenv("RME_WORLD_PERF"))std::cout << "METRIC surface " << blocks << ' ' << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-surfaceStart).count() << ' ' << MapHash(editor.map) << '\n';
 			Check(localApplied,"Local nature generation validates the combined map: "+nstr(error));
+			Check(localStats.preparedTiles==localStats.changedTiles && localStats.contextCopies>localStats.preparedTiles,"Only selected tiles are rebuilt; unchanged context is copied once");
 			Check(localStats.changedTiles>0 && localStats.changedTiles<stats.changedTiles && localStats.furniture==0,"Local edit applies only selected natural tiles");
 			for(const auto& [pos,tile]:untouched)Check(editor.map.getTile(pos)==tile,"Every unselected tile, road, building and other floor retains its original tile object");
 			const auto localHash=MapHash(editor.map);
@@ -829,7 +834,9 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			editor.actionQueue->redo();Check(MapHash(editor.map)==localHash,"Local nature edit redoes exactly");
 			editor.actionQueue->undo();
 			local.world.natureFloor=1;
+			const auto caveStart=std::chrono::steady_clock::now();
 			const bool caveApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);
+			if(std::getenv("RME_WORLD_PERF"))std::cout << "METRIC cave " << blocks << ' ' << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-caveStart).count() << ' ' << MapHash(editor.map) << '\n';
 			Check(caveApplied && localStats.changedTiles>0,"The same local-mask transaction supports underground nature: "+nstr(error));
 			editor.actionQueue->undo();Check(MapHash(editor.map)==applied,"Underground nature regeneration undoes without changing any other floor");
 			local.world.natureFloor=0;

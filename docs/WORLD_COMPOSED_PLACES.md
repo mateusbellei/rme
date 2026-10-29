@@ -129,8 +129,8 @@ planned reservations, buildings, roofs, roads and travel cells are excluded even
 inside white pixels. House/spawn/creature/script/zone/waypoint metadata still
 blocks replacement. This is replacement, not additive decoration of user props.
 
-The preview dims preserved pixels and reports the effective tile count. The full
-generated staging result is combined with untouched original tiles and validated
+The preview dims preserved pixels and reports the effective tile count. Selected
+tiles are generated inside a private copy of the original context and validated
 for physical travel/navigation before any changes are committed. Every tile
 outside the effective selection retains its original editor object; no outside
 borders are committed. A single undo/redo covers the local change. Empty effective
@@ -144,6 +144,9 @@ you want to remove all its parts; outside parts remain untouched. Atomic scene
 placement applies to the new composition. Local application still plans and
 validates the complete world, so memory/time are not proportional only to the
 painted area.
+
+Staging avoids regenerating preserved tiles or copying them a second time.
+See [WORLD_PERFORMANCE.md](WORLD_PERFORMANCE.md) for counters and measurement scope.
 
 ## Custom settings such as Ninja Saga
 

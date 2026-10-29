@@ -139,6 +139,17 @@ int main() {
 		prefab.floorBrush.clear();
 		prefab.prefabZ = 0;
 		Check(!WorldGen::ValidateBlueprint(prefab, error), "Prefab upper floors must stay within source z coordinates");
+
+		auto roof=WorldGen::DefaultBlueprints().front();roof.roofBrush="roof";roof.roofRows.assign(roof.rows.size(),std::string(roof.rows.front().size(),'.'));
+		roof.roofRows[1][1]='n';roof.roofRows[1][2]='h';roof.roofMaterials={"N","E","S","W","H","V"};roof.district="training";
+		Check(WorldGen::ValidateBlueprint(roof,error),"Directional roof bindings and districts validate");
+		auto rotated=WorldGen::RotateBlueprint(roof,1);
+		Check(WorldGen::FindBlueprintSymbol(rotated.roofRows,'e').first>=0 && WorldGen::FindBlueprintSymbol(rotated.roofRows,'v').first>=0,"Roof rotation must rotate slopes and ridge orientations as well as positions");
+		Check(WorldGen::RotateBlueprint(rotated,3).roofRows==roof.roofRows,"Four roof rotations recover original silhouette and slope directions");
+		roof.roofMaterials[2].clear();Check(!WorldGen::ValidateBlueprint(roof,error),"Rotatable roof cannot omit orientations that rotation may use");
+		roof.roofMaterials[2]="S";roof.roofRows[0][0]='x';Check(!WorldGen::ValidateBlueprint(roof,error),"Unknown roof symbols fail");
+		roof.roofRows[0][0]='.';roof.district="unknown";Check(!WorldGen::ValidateBlueprint(roof,error),"Unknown districts fail");
+
 		std::cout << "PASS: reusable blueprints, rotations, room connectivity, walls, entrances and vertical landing anchors\n";
 		return 0;
 	} catch (const std::exception& e) {

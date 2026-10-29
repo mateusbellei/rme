@@ -144,6 +144,7 @@ namespace WorldGen {
 			error = "Blueprint role or per-settlement limit is invalid.";
 			return false;
 		}
+		for (const auto& name : b.roofMaterials) if(name.size()>128 || name.find('\0')!=std::string::npos || (!name.empty() && b.roofRows.empty())) {error="Roof materials need bounded names and roofRows.";return false;}
 		for (const auto& name : { b.floorBrush, b.wallBrush, b.roofBrush }) {
 			if (name.size() > 128 || name.find('\0') != std::string::npos) {
 				error = "Blueprint material brush names must contain at most 128 bytes without NUL.";
@@ -164,6 +165,21 @@ namespace WorldGen {
 		}
 		if (!ValidateRows(b.rows, false, b.maxLevels > 1, error)) {
 			return false;
+		}
+		if (!b.district.empty() && b.district!="civic" && b.district!="market" && b.district!="residential" && b.district!="training" && b.district!="rural") { error="Unknown construction district."; return false; }
+		if (b.allowRotation && !b.roofRows.empty()) {
+			bool slopes=false,ridges=false;for(const auto& row:b.roofRows){slopes |= row.find_first_of("nesw")!=std::string::npos;ridges |= row.find_first_of("hv")!=std::string::npos;}
+			for(size_t i=0;i<6;++i)if((i<4?slopes:ridges) && b.roofMaterials[i].empty()){error="Rotatable roofs require all four slopes or both ridge orientations.";return false;}
+		}
+		if (!b.roofRows.empty()) {
+			if (b.roofBrush.empty() || b.roofRows.size()!=b.rows.size()) { error="roofRows requires a roof material and base dimensions."; return false; }
+			bool covered=false;
+			for (const auto& row:b.roofRows) {
+				if (row.size()!=b.rows.front().size() || row.find_first_not_of(".neswhv ")!=std::string::npos) { error="roofRows must use . or space with base dimensions."; return false; }
+				covered |= row.find_first_not_of(" ")!=std::string::npos;
+				for(char symbol:row) if(symbol!='.' && symbol!=' ' && b.roofMaterials[size_t(BlueprintRoofSlot(symbol)-5)].empty()) {error="Oriented roof cells need their exact roofMaterials binding.";return false;}
+			}
+			if (!covered) { error="Roof silhouette cannot be empty."; return false; }
 		}
 		if (!b.upperFloors.empty() && (!b.upperRows.empty() || b.upperFloors.size() != size_t(b.maxLevels - 1))) {
 			error = "upperFloors must define every upper level and cannot be combined with upperRows.";
@@ -298,6 +314,14 @@ namespace WorldGen {
 		if (!result.rows.empty()) {
 			result.rows = RotateRows(result.rows, turns);
 		}
+		if (!result.roofRows.empty()) {
+			result.roofRows=RotateRows(result.roofRows,turns);
+			for(auto& row:result.roofRows)for(auto& cell:row) {
+				const std::string slopes="nesw";const auto index=slopes.find(cell);
+				if(index!=std::string::npos)cell=slopes[(index+turns)%4];
+				else if((turns%2) && (cell=='h' || cell=='v'))cell=cell=='h'?'v':'h';
+			}
+		}
 		if (!result.upperRows.empty()) {
 			result.upperRows = RotateRows(result.upperRows, turns);
 		}
@@ -311,6 +335,10 @@ namespace WorldGen {
 		return blueprint.role.empty() ? blueprint.id : blueprint.role;
 	}
 
+	int BlueprintRoofSlot(char symbol) {
+		const auto index=std::string("neswhv").find(symbol);
+		return index==std::string::npos?4:5+int(index);
+	}
 	uint32_t RoleColor(const std::string& role) {
 		uint32_t hash = 2166136261u;
 		for (unsigned char value : role) {

@@ -23,6 +23,8 @@
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
+#include <chrono>
+#include <cstdlib>
 
 namespace {
 	void Check(bool condition, const std::string& message) {
@@ -820,8 +822,11 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			const auto basePreview=WorldEditor::Render(plan,0);
 			const auto scopedPreview=WorldEditor::Render(plan,0,WorldEditor::PreviewLayer::Terrain,&local);
 			Check(scopedPreview.IsOk() && scopedPreview.GetBlue(0,0)==basePreview.GetBlue(0,0)/4,"Local preview dims preserved cells");
+			const auto surfaceStart=std::chrono::steady_clock::now();
 			const bool localApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);
+			if(std::getenv("RME_WORLD_PERF"))std::cout << "METRIC surface " << blocks << ' ' << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-surfaceStart).count() << ' ' << MapHash(editor.map) << '\n';
 			Check(localApplied,"Local nature generation validates the combined map: "+nstr(error));
+			Check(localStats.preparedTiles==localStats.changedTiles && localStats.contextCopies>localStats.preparedTiles,"Only selected tiles are rebuilt; unchanged context is copied once");
 			Check(localStats.changedTiles>0 && localStats.changedTiles<stats.changedTiles && localStats.furniture==0,"Local edit applies only selected natural tiles");
 			for(const auto& [pos,tile]:untouched)Check(editor.map.getTile(pos)==tile,"Every unselected tile, road, building and other floor retains its original tile object");
 			const auto localHash=MapHash(editor.map);
@@ -829,7 +834,9 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			editor.actionQueue->redo();Check(MapHash(editor.map)==localHash,"Local nature edit redoes exactly");
 			editor.actionQueue->undo();
 			local.world.natureFloor=1;
+			const auto caveStart=std::chrono::steady_clock::now();
 			const bool caveApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);
+			if(std::getenv("RME_WORLD_PERF"))std::cout << "METRIC cave " << blocks << ' ' << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-caveStart).count() << ' ' << MapHash(editor.map) << '\n';
 			Check(caveApplied && localStats.changedTiles>0,"The same local-mask transaction supports underground nature: "+nstr(error));
 			editor.actionQueue->undo();Check(MapHash(editor.map)==applied,"Underground nature regeneration undoes without changing any other floor");
 			local.world.natureFloor=0;
@@ -965,6 +972,35 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 		result << "FAIL: " << exception.what() << '\n';
 		return 1;
 	}
+}
+
+static int RunPhysicalMaskScenario(const wxString& outputDirectory) {
+	try {
+		const std::filesystem::path directory=nstr(outputDirectory);
+		std::filesystem::create_directories(directory);PrepareRegistry();WriteLegend(directory/"legend.json");
+		for(int i=0;i<5;++i){FixtureItem(320+i,ITEM_GROUP_NONE);g_items[320+i].moveable=false;}
+		g_items[320].floorChangeDown=true;g_items[321].floorChangeNorth=true;g_items[322].floorChangeEast=true;g_items[323].floorChangeSouth=true;g_items[324].floorChangeWest=true;
+		MapVersion version;version.otbm=MAP_OTBM_2;version.client=ClientVersionID(57);
+		CopyBuffer buffer;Editor editor(buffer,version);editor.map.setWidth(128);editor.map.setHeight(128);
+		GenerationSpec spec;spec.source=GenerationSource::WorldPlan;spec.region.width=spec.region.height=64;
+		spec.world.settings.settlementCount=1;spec.world.settings.buildingsPerSettlement=0;spec.world.settings.buildingLevels=1;
+		spec.world.settings.caveDepth=1;spec.world.settings.physicalStairs=true;spec.world.stairItems={320,321,322,323,324};
+		spec.world.connectionItemId=103;spec.world.settings.riverCount=0;spec.imageMask.legendPath=wxstr((directory/"legend.json").string());
+		spec.doodads.enabled=true;spec.doodads.density=20;
+		GenerationSpec resolved;WorldGen::Plan plan;wxString error;
+		Check(WorldEditor::BuildPlan(editor,spec,resolved,plan,error),"Physical local fixture plan: "+nstr(error));
+		Check(WorldEditor::ApplyPlan(editor,resolved,plan,error),"Physical local fixture apply: "+nstr(error));
+		const auto before=MapHash(editor.map);std::vector<std::pair<Position,Tile*>> endpoints;
+		for(const auto& link:plan.links)for(const auto& endpoint:{std::pair{link.upper,link.upperOffsetZ},std::pair{link.lower,link.lowerOffsetZ}}){Position p(endpoint.first.x,endpoint.first.y,7+endpoint.second);endpoints.push_back({p,editor.map.getTile(p)});}
+		resolved.world.protectExisting=false;resolved.world.natureMask.assign(4096,1);resolved.world.objectSeed=4911;
+		WorldEditor::ApplicationStats stats;
+		const bool accepted=WorldEditor::ApplyPlan(editor,resolved,plan,error,&stats);
+		Check(accepted && stats.preparedTiles==stats.changedTiles && stats.changedTiles>0,"Physical stairs survive selective staging: "+nstr(error));
+		for(const auto& [p,tile]:endpoints)Check(editor.map.getTile(p)==tile,"Physical endpoint tiles retain identity instead of acquiring duplicate travel items");
+		editor.actionQueue->undo();Check(MapHash(editor.map)==before,"Selective update with directional stairs undoes exactly");
+		std::cout << "PASS: masked nature around physical stairs, preserved endpoints, no duplicate floor changes and exact undo\n";
+		return 0;
+	} catch(const std::exception& exception){std::cerr << "FAIL: physical local mask: " << exception.what() << '\n';return 1;}
 }
 
 static int RunBatchScenario(const wxString& outputDirectory) {
@@ -1126,6 +1162,8 @@ int RunWorldEditorSelfTest(const wxString& outputDirectory) {
 	if (city != 0) {
 		return city;
 	}
+	const int physical = RunPhysicalMaskScenario(outputDirectory + "/physical-mask");
+	if (physical != 0) return physical;
 	const int batch = RunBatchScenario(outputDirectory);
 	if (batch != 0) {
 		return batch;

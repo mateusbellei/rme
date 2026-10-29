@@ -114,6 +114,7 @@ namespace WorldGen {
 		int mountainLevels = 0;
 		int streetVariation = 0;
 		bool mountainPasses = false;
+		bool terrainAwareLots = false; // Prefer flatter, dry building sites near each center.
 		bool physicalStairs = false;
 		int caveDepth = 0;
 		int caveEntrances = 1;

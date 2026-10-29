@@ -49,6 +49,7 @@ static void TestRecipes() {
 	original.world.settings.caveChambers = 12;
 	original.world.settings.wildernessCaveEntry = true;
 	original.world.settings.mountainPasses = true;
+    original.world.settings.terrainAwareLots=true;
 	original.world.natureMaskPath = "edit.png";
 	original.world.natureFloor = -2;
 	original.world.settings.caveFill = 40;
@@ -69,7 +70,7 @@ static void TestRecipes() {
 	Check(ProceduralRecipe::Save(file, original, error), "World recipe must save");
 	GenerationSpec loaded;
 	Check(ProceduralRecipe::Load(file, loaded, error), "World recipe must load");
-	Check(loaded.world.settings.caveChambers==12 && loaded.world.settings.wildernessCaveEntry && loaded.world.settings.mountainPasses && loaded.world.natureMaskPath=="edit.png" && loaded.world.natureFloor==-2,"Place composition and local nature paths round-trip");
+	Check(loaded.world.settings.caveChambers==12 && loaded.world.settings.wildernessCaveEntry && loaded.world.settings.mountainPasses && loaded.world.settings.terrainAwareLots && loaded.world.natureMaskPath=="edit.png" && loaded.world.natureFloor==-2,"Place composition and local nature paths round-trip");
 	Check(loaded.world.settings.settlementAnchors == original.world.settings.settlementAnchors, "Authored city anchors must round-trip in order");
 	Check(loaded.source == original.source && loaded.seed == original.seed, "Full uint32 seed and world source must round-trip");
 	Check(loaded.region.originX == 200 && loaded.region.originY == 300 && loaded.region.width == 128 && loaded.region.height == 96, "Target origin and dimensions must round-trip");

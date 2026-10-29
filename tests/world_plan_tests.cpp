@@ -710,6 +710,11 @@ static void TestComposedPlaces() {
 		const auto rotated=RotateBlueprint(plan.catalog[b.blueprint],b.rotation);
 		for(int y=0;y<b.height;++y)for(int x=0;x<b.width;++x)Check(bool(plan.FindLayer(-b.levels)->cells[plan.Index({b.origin.x+x,b.origin.y+y})].flags&Roof)==(rotated.roofRows[y][x]!=' '),"Roof markers must follow rotated authored openings exactly");
 	}
+    const auto baseline=Fingerprint(plan);
+    s.terrainAwareLots=true;
+    Check(Build(s,plan,error,&catalog,&input) && Validate(plan).valid && plan.buildings.size()==12,"Terrain-sensitive lot priorities preserve required functions and connected floors");
+    Check(Build(s,replay,error,&catalog,&input) && Fingerprint(plan)==Fingerprint(replay) && Fingerprint(plan)!=baseline,"Terrain-sensitive lot policy is explicit and reproducible");
+    s.terrainAwareLots=false;
 	s.caveDepth=2;s.caveChambers=12;s.wildernessCaveEntry=true;s.physicalStairs=true;
 	Check(Build(s,plan,error,&catalog,&input) && Validate(plan).valid,"Chambers and wilderness cave entries must connect all floors");
 	Check(std::count_if(plan.FindLayer(1)->cells.begin(),plan.FindLayer(1)->cells.end(),[](const Cell& c){return c.moisture>0 && c.terrain==Terrain::CaveFloor;})>0,"Cave chambers must create actual humid room terrain");

@@ -189,6 +189,7 @@ bool ProceduralRecipe::Save(const wxString& path, const GenerationSpec& spec, wx
 	world["caveDepth"] = json::mValue(spec.world.settings.caveDepth);
 	world["caveEntrances"] = spec.world.settings.caveEntrances;
 	world["caveChambers"] = spec.world.settings.caveChambers;
+	world["terrainAwareLots"] = spec.world.settings.terrainAwareLots;
 	world["mountainPasses"] = spec.world.settings.mountainPasses;
 	world["wildernessCaveEntry"] = spec.world.settings.wildernessCaveEntry;
 	world["caveFill"] = json::mValue(spec.world.settings.caveFill);
@@ -480,6 +481,8 @@ bool ProceduralRecipe::Load(const wxString& path, GenerationSpec& result, wxStri
 		integer("caveDepth", spec.world.settings.caveDepth);
 		integer("caveEntrances", spec.world.settings.caveEntrances);
 		integer("caveChambers", spec.world.settings.caveChambers);
+        const auto terrainLots=world.find("terrainAwareLots");
+        if(terrainLots!=world.end()){if(terrainLots->second.type()!=json::bool_type){error="terrainAwareLots must be boolean.";return false;}spec.world.settings.terrainAwareLots=terrainLots->second.get_bool();}
 		const auto passes=world.find("mountainPasses");
 		if(passes!=world.end()) {if(passes->second.type()!=json::bool_type){error="mountainPasses must be boolean.";return false;}spec.world.settings.mountainPasses=passes->second.get_bool();}
 		const auto wildEntry=world.find("wildernessCaveEntry");

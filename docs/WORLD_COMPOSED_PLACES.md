@@ -10,7 +10,8 @@ without these fields retain their previous plan and OTBM output.
 `objects_places.json` extends the ecology profile with a top-level `scenes` array.
 The bundled 10.98 example includes wayside camps, overgrown ruins, stone shrines,
 training clearings, snow shelters, crystal sanctuaries, dry waystations and orchard
-rest areas. Scene props reuse existing client items; the campsite hearth is unlit.
+rest areas. Camps include tested two-by-two tent composites. Scene props reuse
+existing client items; the campsite hearth is unlit.
 
 ```json
 {"id":"grove", "habitats":["forest"], "spacing":48, "chance":60,
@@ -136,6 +137,13 @@ borders are committed. A single undo/redo covers the local change. Empty effecti
 masks, incomplete original worlds, protected metadata and incompatible interfaces
 fail atomically. The batch generator creates a new empty map, so it cannot use
 this existing-world mode as a partial OTBM patch command.
+
+Replacement is per tile: an existing wilderness scene or multi-item assembly is
+not recovered as an editable group from OTBM. Paint the complete old assembly if
+you want to remove all its parts; outside parts remain untouched. Atomic scene
+placement applies to the new composition. Local application still plans and
+validates the complete world, so memory/time are not proportional only to the
+painted area.
 
 ## Custom settings such as Ninja Saga
 

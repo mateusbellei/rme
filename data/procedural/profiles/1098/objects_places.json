@@ -652,6 +652,13 @@
           "brushes": [
             "mossy rocks"
           ]
+        },
+        {
+          "x": 0,
+          "y": -3,
+          "brushes": [
+            "gray striped tent"
+          ]
         }
       ]
     },
@@ -831,6 +838,13 @@
           "brushes": [
             "world chair west"
           ]
+        },
+        {
+          "x": 0,
+          "y": -3,
+          "brushes": [
+            "gray striped tent"
+          ]
         }
       ]
     },
@@ -923,6 +937,13 @@
           "y": 3,
           "brushes": [
             "world chair west"
+          ]
+        },
+        {
+          "x": 0,
+          "y": -3,
+          "brushes": [
+            "red striped tent"
           ]
         }
       ]

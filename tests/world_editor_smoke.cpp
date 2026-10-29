@@ -817,6 +817,9 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 				}
 			}
 			WorldEditor::ApplicationStats localStats;
+			const auto basePreview=WorldEditor::Render(plan,0);
+			const auto scopedPreview=WorldEditor::Render(plan,0,WorldEditor::PreviewLayer::Terrain,&local);
+			Check(scopedPreview.IsOk() && scopedPreview.GetBlue(0,0)==basePreview.GetBlue(0,0)/4,"Local preview dims preserved cells");
 			const bool localApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);
 			Check(localApplied,"Local nature generation validates the combined map: "+nstr(error));
 			Check(localStats.changedTiles>0 && localStats.changedTiles<stats.changedTiles && localStats.furniture==0,"Local edit applies only selected natural tiles");
@@ -825,6 +828,11 @@ static int RunWorldScenario(const wxString& outputDirectory, bool blocks) {
 			editor.actionQueue->undo();Check(MapHash(editor.map)==applied,"Local nature edit undoes as one transaction");
 			editor.actionQueue->redo();Check(MapHash(editor.map)==localHash,"Local nature edit redoes exactly");
 			editor.actionQueue->undo();
+			local.world.natureFloor=1;
+			const bool caveApplied=WorldEditor::ApplyPlan(editor,local,plan,error,&localStats);
+			Check(caveApplied && localStats.changedTiles>0,"The same local-mask transaction supports underground nature: "+nstr(error));
+			editor.actionQueue->undo();Check(MapHash(editor.map)==applied,"Underground nature regeneration undoes without changing any other floor");
+			local.world.natureFloor=0;
 			bool preserveVisited=false;
 			const bool cancelledLocal=WorldEditor::ApplyPlan(editor,local,plan,error,nullptr,[&](const char* stage,int) { if(std::string(stage)=="Preserving unselected tiles"){preserveVisited=true;return false;}return true; });
 			Check(!cancelledLocal && preserveVisited && MapHash(editor.map)==applied,"Cancellation while combining untouched tiles preserves the complete original map");

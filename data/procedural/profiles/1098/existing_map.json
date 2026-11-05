@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "roadBrush": "cobblestone",
+  "objectProfile": "objects_natural.json",
+  "forestObjects": [
+    "green trees",
+    "trees",
+    "world bamboo clump"
+  ],
+  "grounds": [
+    {
+      "brush": "grass",
+      "terrain": "grass"
+    },
+    {
+      "brush": "sand",
+      "terrain": "desert"
+    },
+    {
+      "brush": "snow",
+      "terrain": "snow"
+    },
+    {
+      "brush": "clear water",
+      "terrain": "ocean"
+    },
+    {
+      "brush": "mountain",
+      "terrain": "mountain"
+    },
+    {
+      "brush": "cave",
+      "terrain": "cave_floor"
+    },
+    {
+      "brush": "mountain top ground",
+      "terrain": "grass",
+      "habitat": "highland"
+    },
+    {
+      "brush": "cobblestone",
+      "terrain": "road"
+    },
+    {
+      "brush": "wooden floor",
+      "terrain": "building"
+    },
+    {
+      "brush": "grass (alternate border)",
+      "terrain": "grass"
+    },
+    {
+      "brush": "sand (thick border)",
+      "terrain": "desert"
+    },
+    {
+      "brush": "cave (alternate border)",
+      "terrain": "cave_floor"
+    },
+    {
+      "brush": "wooden floor (with border)",
+      "terrain": "building"
+    },
+    {
+      "brush": "stone floor",
+      "terrain": "building"
+    },
+    {
+      "brush": "white marble floor",
+      "terrain": "building"
+    },
+    {
+      "brush": "dark tiled stone floor",
+      "terrain": "building"
+    },
+    {
+      "brush": "tiled sandstone floor",
+      "terrain": "building"
+    },
+    {
+      "brush": "dark wooden floor",
+      "terrain": "building"
+    }
+  ]
+}

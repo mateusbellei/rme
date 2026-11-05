@@ -108,6 +108,8 @@ ${CMAKE_CURRENT_LIST_DIR}/waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/welcome_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/world_decoration.h
+${CMAKE_CURRENT_LIST_DIR}/world_existing.h
+${CMAKE_CURRENT_LIST_DIR}/world_existing_editor.h
 ${CMAKE_CURRENT_LIST_DIR}/world_inputs.h
 ${CMAKE_CURRENT_LIST_DIR}/world_export.h
 ${CMAKE_CURRENT_LIST_DIR}/world_batch.h
@@ -267,6 +269,7 @@ ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_value.cpp
 ${CMAKE_CURRENT_LIST_DIR}/json/json_spirit_writer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/procedural_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_decoration.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/world_existing.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_inputs.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_export.cpp
 ${CMAKE_CURRENT_LIST_DIR}/world_batch.cpp

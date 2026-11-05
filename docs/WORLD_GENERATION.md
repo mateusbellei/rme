@@ -893,3 +893,9 @@ See [CITY_GEOGRAPHY_STUDY.md](CITY_GEOGRAPHY_STUDY.md) for coastal/wetland profi
 
 Composed scenes, district affinities, directional roof silhouettes, cave rooms and
 local nature PNG transactions: [WORLD_COMPOSED_PLACES.md](WORLD_COMPOSED_PLACES.md).
+
+## Existing authored maps
+
+Use **Analyze / improve existing map...** for conservative additive improvements
+without the original procedural plan. See [WORLD_EXISTING_MAPS.md](WORLD_EXISTING_MAPS.md)
+for interpretation profiles, short path repairs, proposal previews and protections.

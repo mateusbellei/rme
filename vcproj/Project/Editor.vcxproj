@@ -470,6 +470,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\..\source\procedural_dialog.cpp" />
+    <ClInclude Include="..\..\source\world_existing.h" />
+    <ClInclude Include="..\..\source\world_existing_editor.h" />
+    <ClCompile Include="..\..\source\world_existing.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
     <ClInclude Include="..\..\source\world_decoration.h" />
     <ClInclude Include="..\..\source\world_inputs.h" />
     <ClInclude Include="..\..\source\world_export.h" />

@@ -10,6 +10,7 @@
 #include "editor.h"
 #include "gui.h"
 #include "world_editor.h"
+#include "world_existing_editor.h"
 #include "world_export.h"
 #include "world_inputs.h"
 #include "world_decoration.h"
@@ -187,6 +188,9 @@ ProceduralDialog::ProceduralDialog(wxWindow* parent, Editor& editor) :
 	worldBox->Add(chkProtectExisting, 0, wxALL, 4);
 	btnWorldSettings = new wxButton(content, ID_WORLD_SETTINGS, "World settings...");
 	worldBox->Add(btnWorldSettings, 0, wxALL, 4);
+    auto* improveExisting=new wxButton(content,wxID_ANY,"Analyze / improve existing map...");
+    worldBox->Add(improveExisting,0,wxALL,4);
+    improveExisting->Bind(wxEVT_BUTTON,&ProceduralDialog::OnImproveExisting,this);
 	top->Add(worldBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
 	wxStaticBoxSizer* sbPipeline = new wxStaticBoxSizer(wxVERTICAL, content, "Post-processing");
@@ -994,4 +998,60 @@ void ProceduralDialog::OnPreviewWorld(wxCommandEvent& event) {
 	redraw();
 	preview.CentreOnParent();
 	preview.ShowModal();
+}
+
+
+void ProceduralDialog::OnImproveExisting(wxCommandEvent&) {
+    wxDialog dialog(this,wxID_ANY,"Improve existing map",wxDefaultPosition,DialogSize(this,790,850),wxDEFAULT_DIALOG_STYLE|wxRESIZE_BORDER);
+    auto* layout=new wxBoxSizer(wxVERTICAL);
+    auto* intro=new wxStaticText(&dialog,wxID_ANY,"Analyze the selected tiles or configured region on one floor. Existing objects and buildings are preserved.\nUnknown materials stay protected. Review the proposed changes before applying.");
+    layout->Add(intro,0,wxEXPAND|wxALL,8);
+    auto* profileRow=new wxBoxSizer(wxHORIZONTAL);
+    profileRow->Add(new wxStaticText(&dialog,wxID_ANY,"Analysis profile:"),0,wxALIGN_CENTER_VERTICAL|wxRIGHT,6);
+    auto* profile=new wxTextCtrl(&dialog,wxID_ANY,g_gui.GetProceduralDataDirectory()+"profiles/1098/existing_map.json");profileRow->Add(profile,1,wxRIGHT,6);
+    auto* browse=new wxButton(&dialog,wxID_ANY,"Browse...");profileRow->Add(browse,0);layout->Add(profileRow,0,wxEXPAND|wxLEFT|wxRIGHT|wxBOTTOM,8);
+    auto* objectsRow=new wxBoxSizer(wxHORIZONTAL);objectsRow->Add(new wxStaticText(&dialog,wxID_ANY,"Object profile:"),0,wxALIGN_CENTER_VERTICAL|wxRIGHT,6);
+    auto* objects=new wxTextCtrl(&dialog,wxID_ANY,worldSettings.objectProfilePath);objects->SetHint("Blank uses the analysis profile's object palette");objectsRow->Add(objects,1,wxRIGHT,6);auto* browseObjects=new wxButton(&dialog,wxID_ANY,"Browse...");objectsRow->Add(browseObjects,0);layout->Add(objectsRow,0,wxEXPAND|wxLEFT|wxRIGHT|wxBOTTOM,8);
+    auto* variation=new wxBoxSizer(wxHORIZONTAL);variation->Add(new wxStaticText(&dialog,wxID_ANY,"Seed:"),0,wxALIGN_CENTER_VERTICAL|wxRIGHT,6);
+    auto* objectSeed=new wxSpinCtrlDouble(&dialog,wxID_ANY,std::to_string(uint32_t(spnSeed->GetValue())),wxDefaultPosition,wxSize(160,-1),wxSP_ARROW_KEYS,0,4294967295.0,spnSeed->GetValue(),1);objectSeed->SetDigits(0);variation->Add(objectSeed,0,wxRIGHT,10);
+    variation->Add(new wxStaticText(&dialog,wxID_ANY,"Density %:"),0,wxALIGN_CENTER_VERTICAL|wxRIGHT,6);auto* density=new wxSpinCtrl(&dialog,wxID_ANY,std::to_string(spnDoodadDensity->GetValue()),wxDefaultPosition,wxSize(70,-1),wxSP_ARROW_KEYS,0,40,spnDoodadDensity->GetValue());variation->Add(density,0);layout->Add(variation,0,wxEXPAND|wxLEFT|wxRIGHT|wxBOTTOM,8);
+    auto* settings=new wxBoxSizer(wxHORIZONTAL);
+    auto* nature=new wxCheckBox(&dialog,wxID_ANY,"Add nature");nature->SetValue(true);settings->Add(nature,0,wxALIGN_CENTER_VERTICAL|wxRIGHT,8);
+    auto* paths=new wxCheckBox(&dialog,wxID_ANY,"Join short path gaps");paths->SetValue(true);settings->Add(paths,0,wxALIGN_CENTER_VERTICAL|wxRIGHT,8);
+    settings->Add(new wxStaticText(&dialog,wxID_ANY,"Max gap:"),0,wxALIGN_CENTER_VERTICAL|wxRIGHT,4);
+    auto* gap=new wxSpinCtrl(&dialog,wxID_ANY,"8",wxDefaultPosition,wxSize(60,-1),wxSP_ARROW_KEYS,1,12,8);settings->Add(gap,0,wxRIGHT,6);
+    settings->Add(new wxStaticText(&dialog,wxID_ANY,"Buffer:"),0,wxALIGN_CENTER_VERTICAL|wxRIGHT,4);
+    auto* buffer=new wxSpinCtrl(&dialog,wxID_ANY,"2",wxDefaultPosition,wxSize(60,-1),wxSP_ARROW_KEYS,1,8,2);settings->Add(buffer,0);layout->Add(settings,0,wxEXPAND|wxLEFT|wxRIGHT|wxBOTTOM,8);
+    auto* analysisRow=new wxBoxSizer(wxHORIZONTAL);
+    auto* analyze=new wxButton(&dialog,wxID_ANY,"Analyze current map");analysisRow->Add(analyze,0,wxRIGHT,8);
+    auto* views=new wxChoice(&dialog,wxID_ANY);for(const auto* label:{"Recognized terrain","Proposed changes","Eligible / protected"})views->Append(label);views->SetSelection(1);analysisRow->Add(views,1);
+    layout->Add(analysisRow,0,wxEXPAND|wxLEFT|wxRIGHT|wxBOTTOM,8);
+    auto* image=new wxStaticBitmap(&dialog,wxID_ANY,wxBitmap(1,1));layout->Add(image,1,wxALIGN_CENTER|wxALL,8);
+    auto* description=new wxTextCtrl(&dialog,wxID_ANY,"Choose an analysis profile, then analyze the map. The existing generation seed and density control the proposed nature. The loaded world's object profile is reused when available.",wxDefaultPosition,wxSize(-1,125),wxTE_READONLY|wxTE_MULTILINE);layout->Add(description,0,wxEXPAND|wxALL,8);
+    auto* buttons=new wxBoxSizer(wxHORIZONTAL);auto* exportReport=new wxButton(&dialog,wxID_ANY,"Export analysis + PNGs...");auto* apply=new wxButton(&dialog,wxID_ANY,"Apply proposed improvements");
+    apply->Enable(false);exportReport->Enable(false);buttons->Add(exportReport,0,wxRIGHT,8);buttons->Add(apply,0,wxRIGHT,8);buttons->Add(new wxButton(&dialog,wxID_CANCEL,"Close"),0);layout->Add(buttons,0,wxALIGN_RIGHT|wxALL,8);dialog.SetSizer(layout);
+    WorldEditor::ExistingPreview prepared;
+    auto invalidate=[&](){prepared=WorldEditor::ExistingPreview();image->SetBitmap(wxNullBitmap);apply->Enable(false);exportReport->Enable(false);description->SetValue("Settings changed. Analyze again to review the new proposal.");};
+    auto redraw=[&](){if(!prepared.ready())return;auto bitmap=WorldEditor::RenderExisting(prepared,views->GetSelection());if(!bitmap.IsOk())return;const int maxWidth=std::max(100,dialog.GetClientSize().x-30),maxHeight=std::max(80,dialog.GetClientSize().y-435);const double scale=std::min(double(maxWidth)/bitmap.GetWidth(),double(maxHeight)/bitmap.GetHeight());image->SetBitmap(wxBitmap(bitmap.Scale(std::max(1,int(bitmap.GetWidth()*scale)),std::max(1,int(bitmap.GetHeight()*scale)),wxIMAGE_QUALITY_NEAREST)));dialog.Layout();};
+    browse->Bind(wxEVT_BUTTON,[&](wxCommandEvent&){wxFileDialog picker(&dialog,"Choose existing-map analysis profile","","","JSON (*.json)|*.json",wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK)profile->SetValue(picker.GetPath());});
+    browseObjects->Bind(wxEVT_BUTTON,[&](wxCommandEvent&){wxFileDialog picker(&dialog,"Choose object profile","","","JSON (*.json)|*.json",wxFD_OPEN|wxFD_FILE_MUST_EXIST);if(picker.ShowModal()==wxID_OK)objects->SetValue(picker.GetPath());});
+    objects->Bind(wxEVT_TEXT,[&](wxCommandEvent&){invalidate();});objectSeed->Bind(wxEVT_SPINCTRLDOUBLE,[&](wxSpinDoubleEvent&){invalidate();});objectSeed->Bind(wxEVT_TEXT,[&](wxCommandEvent&){invalidate();});density->Bind(wxEVT_SPINCTRL,[&](wxSpinEvent&){invalidate();});density->Bind(wxEVT_TEXT,[&](wxCommandEvent&){invalidate();});
+    profile->Bind(wxEVT_TEXT,[&](wxCommandEvent&){invalidate();});nature->Bind(wxEVT_CHECKBOX,[&](wxCommandEvent&){invalidate();});paths->Bind(wxEVT_CHECKBOX,[&](wxCommandEvent&){invalidate();});gap->Bind(wxEVT_SPINCTRL,[&](wxSpinEvent&){invalidate();});buffer->Bind(wxEVT_SPINCTRL,[&](wxSpinEvent&){invalidate();});gap->Bind(wxEVT_TEXT,[&](wxCommandEvent&){invalidate();});buffer->Bind(wxEVT_TEXT,[&](wxCommandEvent&){invalidate();});
+    analyze->Bind(wxEVT_BUTTON,[&](wxCommandEvent&){
+        WorldEditor::ExistingOptions options;options.spec=BuildSpecFromDialog();options.spec.seed=uint32_t(objectSeed->GetValue());options.spec.world.objectSeed=options.spec.seed;options.spec.doodads.density=density->GetValue();options.spec.world.objectProfilePath=objects->GetValue();options.profilePath=profile->GetValue();options.addNature=nature->GetValue();options.connectPaths=paths->GetValue();options.maxGap=gap->GetValue();options.protectionRadius=buffer->GetValue();
+        WorldEditor::ExistingPreview candidate;wxString error;bool success;
+        {wxProgressDialog progress("Analyzing existing map","Reading materials",100,&dialog,wxPD_APP_MODAL|wxPD_CAN_ABORT|wxPD_AUTO_HIDE);success=WorldEditor::PrepareExisting(editor,options,candidate,error,DialogProgress(progress));}
+        if(!success){invalidate();if(error!="World generation cancelled.")g_gui.PopupDialog(&dialog,"Analysis failed",error,wxOK|wxICON_ERROR);return;}
+        prepared=std::move(candidate);description->SetValue(WorldEditor::DescribeExisting(prepared));apply->Enable(prepared.changedTiles()>0);exportReport->Enable(true);redraw();
+    });
+    views->Bind(wxEVT_CHOICE,[&](wxCommandEvent&){redraw();});dialog.Bind(wxEVT_SIZE,[&](wxSizeEvent& event){redraw();event.Skip();});
+    exportReport->Bind(wxEVT_BUTTON,[&](wxCommandEvent&){
+        if(!prepared.ready())return;wxFileDialog picker(&dialog,"Export existing-map analysis","","existing-map-analysis.json","JSON (*.json)|*.json",wxFD_SAVE|wxFD_OVERWRITE_PROMPT);if(picker.ShowModal()!=wxID_OK)return;
+        wxString error;if(!WorldEditor::ExportExisting(prepared,picker.GetPath(),error)){g_gui.PopupDialog(&dialog,"Export failed",error,wxOK|wxICON_ERROR);return;}
+        wxFileName prefix(picker.GetPath());prefix.ClearExt();wxPNGHandler encoder;
+        for(int view=0;view<3;++view){auto bitmap=WorldEditor::RenderExisting(prepared,view);wxFileOutputStream file(prefix.GetFullPath()+wxString::Format("_view%d.png",view));if(!file.IsOk() || !encoder.SaveFile(&bitmap,file,false)){g_gui.PopupDialog(&dialog,"Export failed","Could not write analysis PNG.",wxOK|wxICON_ERROR);return;}}
+        g_gui.SetStatusText("Existing-map analysis and proposal PNGs exported.");
+    });
+    apply->Bind(wxEVT_BUTTON,[&](wxCommandEvent&){if(!prepared.ready())return;wxString error;bool success;{wxProgressDialog progress("Improving existing map","Checking preview",100,&dialog,wxPD_APP_MODAL|wxPD_CAN_ABORT|wxPD_AUTO_HIDE);success=WorldEditor::ApplyExisting(editor,prepared,error,nullptr,DialogProgress(progress));}if(!success){g_gui.PopupDialog(&dialog,"Improvements not applied",error,wxOK|wxICON_ERROR);return;}dialog.EndModal(wxID_OK);});
+    dialog.CentreOnParent();dialog.ShowModal();
 }

@@ -1,6 +1,11 @@
 #include "main.h"
 
 #include "world_editor.h"
+#include "world_existing_editor.h"
+#include "filehandle.h"
+#include "iomap_otbm.h"
+#include "town.h"
+#include <wx/file.h>
 #include "procedural_json.h"
 #include "procedural_common.h"
 #include "procedural_legend.h"
@@ -24,6 +29,7 @@
 #include <set>
 #include <filesystem>
 #include <limits>
+#include <numeric>
 
 namespace WorldEditor {
 	namespace {
@@ -1400,4 +1406,322 @@ namespace WorldEditor {
 		}
 		return text;
 	}
+
+    struct PreparedExisting {
+        Editor* owner=nullptr;
+        GenerationSpec spec;
+        GenerationRegion editRegion;
+        ExistingOptions options;
+        WorldExisting::Analysis analysis;
+        ApplicationStats stats;
+        BaseMap scratch;
+        WorldGen::Plan semantic;
+        std::vector<Position> changes;
+        std::vector<uint8_t> roadChanges;
+        std::map<int,size_t> unknown;
+        uint64_t baseline=0,client=0,profileDigest=0,objectsDigest=0;
+        wxString objectsPath;
+        size_t roads=0;
+        uint32_t requestedObjectSeed=0;
+    };
+
+    namespace {
+        struct ExistingBinding {WorldGen::Terrain terrain=WorldGen::Terrain::Void;bool highland=false;};
+        struct ExistingProfile {
+            std::map<int,ExistingBinding> exact;
+            std::map<Brush*,ExistingBinding> brushes;
+            GroundBrush* road=nullptr;
+            std::set<Brush*> forestObjects;
+            wxString objects;
+        };
+        void HashExisting(uint64_t& hash,uint64_t value) {for(int b=0;b<8;++b){hash^=uint8_t(value>>(b*8));hash*=1099511628211ull;}}
+        uint64_t ExistingFileDigest(const wxString& path) {
+            if(path.empty())return 0;
+            wxFile file(path);if(!file.IsOpened())return 0;const auto length=file.Length();if(length<0 || length>1024*1024)return 0;
+            std::vector<uint8_t> bytes(size_t(length),uint8_t(0));
+            if(file.Read(bytes.data(),bytes.size())!=ssize_t(bytes.size()))return 0;
+            uint64_t hash=1469598103934665603ull;for(auto byte:bytes){hash^=byte;hash*=1099511628211ull;}return hash;
+        }
+        uint64_t ExistingClientDigest() {
+            uint64_t hash=1469598103934665603ull;
+            HashExisting(hash,g_items.MajorVersion);HashExisting(hash,g_items.MinorVersion);HashExisting(hash,g_items.BuildNumber);
+            // Include editor/runtime definitions beyond the OTB file's max ID.
+            for(unsigned id=1;id<=65535;++id)if(g_items.typeExists(id)) {
+                const auto& type=g_items[id];HashExisting(hash,id);HashExisting(hash,type.clientID);
+                HashExisting(hash,type.unpassable);HashExisting(hash,type.isGroundTile());HashExisting(hash,type.isFloorChange());HashExisting(hash,type.isTeleport());HashExisting(hash,type.ground_equivalent);
+                HashExisting(hash,type.isWall);HashExisting(hash,type.isBorder);HashExisting(hash,type.isDoor());HashExisting(hash,type.isContainer());HashExisting(hash,type.isDepot());HashExisting(hash,type.isMetaItem());HashExisting(hash,type.brush?type.brush->getID():0);
+                HashExisting(hash,type.sprite?type.sprite->width:0);HashExisting(hash,type.sprite?type.sprite->height:0);
+            }
+            return hash;
+        }
+        uint64_t ExistingMapDigest(Editor& editor,const GenerationRegion& region) {
+            uint64_t hash=1469598103934665603ull;
+            HashExisting(hash,editor.map.getWidth());HashExisting(hash,editor.map.getHeight());
+            IOMapOTBM codec(editor.map.getVersion());MemoryNodeFileWriteHandle bytes;
+            for(int y=0;y<region.height;++y)for(int x=0;x<region.width;++x) {
+                const Position pos(region.originX+x,region.originY+y,region.z);const auto* tile=editor.map.getTile(pos);const auto* location=editor.map.getTileL(pos);
+                HashExisting(hash,tile?1:0);
+                if(location){HashExisting(hash,location->getWaypointCount());HashExisting(hash,location->getTownCount());HashExisting(hash,location->getSpawnCount());}
+                if(!tile)continue;
+                HashExisting(hash,tile->house_id);HashExisting(hash,tile->getMapFlags());HashExisting(hash,tile->isHouseExit());HashExisting(hash,reinterpret_cast<uintptr_t>(tile->spawn));HashExisting(hash,reinterpret_cast<uintptr_t>(tile->creature));
+                std::vector<uint16_t> zones(tile->getZoneIds().begin(),tile->getZoneIds().end());std::sort(zones.begin(),zones.end());HashExisting(hash,zones.size());for(auto zone:zones)HashExisting(hash,zone);
+                bytes.reset();bytes.addNode(0);
+                if(tile->ground)tile->ground->serializeItemNode_OTBM(codec,bytes);
+                for(const auto* item:tile->items)item->serializeItemNode_OTBM(codec,bytes);
+                bytes.endNode();for(size_t n=0;n<bytes.getSize();++n){hash^=bytes.getMemory()[n];hash*=1099511628211ull;}
+            }
+            // Town order governs regional scene bindings and is part of the preview.
+            for(const auto& entry:editor.map.towns){const auto p=entry.second->getTemplePosition();HashExisting(hash,entry.first);HashExisting(hash,p.x);HashExisting(hash,p.y);HashExisting(hash,p.z);}
+            return hash;
+        }
+        bool ReadExistingProfile(const wxString& path,ExistingProfile& profile,wxString& error) {
+            json::mValue root;std::string problem;
+            if(!ProceduralJSON::ReadFile(nstr(path),1024*1024,root,problem) || root.type()!=json::obj_type){error="Invalid existing-map profile: "+wxstr(problem);return false;}
+            const auto& object=root.get_obj();const auto version=object.find("version"),grounds=object.find("grounds");
+            if(version==object.end() || version->second.type()!=json::int_type || version->second.get_int64()!=1 || grounds==object.end() || grounds->second.type()!=json::array_type || grounds->second.get_array().empty() || grounds->second.get_array().size()>256){error="Existing-map profile needs version 1 and 1..256 ground mappings.";return false;}
+            for(const auto& value:grounds->second.get_array()) {
+                if(value.type()!=json::obj_type){error="Existing ground mapping must be an object.";return false;}
+                const auto& fields=value.get_obj();const auto terrain=fields.find("terrain"),id=fields.find("id"),brush=fields.find("brush");
+                if(terrain==fields.end() || terrain->second.type()!=json::str_type || (id==fields.end())==(brush==fields.end())){error="Existing ground mapping needs terrain and exactly one of id or brush.";return false;}
+                WorldGen::Terrain category=WorldGen::Terrain::Void;
+                for(int t=0;t<int(WorldGen::Terrain::Void);++t)if(terrain->second.get_str()==WorldGen::TerrainName(WorldGen::Terrain(t)))category=WorldGen::Terrain(t);
+                if(category==WorldGen::Terrain::Void){error="Unknown existing-map terrain category.";return false;}
+                ExistingBinding binding{category,false};const auto habitat=fields.find("habitat");
+                if(habitat!=fields.end()){if(habitat->second.type()!=json::str_type || habitat->second.get_str()!="highland" || !WorldExisting::Natural(category)){error="Existing habitat override must be highland on natural ground.";return false;}binding.highland=true;}
+                if(id!=fields.end()) {
+                    if(id->second.type()!=json::int_type || id->second.get_int64()<1 || id->second.get_int64()>65535 || !g_items.typeExists(int(id->second.get_int64())) || !g_items[int(id->second.get_int64())].isGroundTile() || !profile.exact.emplace(int(id->second.get_int64()),binding).second){error="Existing ground IDs must be unique active-client grounds.";return false;}
+                } else {
+                    if(brush->second.type()!=json::str_type){error="Existing ground brush must be an exact name.";return false;}
+                    auto* resolved=g_brushes.getBrush(brush->second.get_str());
+                    if(!resolved || !resolved->isGround() || !profile.brushes.emplace(resolved,binding).second){error="Missing or duplicate exact existing ground brush: "+wxstr(brush->second.get_str());return false;}
+                }
+            }
+            const auto road=object.find("roadBrush");
+            if(road!=object.end()) {
+                if(road->second.type()!=json::str_type){error="roadBrush must be an exact ground name.";return false;}
+                auto* brush=g_brushes.getBrush(road->second.get_str());
+                if(!brush || !brush->isGround()){error="Missing existing-map road ground brush.";return false;}profile.road=brush->asGround();
+            }
+            const auto forest=object.find("forestObjects");
+            if(forest!=object.end()) {
+                if(forest->second.type()!=json::array_type || forest->second.get_array().size()>32){error="forestObjects must contain at most 32 exact doodad brushes.";return false;}
+                for(const auto& value:forest->second.get_array()) {
+                    if(value.type()!=json::str_type){error="forestObjects must contain exact brush names.";return false;}
+                    auto* brush=g_brushes.getBrush(value.get_str());if(!brush || !brush->isDoodad() || !profile.forestObjects.insert(brush).second){error="Missing or duplicate forest evidence brush.";return false;}
+                }
+            }
+            const auto props=object.find("objectProfile");
+            if(props!=object.end()) {
+                if(props->second.type()!=json::str_type || props->second.get_str().empty()){error="objectProfile must be a nonempty relative or absolute path.";return false;}
+                wxFileName filename(wxstr(props->second.get_str()));if(filename.IsRelative())filename.MakeAbsolute(wxFileName(path).GetPath());profile.objects=filename.GetFullPath();
+            }
+            return true;
+        }
+        WorldGen::Terrain ExistingTerrain(const Tile* tile,const ExistingProfile& profile) {
+            if(!tile || !tile->ground)return WorldGen::Terrain::Void;
+            const auto exact=profile.exact.find(tile->ground->getID());if(exact!=profile.exact.end())return exact->second.terrain;
+            const auto& type=g_items[tile->ground->getID()];const auto brush=profile.brushes.find(type.brush);
+            if(brush!=profile.brushes.end())return brush->second.terrain;
+            return type.isFloorChange() || type.isTeleport()?WorldGen::Terrain::BuildingFloor:WorldGen::Terrain::Void;
+        }
+        bool ExistingProtected(Editor& editor,const Position& pos,const Tile* tile) {
+            const auto* location=editor.map.getTileL(pos);
+            if(location && (location->getWaypointCount() || location->getTownCount() || location->getSpawnCount()))return true;
+            if(!tile || !tile->ground || tile->house_id || tile->spawn || tile->creature || tile->getMapFlags() || !tile->getZoneIds().empty() || tile->isHouseExit())return true;
+            auto unsafe=[](const Item* item){if(!item)return false;const auto& t=g_items[item->getID()];return item->isComplex() || t.isMetaItem() || t.isFloorChange() || t.isTeleport() || t.isDoor() || t.isContainer() || t.isDepot() || t.isWall;};
+            if(unsafe(tile->ground))return true;
+            // Every authored object is retained, including decorative or scripted borders.
+            for(const auto* item:tile->items)if(!item->isBorder() || unsafe(item))return true;
+            return false;
+        }
+    }
+
+    const WorldExisting::Analysis& ExistingPreview::analysis() const {return prepared->analysis;}
+    const ApplicationStats& ExistingPreview::stats() const {return prepared->stats;}
+    const GenerationRegion& ExistingPreview::region() const {return prepared->spec.region;}
+    uint64_t ExistingPreview::fingerprint() const {return prepared->baseline;}
+    size_t ExistingPreview::changedTiles() const {return prepared->changes.size();}
+    size_t ExistingPreview::roadTiles() const {return prepared->roads;}
+    const std::map<int,size_t>& ExistingPreview::unknownGrounds() const {return prepared->unknown;}
+
+    bool PrepareExisting(Editor& editor,const ExistingOptions& options,ExistingPreview& preview,wxString& error,const WorldGen::ProgressCallback& progress) {
+        error.clear();
+        if(editor.IsLiveClient()){error="Analyze and improve maps locally, outside live editing sessions.";return false;}
+        auto next=std::make_shared<PreparedExisting>();next->owner=&editor;next->spec=options.spec;next->options=options;
+        auto& spec=next->spec;spec.elevation.maxLevels=0;
+        if(!ProceduralCommon::ResolveRegion(editor,spec,error))return false;
+        next->editRegion=spec.region;
+        const auto original=spec.region;
+        if(original.originX<0 || original.originY<0 || int64_t(original.originX)+original.width>editor.map.getWidth() || int64_t(original.originY)+original.height>editor.map.getHeight()){error="The requested existing-map region is outside the map.";return false;}
+        constexpr int halo=32;
+        spec.region.originX=std::max(0,original.originX-halo);spec.region.originY=std::max(0,original.originY-halo);
+        spec.region.width=std::min(editor.map.getWidth(),original.originX+original.width+halo)-spec.region.originX;
+        spec.region.height=std::min(editor.map.getHeight(),original.originY+original.height+halo)-spec.region.originY;
+        const auto& r=spec.region;
+        if(original.width<1 || original.height<1 || original.originX<0 || original.originY<0 || int64_t(original.originX)+original.width>editor.map.getWidth() || int64_t(original.originY)+original.height>editor.map.getHeight() || r.width<1 || r.height<1 || int64_t(r.width)*r.height>DefaultTileBudget || r.originX<0 || r.originY<0 || r.z<0 || r.z>MAP_MAX_LAYER || int64_t(r.originX)+r.width>editor.map.getWidth() || int64_t(r.originY)+r.height>editor.map.getHeight()){error="Existing-map analysis requires an in-bounds region of at most 1,048,576 cells on one floor.";return false;}
+        if(!Update(progress,"Reading existing-map materials",0,error))return false;
+        ExistingProfile profile;
+        wxFileName profileFile(options.profilePath.empty()?g_gui.GetProceduralDataDirectory()+"profiles/1098/existing_map.json":options.profilePath);
+        if(profileFile.IsRelative())profileFile.MakeAbsolute();const auto profilePath=profileFile.GetFullPath();
+        next->options.profilePath=profilePath;
+        next->profileDigest=ExistingFileDigest(profilePath);
+        if(!next->profileDigest){error="Could not read the existing-map analysis profile.";return false;}
+        if(!ReadExistingProfile(profilePath,profile,error))return false;
+        if(next->profileDigest!=ExistingFileDigest(profilePath)){error="Analysis profile changed while loading.";return false;}next->objectsPath=profile.objects;
+        if(!spec.world.objectProfilePath.empty())next->objectsPath=spec.world.objectProfilePath;
+        if(options.addNature && next->objectsPath.empty()){error="Choose an object profile before enriching an existing map.";return false;}
+        spec.world.objectProfilePath=next->objectsPath;
+        next->objectsDigest=options.addNature?ExistingFileDigest(next->objectsPath):0;
+        if(options.addNature && !next->objectsDigest){error="Could not read the existing-map object profile.";return false;}
+        next->baseline=ExistingMapDigest(editor,r);next->client=ExistingClientDigest();
+        WorldExisting::Settings settings{r.width,r.height,options.protectionRadius,options.maxGap,options.maxConnections,options.connectPaths};
+        std::vector<WorldExisting::Cell> cells(size_t(r.width)*r.height);
+        std::set<Position> selected;
+        if(options.spec.useSelection)for(auto* tile:editor.selection.getTiles())selected.insert(tile->getPosition());
+        for(int y=0;y<r.height;++y) {
+            if((y&31)==0 && !Update(progress,"Reading existing terrain and protected objects",10,error))return false;
+            for(int x=0;x<r.width;++x) {
+                const Position pos(r.originX+x,r.originY+y,r.z);const auto* tile=editor.map.getTile(pos);auto& cell=cells[size_t(y)*r.width+x];
+                cell.exists=tile && tile->ground;cell.bare=tile && tile->items.empty();cell.terrain=ExistingTerrain(tile,profile);cell.walkable=TileWalkable(tile);
+                if(cell.exists){const auto exact=profile.exact.find(tile->ground->getID());const auto brush=profile.brushes.find(g_items[tile->ground->getID()].brush);cell.highland=exact!=profile.exact.end()?exact->second.highland:brush!=profile.brushes.end() && brush->second.highland;}
+                if(tile){auto travel=[](const Item* item){return item && (g_items[item->getID()].isFloorChange() || g_items[item->getID()].isTeleport());};cell.travel=travel(tile->ground) || std::any_of(tile->items.begin(),tile->items.end(),travel);}
+                cell.editable=cell.exists && cell.terrain!=WorldGen::Terrain::Void && !ExistingProtected(editor,pos,tile) && pos.x>=original.originX && pos.y>=original.originY && pos.x<original.originX+original.width && pos.y<original.originY+original.height && (!options.spec.useSelection || selected.count(pos));
+                cell.structure=cell.exists && (cell.terrain==WorldGen::Terrain::BuildingFloor || cell.terrain==WorldGen::Terrain::Bridge || tile->hasWall() || !cell.editable);
+                if(cell.exists && cell.terrain==WorldGen::Terrain::Void)++next->unknown[tile->ground->getID()];
+                // Existing border stacks are retained during enrichment, but a road
+                // ground replacement is allowed only on truly bare ground (below).
+            }
+        }
+        // Existing composite and large sprites occupy more than their anchor.
+        // The inspected halo makes off-selection anchors visible to this guard.
+        for(int y=0;y<r.height;++y)for(int x=0;x<r.width;++x) {
+            const auto* tile=editor.map.getTile(PositionFor(spec,{x,y},0));if(!tile)continue;
+            auto protectFootprint=[&](const Item* item){if(!item || !g_items[item->getID()].sprite)return;const auto* sprite=g_items[item->getID()].sprite;const int width=std::clamp(int(sprite->width),1,32),height=std::clamp(int(sprite->height),1,32);if(width==1 && height==1)return;for(int dy=0;dy<height;++dy)for(int dx=0;dx<width;++dx){const int nx=x-dx,ny=y-dy;if(nx>=0 && ny>=0){auto& c=cells[size_t(ny)*r.width+nx];c.editable=false;c.structure=true;}}};
+            protectFootprint(tile->ground);for(const auto* item:tile->items)protectFootprint(item);
+        }
+        // Tree families are explicit client bindings, not name guessing. Their
+        // neighborhood estimates forest context without changing any ground.
+        for(int y=0;y<r.height;++y)for(int x=0;x<r.width;++x) {
+            const auto* tile=editor.map.getTile(PositionFor(spec,{x,y},0));if(!tile)continue;
+            bool forest=false;for(const auto* item:tile->items)forest|=profile.forestObjects.count(g_items[item->getID()].doodad_brush)!=0;
+            if(!forest)continue;
+            for(int dy=-6;dy<=6;++dy)for(int dx=-6;dx<=6;++dx)if(std::abs(dx)+std::abs(dy)<=6){const int nx=x+dx,ny=y+dy;if(nx>=0 && ny>=0 && nx<r.width && ny<r.height && cells[size_t(ny)*r.width+nx].terrain==WorldGen::Terrain::Grass)cells[size_t(ny)*r.width+nx].terrain=WorldGen::Terrain::Forest;}
+        }
+        std::string problem;
+        if(!WorldExisting::Analyze(settings,cells,next->analysis,problem,progress)){error=wxstr(problem);return false;}
+        auto& plan=next->semantic;plan.settings.width=r.width;plan.settings.height=r.height;plan.settings.seed=spec.seed;plan.settings.settlementCount=0;plan.layers.push_back({0,{}});auto& layer=plan.layers.front();layer.cells.resize(cells.size());
+        for(size_t i=0;i<cells.size();++i) {
+            auto& cell=layer.cells[i];cell.terrain=cells[i].terrain;cell.flags=next->analysis.eligible[i]?WorldGen::None:WorldGen::Reserved;if(cells[i].highland)cell.flags|=WorldGen::Highland;if(cells[i].travel)cell.flags|=WorldGen::Connection;
+            cell.elevation=5000;cell.moisture=5000;cell.temperature=cell.terrain==WorldGen::Terrain::Snow?1500:cell.terrain==WorldGen::Terrain::Desert?8500:5000;
+        }
+        for(const auto& town:editor.map.towns) {
+            const auto p=town.second->getTemplePosition();
+            if(p.z==r.z && plan.settlements.size()<32)plan.settlements.push_back({{p.x-r.originX,p.y-r.originY},0,WorldGen::Terrain::Grass,{}});
+        }
+        // Only the analyzed floor is staged. All original tiles and their item
+        // attributes are copied; enrichment adds items rather than rebuilding them.
+        for(int y=0;y<r.height;++y) {
+            if((y&31)==0 && !Update(progress,"Staging existing-map improvements",55,error))return false;
+            for(int x=0;x<r.width;++x) {
+                const Position pos(r.originX+x,r.originY+y,r.z);
+                if(auto* tile=editor.map.getTile(pos))next->scratch.setTile(pos,tile->deepCopy(next->scratch),true);
+            }
+        }
+        next->roadChanges.assign(cells.size(),0);
+        if(options.connectPaths && !next->analysis.connections.empty() && !profile.road){error="The analysis profile needs roadBrush to improve path gaps.";return false;}
+        std::vector<WorldExisting::Connection> accepted;
+        for(const auto& connection:next->analysis.connections) {
+            bool valid=true;
+            for(const auto p:connection.cells){const auto* tile=editor.map.getTile(PositionFor(spec,p,0));if(!tile || !tile->items.empty())valid=false;}
+            if(!valid)continue;
+            for(const auto p:connection.cells) {
+                const auto pos=PositionFor(spec,p,0);auto* tile=next->scratch.getTile(pos);ScopedMTRandom random(CellSeed(spec.seed,p.x,p.y,r.z,301));profile.road->draw(&next->scratch,tile,nullptr);tile->update();
+                if(spec.pipeline.borderizeAfter)GroundBrush::doBorders(&next->scratch,tile);
+                tile->update();
+                if(!TileWalkable(tile) || !tile->ground || tile->ground->isComplex() || !WorldExisting::Road(ExistingTerrain(tile,profile))){error="The chosen path material must produce recognized walkable road ground.";return false;}
+                for(const auto* item:tile->items)if(!item->isBorder() || item->isComplex() || g_items[item->getID()].isGroundTile() || g_items[item->getID()].isFloorChange() || g_items[item->getID()].isTeleport() || g_items[item->getID()].isMetaItem()){error="Path borders must be ordinary nonblocking border items.";return false;}
+                const size_t i=size_t(p.y)*r.width+p.x;layer.cells[i].terrain=WorldGen::Terrain::Road;layer.cells[i].flags=WorldGen::Reserved;next->roadChanges[i]=1;
+            }
+            accepted.push_back(connection);
+        }
+        next->analysis.connections=std::move(accepted);
+        WorldGen::DecorationEnvironment environment;
+        if(!WorldGen::BuildDecorationEnvironment(layer,r.width,r.height,environment)){error="Could not estimate existing environment.";return false;}
+        for(size_t i=0;i<layer.cells.size();++i){auto& cell=layer.cells[i];const int base=cell.terrain==WorldGen::Terrain::Desert?2000:cell.terrain==WorldGen::Terrain::Forest?6500:cell.terrain==WorldGen::Terrain::Snow?3500:5000;cell.moisture=uint16_t(environment.water[i]<=32?std::max(base,8500-int(environment.water[i])*200):base);}
+        next->requestedObjectSeed=spec.world.objectSeed.value_or(spec.seed);
+        spec.world.objectSeed=CellSeed(next->requestedObjectSeed,r.originX,r.originY,r.z,302);
+        spec.world.natureMask.clear();spec.world.natureMaskPath.clear();spec.doodads.enabled=options.addNature;
+        std::set<Position> blocking;
+        if(options.addNature && !Decorate(spec,plan,next->scratch,blocking,next->stats,progress,error))return false;
+        for(int y=0;y<r.height;++y)for(int x=0;x<r.width;++x) {
+            const auto i=size_t(y)*r.width+x;const auto pos=PositionFor(spec,{x,y},0);const auto* original=editor.map.getTile(pos);const auto* staged=next->scratch.getTile(pos);
+            if(next->roadChanges[i] || (original && staged && original->items.size()!=staged->items.size())) {
+                if(!next->analysis.eligible[i]){error="An improvement attempted to modify a protected cell.";return false;}
+                if(g_gui.gfx.client_version) {
+                    auto covered=[](const Item* item){return item && g_items[item->getID()].sprite;};
+                    if(!covered(staged->ground) || std::any_of(staged->items.begin(),staged->items.end(),[&](const Item* item){return !covered(item);})){error="A proposed existing-map improvement has no sprite metadata in the active client.";return false;}
+                }
+                next->changes.push_back(pos);next->roads+=next->roadChanges[i]!=0;
+            }
+        }
+        next->stats.changedTiles=next->changes.size();next->stats.preparedTiles=next->changes.size();next->stats.contextCopies=std::count_if(cells.begin(),cells.end(),[](const auto& c){return c.exists;});
+        if(!Update(progress,"Existing-map preview ready",90,error))return false;
+        if(next->baseline!=ExistingMapDigest(editor,r) || next->client!=ExistingClientDigest() || next->profileDigest!=ExistingFileDigest(profilePath) || (options.addNature && next->objectsDigest!=ExistingFileDigest(next->objectsPath))){error="The map, client or profile changed during analysis. Analyze again.";return false;}
+        preview.prepared=std::move(next);return true;
+    }
+
+    bool ApplyExisting(Editor& editor,const ExistingPreview& preview,wxString& error,ApplicationStats* stats,const WorldGen::ProgressCallback& progress) {
+        error.clear();const auto state=preview.prepared;
+        if(!state || state->owner!=&editor || editor.IsLiveClient()){error="Build an existing-map preview for this local editor first.";return false;}
+        if(state->changes.empty()){error="This preview has no eligible changes to apply.";return false;}
+        if(!Update(progress,"Applying existing-map improvements",95,error))return false;
+        if(state->baseline!=ExistingMapDigest(editor,state->spec.region) || state->client!=ExistingClientDigest() || state->profileDigest!=ExistingFileDigest(state->options.profilePath) || (state->options.addNature && state->objectsDigest!=ExistingFileDigest(state->objectsPath))){error="The map, client or profile changed after analysis. Rebuild the preview.";return false;}
+        std::unique_ptr<BatchAction> batch(editor.actionQueue->createBatch(ACTION_DRAW));std::unique_ptr<Action> action(editor.actionQueue->createAction(batch.get()));
+        for(const auto pos:state->changes) {
+            auto* tile=state->scratch.getTile(pos)->deepCopy(editor.map);tile->setLocation(editor.map.createTileL(pos));action->addChange(newd Change(tile));
+        }
+        batch->addAction(action.release());editor.actionQueue->resetTimer();editor.addBatch(batch.release(),0);editor.actionQueue->resetTimer();
+        if(stats)*stats=state->stats;g_gui.RefreshView();return true;
+    }
+
+    wxImage RenderExisting(const ExistingPreview& preview,int view) {
+        if(!preview.prepared)return wxImage();const auto& s=*preview.prepared;const auto& r=s.spec.region;wxImage image(r.width,r.height);if(!image.IsOk())return image;
+        for(int y=0;y<r.height;++y)for(int x=0;x<r.width;++x) {
+            const size_t i=size_t(y)*r.width+x;const auto& cell=s.analysis.cells[i];uint32_t color=cell.exists?WorldGen::TerrainColor(cell.terrain):0x15191D;
+            if(cell.exists && cell.terrain==WorldGen::Terrain::Void)color=0xB04BD1;if(cell.travel)color=0xFF40FF;
+            if(view==2)color=s.analysis.eligible[i]?0x46945B:cell.exists?0x905C48:0x15191D;
+            if(view==1)color=((color>>16)/3<<16)|(((color>>8)&255)/3<<8)|((color&255)/3);
+            image.SetRGB(x,y,uint8_t(color>>16),uint8_t(color>>8),uint8_t(color));
+        }
+        if(view==1)for(const auto pos:s.changes){const int x=pos.x-r.originX,y=pos.y-r.originY;const bool road=s.roadChanges[size_t(y)*r.width+x];image.SetRGB(x,y,road?255:60,road?200:230,road?50:220);}
+        return image;
+    }
+    wxString DescribeExisting(const ExistingPreview& preview) {
+        if(!preview.prepared)return "No existing-map analysis.";const auto& s=*preview.prepared;const auto& a=s.analysis;
+        wxString text=wxString::Format("Existing map z=%d | %d x %d inspected with context | %llu recognized grounds | %llu unknown grounds\n%llu structural/protected cells | %llu eligible natural cells | %d road components\nProposed: %llu changed tiles, %llu path tiles in %llu short connections, %llu object anchors in %llu scenes.\nCyan: added objects; yellow: new path ground; purple: unknown material. Buildings and authored objects are retained. Climate is estimated from ground type and water proximity.",s.spec.region.z,a.settings.width,a.settings.height,(unsigned long long)a.recognized,(unsigned long long)a.unknown,(unsigned long long)a.structures,(unsigned long long)a.naturalTiles,a.roadComponentCount,(unsigned long long)s.changes.size(),(unsigned long long)s.roads,(unsigned long long)a.connections.size(),(unsigned long long)s.stats.doodads,(unsigned long long)std::accumulate(s.stats.sceneUsage.begin(),s.stats.sceneUsage.end(),size_t(0),[](size_t sum,const auto& entry){return sum+entry.second;}));
+        if(!s.unknown.empty()){text+="\nUnknown ground IDs (preserved):";size_t shown=0;for(const auto& [id,count]:s.unknown){if(shown++==12){text+=" ...";break;}text+=wxString::Format(" %d (%llu)",id,(unsigned long long)count);}}
+        return text;
+    }
+    bool ExportExisting(const ExistingPreview& preview,const wxString& path,wxString& error) {
+        if(!preview.prepared){error="No existing-map analysis to export.";return false;}
+        const auto& s=*preview.prepared;json::mObject report;report["schemaVersion"]=1;report["source"]="existing-map";report["fingerprint"]=std::to_string(s.baseline);
+        report["description"]=nstr(DescribeExisting(preview));
+        report["seed"]=json::mValue(uint64_t(s.spec.seed));report["objectSeed"]=json::mValue(uint64_t(s.requestedObjectSeed));report["effectiveObjectSeed"]=json::mValue(uint64_t(s.spec.world.objectSeed.value_or(s.spec.seed)));
+        report["analysisProfile"]=nstr(wxFileName(s.options.profilePath).GetFullName());report["objectProfile"]=nstr(wxFileName(s.objectsPath).GetFullName());
+        auto region=[](const GenerationRegion& r){json::mObject o;o["x"]=r.originX;o["y"]=r.originY;o["z"]=r.z;o["width"]=r.width;o["height"]=r.height;return o;};
+        report["scope"]=region(s.editRegion);report["inspected"]=region(s.spec.region);
+        json::mObject counts,options,terrainCounts,brushes,scenes,variants,rejected;
+        counts["recognizedGrounds"]=json::mValue(uint64_t(s.analysis.recognized));counts["unknownGrounds"]=json::mValue(uint64_t(s.analysis.unknown));counts["protectedCells"]=json::mValue(uint64_t(s.analysis.structures));counts["eligibleNature"]=json::mValue(uint64_t(s.analysis.naturalTiles));counts["roadComponents"]=s.analysis.roadComponentCount;counts["travelAnchors"]=json::mValue(uint64_t(s.analysis.travelAnchors));
+        counts["pathConnections"]=int(s.analysis.connections.size());counts["pathTiles"]=json::mValue(uint64_t(s.roads));counts["changedTiles"]=json::mValue(uint64_t(s.changes.size()));counts["objectAnchors"]=json::mValue(uint64_t(s.stats.doodads));report["counts"]=counts;
+        options["addNature"]=s.options.addNature;options["connectPaths"]=s.options.connectPaths;options["maxGap"]=s.options.maxGap;options["maxConnections"]=s.options.maxConnections;options["protectionRadius"]=s.options.protectionRadius;report["options"]=options;
+        std::map<std::string,size_t> terrainUsage;for(const auto& cell:s.analysis.cells)if(cell.exists)++terrainUsage[WorldGen::TerrainName(cell.terrain)];for(const auto& [name,count]:terrainUsage)terrainCounts[name]=json::mValue(uint64_t(count));report["terrainCounts"]=terrainCounts;
+        for(const auto& [name,count]:s.stats.objectBrushUsage)brushes[name]=json::mValue(uint64_t(count));for(const auto& [name,count]:s.stats.sceneUsage)scenes[name]=json::mValue(uint64_t(count));for(const auto& [name,count]:s.stats.sceneVariantUsage)variants[name]=json::mValue(uint64_t(count));for(const auto& [name,count]:s.stats.objectBrushRejected)rejected[name]=json::mValue(uint64_t(count));
+        report["objectBrushUsage"]=brushes;report["sceneUsage"]=scenes;report["sceneVariantUsage"]=variants;report["objectBrushRejected"]=rejected;
+        json::mArray unknown,changes;
+        for(const auto& [id,count]:s.unknown){json::mObject entry;entry["id"]=id;entry["tiles"]=json::mValue(uint64_t(count));unknown.push_back(entry);}
+        for(const auto pos:s.changes){json::mObject entry;json::mArray point;point.push_back(pos.x);point.push_back(pos.y);point.push_back(pos.z);entry["position"]=point;entry["kind"]=s.roadChanges[size_t(pos.y-s.spec.region.originY)*s.spec.region.width+pos.x-s.spec.region.originX]?"path":"objects";changes.push_back(entry);}
+        report["unknownGrounds"]=unknown;report["changes"]=changes;
+        const auto bytes=json::write(json::mValue(report));wxFile file(path,wxFile::write);if(!file.IsOpened() || file.Write(bytes.data(),bytes.size())!=bytes.size()){error="Could not export existing-map report.";return false;}return true;
+    }
+
 }

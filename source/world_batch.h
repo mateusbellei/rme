@@ -6,6 +6,7 @@ namespace WorldBatch {
 	struct Options {
 		wxString recipe, itemsOtb, itemsXml, materials, outputDirectory;
 		wxString dataDirectory, clientDat, townPrefix, housePrefix;
+        wxString existingReviewProfile; // Read-only review of the staged map, never imports an arbitrary OTBM.
 		int houseRent = 0;
 		bool exportPreviews = true;
 		bool exportDiagnostics = true;

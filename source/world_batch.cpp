@@ -1,5 +1,6 @@
 #include "main.h"
 #include "world_batch.h"
+#include "world_existing_editor.h"
 #include "procedural_recipe.h"
 #include "world_export.h"
 #include "world_inputs.h"
@@ -346,6 +347,11 @@ namespace WorldBatch {
 		if (options.clientDat.empty()) {
 			prepared.warnings.push_back("No client DAT supplied: physical blocking and composite coordinates were checked; sprite extents were unavailable.");
 		}
+        WorldEditor::ExistingPreview existingReview;
+        if(!options.existingReviewProfile.empty()) {
+            WorldEditor::ExistingOptions review;review.spec=resolved;review.profilePath=options.existingReviewProfile;
+            if(!WorldEditor::PrepareExisting(editor,review,existingReview,error,progress))return false;
+        }
 		editor.map.setSpawnFilename("world-spawns.xml");
 		editor.map.setHouseFilename("world-houses.xml");
 		editor.map.setMapDescription("Generated world; algorithm " + std::to_string(WorldGen::AlgorithmVersion) + "; plan " + std::to_string(prepared.fingerprint));
@@ -456,6 +462,16 @@ namespace WorldBatch {
 				}
 			}
 		}
+        if(existingReview.ready()) {
+            if(!WorldEditor::ExportExisting(existingReview,output+"existing-analysis.json",error))return false;
+            if(options.exportPreviews) {
+                wxPNGHandler encoder;
+                for(int view=0;view<3;++view) {
+                    const auto filename=wxString::Format("existing-analysis_view%d.png",view);auto image=WorldEditor::RenderExisting(existingReview,view);wxTempFileOutputStream stream(output+filename);
+                    if(!stream.IsOk() || !encoder.SaveFile(&image,stream,false) || !stream.Commit()){error="Could not export existing-map review PNG.";return false;}previews.push_back(nstr(filename));
+                }
+            }
+        }
 		json::mObject editableInputs;
 		if (options.exportEditableInputs) {
 			GenerationSpec editable = resolved;
@@ -475,6 +491,7 @@ namespace WorldBatch {
 		}
 		json::mObject report, client;
 		report["schemaVersion"] = 1;
+        if(existingReview.ready())report["existingAnalysis"]="existing-analysis.json";
 		report["tileBudget"] = json::mValue(uint64_t(options.tileBudget));
 		report["verifiedOTBM"] = prepared.verified;
 		report["previews"] = previews;
@@ -552,7 +569,7 @@ namespace WorldBatch {
 		return true;
 	}
 	int CommandLine(const wxArrayString& args) {
-		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--no-diagnostics] [--editable-inputs] [--town-prefix NAME] [--house-prefix NAME] [--house-rent UINT31] [--tile-budget MAX_TILES] [--seed UINT32] [--verify]";
+		const char* usage = "Usage: rme --generate-world recipe.json items.otb items.xml materials.xml NEW_OUTPUT_DIRECTORY [--data-dir DIR] [--client-dat FILE] [--no-previews] [--no-diagnostics] [--editable-inputs] [--town-prefix NAME] [--house-prefix NAME] [--house-rent UINT31] [--tile-budget MAX_TILES] [--seed UINT32] [--review-existing ANALYSIS_PROFILE.json] [--verify]";
 		if (args.size() == 1 && args[0] == "--help") {
 			std::cout << usage << '\n';
 			return 0;
@@ -593,6 +610,8 @@ namespace WorldBatch {
 				options.dataDirectory = args[i + 1];
 			} else if (args[i] == "--client-dat") {
 				options.clientDat = args[i + 1];
+            } else if(args[i]=="--review-existing") {
+                if(!options.existingReviewProfile.empty()){std::cerr<<"Specify --review-existing once.\n";return 2;}options.existingReviewProfile=args[i+1];
 			} else if (args[i] == "--town-prefix") {
 				options.townPrefix = args[i + 1];
 			} else if (args[i] == "--house-prefix") {

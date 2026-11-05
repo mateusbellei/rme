@@ -482,6 +482,16 @@ def main():
             elif node[0]==6:roof_ids.add(struct.unpack_from("<H",node,1)[0])
         assert len(roof_ids & {926,927,929,936,937,939,946,947,948,956,957,958})>=3
         print("PASS: composed village, role districts, directional roof materials and connected multi-floor caverns")
+        # Interpret the actual loaded client/map, without changing its generated OTBM.
+        reviewed=composed_command.copy();reviewed[6]=str(Path(temporary)/"reviewed-existing")
+        reviewed.extend(["--review-existing",str(source/"data/procedural/profiles/1098/existing_map.json")])
+        generated=subprocess.run(reviewed,cwd=temporary,capture_output=True,text=True,errors="replace",timeout=60)
+        assert generated.returncode==0,generated.stdout+generated.stderr
+        review=json.loads((Path(reviewed[6])/"existing-analysis.json").read_text())
+        assert review["source"]=="existing-map" and review["counts"]["recognizedGrounds"]>0 and review["counts"]["objectAnchors"]>0
+        assert len(review["changes"])==review["counts"]["changedTiles"] and not review["objectBrushRejected"]
+        assert (Path(reviewed[6])/"world.otbm").read_bytes()==(Path(composed_command[6])/"world.otbm").read_bytes()
+        print("PASS: actual-client existing-map interpretation, exact proposals and read-only batch review")
         # Patch constraints must affect actual placement, including shoreline distance.
         constraint_profile = Path(temporary) / "constrained-objects.json"
         for limit in (0, 5):

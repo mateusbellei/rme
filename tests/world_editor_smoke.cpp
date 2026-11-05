@@ -1,6 +1,7 @@
 #include "main.h"
 
 #include "world_editor.h"
+#include "world_existing_editor.h"
 #include "world_decoration.h"
 #include "procedural_recipe.h"
 #include "procedural_common.h"
@@ -1154,7 +1155,90 @@ static int RunMetadataScenario(const wxString& outputDirectory) {
 	}
 }
 
+
+static int RunExistingScenario(const wxString& outputDirectory) {
+    try {
+        const auto directory=std::filesystem::u8path(nstr(outputDirectory));std::filesystem::create_directories(directory);PrepareRegistry();
+        FixtureItem(107,ITEM_GROUP_GROUND);FixtureItem(109,ITEM_GROUP_GROUND);g_items[109].floorChangeDown=true;FixtureItem(400,ITEM_GROUP_CONTAINER,false,ITEM_TYPE_CONTAINER);g_items[400].volume=20;
+        const std::string profile=R"({"version":1,"roadBrush":"fixture floor","objectProfile":"objects.json","grounds":[{"id":100,"terrain":"grass"},{"id":101,"terrain":"ocean"},{"brush":"fixture floor","terrain":"road"}]})";
+        {std::ofstream f(directory/"profile.json");f<<profile;}
+        {std::ofstream f(directory/"objects.json");f<<R"({"version":1,"biomes":{"forest":{"density":180,"brushes":[{"name":"tree bush cactus snow crystal palm"}]}},"scenes":[{"id":"rest","habitats":["forest"],"spacing":24,"radius":3,"chance":100,"objects":[{"x":0,"y":0,"brushes":["tree bush cactus snow crystal palm"]}]}]})";}
+        MapVersion version(MAP_OTBM_2,57);CopyBuffer copy;Editor editor(copy,version);editor.map.setWidth(96);editor.map.setHeight(96);
+        auto put=[&](int x,int y,int z,int id){Position pos(x,y,z);auto* tile=editor.map.allocator(editor.map.createTileL(pos));tile->addItem(Item::Create(id));tile->update();editor.map.setTile(pos,tile,true);return tile;};
+        for(int y=0;y<96;++y)for(int x=0;x<96;++x)put(x,y,7,100);
+        for(int x=4;x<=35;++x)put(x,48,7,104);for(int x=40;x<=80;++x)put(x,48,7,104);
+        auto* script=editor.map.getTile(20,20,7);script->ground->setActionID(4123);
+        auto* authored=editor.map.getTile(40,20,7);auto* note=Item::Create(301);note->setText("Keep authored text");authored->addItem(note);authored->update();
+        auto* chest=editor.map.getTile(24,20,7);auto* container=dynamic_cast<Container*>(Item::Create(400));Check(container!=nullptr,"Container fixture");auto* child=Item::Create(301);child->setActionID(9001);container->getVector().push_back(child);chest->addItem(container);chest->update();
+        auto* owned=editor.map.getTile(14,14,7);owned->house_id=44;
+        auto* wall=editor.map.getTile(30,20,7);wall->addItem(Item::Create(200));wall->update();
+        for(int y=20;y<23;++y)for(int x=70;x<73;++x)put(x,y,7,107);
+        auto* stairs=put(56,60,7,109);auto* portal=editor.map.getTile(50,60,7);auto* teleport=dynamic_cast<Teleport*>(Item::Create(103));teleport->setDestination(Position(45,45,8));portal->addItem(teleport);portal->update();
+        auto* below=put(45,45,8,100);below->addItem(Item::Create(301));below->update();
+        GameSprite large;large.width=12;large.height=3;auto* oldSprite=g_items[310].sprite;g_items[310].sprite=&large;
+        auto* tree=editor.map.getTile(74,36,7);tree->addItem(Item::Create(310));tree->update();
+        WorldEditor::ExistingOptions options;options.profilePath=outputDirectory+"/profile.json";options.spec.region.originX=options.spec.region.originY=8;options.spec.region.width=options.spec.region.height=64;options.spec.region.z=7;options.spec.pipeline.borderizeAfter=false;options.spec.doodads.density=35;options.maxGap=4;options.protectionRadius=1;
+        wxString error;WorldEditor::ExistingPreview preview;const auto before=MapHash(editor.map);mt_seed(918);const auto rng=mt_capture_state();
+        Check(WorldEditor::PrepareExisting(editor,options,preview,error),"Analyze authored map: "+nstr(error));
+        Check(MapHash(editor.map)==before && !editor.actionQueue->canUndo(),"Preparing improvements must not mutate authored map or history");
+        Check(preview.roadTiles()==4 && preview.changedTiles()>4 && preview.stats().doodads>0,"Prepare exact gap repair and additive nature without the original procedural plan");
+        Check(preview.analysis().travelAnchors==2,"Recognize ground stairs and object teleports as protected travel anchors");
+        Check(preview.unknownGrounds().at(107)==9,"Unknown ground IDs are reported for explicit remapping");
+        const auto& scope=preview.region();Check(!preview.analysis().eligible[size_t(36-scope.originY)*scope.width+65-scope.originX],"An outside-selection large sprite protects its visible footprint inside the selection");
+        Check(WorldEditor::RenderExisting(preview,1).IsOk() && WorldEditor::ExportExisting(preview,outputDirectory+"/analysis.json",error),"Analysis and exact change preview can be exported");
+        for(const char* stage:{"Reading existing terrain and protected objects","Finding short gaps between existing paths","Staging existing-map improvements","Decorating biomes","Existing-map preview ready"}) {
+            WorldEditor::ExistingPreview cancelled;bool visited=false;
+            Check(!WorldEditor::PrepareExisting(editor,options,cancelled,error,[&](const char* name,int){if(std::string(name)==stage){visited=true;return false;}return true;}) && visited && !cancelled.ready() && MapHash(editor.map)==before,"Cancel each analysis phase without partial publication or map edits");
+        }
+        Check(!WorldEditor::ApplyExisting(editor,preview,error,nullptr,[](const char*,int){return false;}) && MapHash(editor.map)==before,"Cancel before commit without changing history");
+        auto* changed=editor.map.getTile(10,60,7);changed->ground->setText("manual change after preview");
+        Check(!WorldEditor::ApplyExisting(editor,preview,error) && error.Contains("changed after analysis") && changed->ground->getText()=="manual change after preview","Attribute-only edits invalidate the prepared snapshot");changed->ground->setText("");
+        // Restore the exact attribute map, not only its visible value.
+        delete changed->ground;changed->ground=Item::Create(100);changed->update();
+        {std::ofstream f(directory/"profile.json");f<<profile<<' ';}
+        Check(!WorldEditor::ApplyExisting(editor,preview,error) && MapHash(editor.map)==before,"Changed profile bytes invalidate a proposal");{std::ofstream f(directory/"profile.json");f<<profile;}
+
+        g_items[100].unpassable=true;
+        Check(!WorldEditor::ApplyExisting(editor,preview,error),"Client blocking changes invalidate the proposal");g_items[100].unpassable=false;
+        bool mutated=false;WorldEditor::ExistingPreview raced;
+        Check(!WorldEditor::PrepareExisting(editor,options,raced,error,[&](const char* stage,int){if(!mutated && std::string(stage)=="Staging existing-map improvements"){editor.map.getTile(10,60,7)->ground->setText("concurrent edit");mutated=true;}return true;}) && mutated && !raced.ready() && error.Contains("changed during analysis"),"Changes during analysis cannot become a mixed-state preview");
+        changed=editor.map.getTile(10,60,7);delete changed->ground;changed->ground=Item::Create(100);changed->update();
+        Check(!WorldEditor::ApplyExisting(editor,preview,error,nullptr,[&](const char*,int){editor.map.getTile(10,60,7)->ground->setText("last callback edit");return true;}) && error.Contains("changed after analysis"),"The final cancellable callback runs before snapshot validation");
+        changed=editor.map.getTile(10,60,7);delete changed->ground;changed->ground=Item::Create(100);changed->update();
+        WorldEditor::ApplicationStats stats;Check(WorldEditor::ApplyExisting(editor,preview,error,&stats),"Apply authored-map improvements: "+nstr(error));
+        Check(stats.changedTiles==preview.changedTiles() && editor.map.getTile(36,48,7)->ground->getID()==104,"Commit exactly the displayed proposal");
+        Check(editor.map.getTile(20,20,7)==script && script->ground->getActionID()==4123 && editor.map.getTile(40,20,7)==authored && note->getText()=="Keep authored text" && editor.map.getTile(24,20,7)==chest && child->getActionID()==9001 && editor.map.getTile(14,14,7)==owned && editor.map.getTile(45,45,8)==below && editor.map.getTile(56,60,7)==stairs && editor.map.getTile(50,60,7)==portal && teleport->getDestination()==Position(45,45,8),"Preserve scripted grounds, ordinary objects, nested quest contents, houses and other floors by tile identity");
+        const auto improved=MapHash(editor.map);Check(improved!=before,"Improvement changes the authored map");
+        Check(!WorldEditor::ApplyExisting(editor,preview,error),"Do not apply the same stale preview twice");
+        MapCodec codec(version);MemoryNodeFileWriteHandle encoded;Check(codec.Write(editor.map,encoded),"Encode improved authored map");Editor reopened(copy,version);MemoryNodeFileReadHandle nodes(encoded.getMemory(),encoded.getSize());Check(codec.Read(reopened.map,nodes) && MapHash(reopened.map)==improved,"Improved authored map and exact attributes survive production OTBM");
+        Check(reopened.map.getTile(20,20,7)->ground->getActionID()==4123,"Scripted ground attribute survives OTBM export");
+        editor.actionQueue->undo();Check(MapHash(editor.map)==before && !editor.actionQueue->canUndo(),"All improvements undo together");editor.actionQueue->redo();Check(MapHash(editor.map)==improved,"All improvements redo exactly");editor.actionQueue->undo();
+        WorldEditor::ExistingPreview replay;Check(WorldEditor::PrepareExisting(editor,options,replay,error) && WorldEditor::ApplyExisting(editor,replay,error) && MapHash(editor.map)==improved,"Same source/scope/seed reproduces the exact additive intervention");editor.actionQueue->undo();
+        auto alternate=options;alternate.spec.seed^=1;WorldEditor::ExistingPreview varied;Check(WorldEditor::PrepareExisting(editor,alternate,varied,error) && WorldEditor::ApplyExisting(editor,varied,error) && MapHash(editor.map)!=improved,"An independent improvement seed changes objects without rebuilding authored terrain");editor.actionQueue->undo();
+        // Capture an irregular selection: holes and a disconnected island stay protected.
+        for(int y=8;y<72;++y)for(int x=8;x<72;++x)if(!(x>=30 && x<=40 && y>=30 && y<=40))editor.selection.addInternal(editor.map.getTile(x,y,7));
+        options.spec.useSelection=true;WorldEditor::ExistingPreview selected;Check(WorldEditor::PrepareExisting(editor,options,selected,error),"Analyze irregular selected tiles: "+nstr(error));
+        auto* hole=editor.map.getTile(35,35,7);Check(WorldEditor::ApplyExisting(editor,selected,error) && editor.map.getTile(35,35,7)==hole,"Selection holes are retained by identity");editor.actionQueue->undo();editor.selection.getTiles().clear();
+
+        {
+            Editor cave(copy,version);cave.map.setWidth(96);cave.map.setHeight(96);
+            for(int y=8;y<72;++y)for(int x=8;x<72;++x){Position pos(x,y,8);auto* tile=cave.map.allocator(cave.map.createTileL(pos));tile->addItem(Item::Create(100));tile->update();cave.map.setTile(pos,tile,true);}
+            {std::ofstream f(directory/"cave-profile.json");f<<R"({"version":1,"grounds":[{"id":100,"terrain":"cave_floor"}]})";}
+            {std::ofstream f(directory/"cave-objects.json");f<<R"({"version":1,"biomes":{"cave":{"brushes":[{"name":"tree bush cactus snow crystal palm"}]}}})";}
+            auto caveOptions=options;caveOptions.spec.useSelection=false;caveOptions.spec.region.z=8;caveOptions.profilePath=outputDirectory+"/cave-profile.json";caveOptions.spec.world.objectProfilePath=outputDirectory+"/cave-objects.json";caveOptions.connectPaths=false;
+            WorldEditor::ExistingPreview cavePreview;const auto originalCave=MapHash(cave.map);
+            Check(WorldEditor::PrepareExisting(cave,caveOptions,cavePreview,error) && cavePreview.stats().doodads>0,"Recognize and enrich an authored cave on its actual floor");
+            Check(WorldEditor::ApplyExisting(cave,cavePreview,error) && !cave.map.getTile(32,32,7),"Cave improvements do not invent surface terrain or floor links");
+            cave.actionQueue->undo();Check(MapHash(cave.map)==originalCave,"Cave improvements undo atomically");
+        }
+        const auto rngAfter=mt_capture_state();Check(rng.values==rngAfter.values && rng.index==rngAfter.index,"Analysis and improvement preserve global brush randomness");g_items[310].sprite=oldSprite;
+        std::cout<<"PASS: authored map analysis, structural gap repair, additive nature, metadata/selection/large-sprite protection, stale snapshots, cancellation, undo/redo and OTBM\n";
+        return 0;
+    } catch(const std::exception& exception){std::cerr<<"FAIL: existing map: "<<exception.what()<<'\n';return 1;}
+}
+
 int RunWorldEditorSelfTest(const wxString& outputDirectory) {
+    const int existing=RunExistingScenario(outputDirectory+"/existing-map");if(existing!=0)return existing;
 	const int prefabs = RunPrefabScenario(outputDirectory + "/otbm-prefabs");
 	if (prefabs != 0) return prefabs;
 	const int png = RunPngScenario(outputDirectory + "/png-import");

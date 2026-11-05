@@ -26,6 +26,7 @@ private:
 	void OnPresetChanged(wxCommandEvent& event);
 	void OnWorldSettings(wxCommandEvent& event);
 	void OnPreviewWorld(wxCommandEvent& event);
+    void OnImproveExisting(wxCommandEvent& event);
 	void SyncFromSelection();
 	void UpdateElevationLabel();
 	void ApplySpecToDialog(const GenerationSpec& spec);

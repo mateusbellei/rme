@@ -1200,6 +1200,9 @@ static int RunExistingScenario(const wxString& outputDirectory) {
 
         g_items[100].unpassable=true;
         Check(!WorldEditor::ApplyExisting(editor,preview,error),"Client blocking changes invalidate the proposal");g_items[100].unpassable=false;
+        g_items[109].floorChangeDown=false;g_items[109].floorChangeNorth=true;
+        Check(!WorldEditor::ApplyExisting(editor,preview,error) && error.Contains("changed after analysis") && MapHash(editor.map)==before && !editor.actionQueue->canUndo(),"Directional stair edits invalidate a preview even when isFloorChange remains true");
+        g_items[109].floorChangeNorth=false;g_items[109].floorChangeDown=true;
         bool mutated=false;WorldEditor::ExistingPreview raced;
         Check(!WorldEditor::PrepareExisting(editor,options,raced,error,[&](const char* stage,int){if(!mutated && std::string(stage)=="Staging existing-map improvements"){editor.map.getTile(10,60,7)->ground->setText("concurrent edit");mutated=true;}return true;}) && mutated && !raced.ready() && error.Contains("changed during analysis"),"Changes during analysis cannot become a mixed-state preview");
         changed=editor.map.getTile(10,60,7);delete changed->ground;changed->ground=Item::Create(100);changed->update();

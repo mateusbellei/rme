@@ -1448,6 +1448,7 @@ namespace WorldEditor {
             // Include editor/runtime definitions beyond the OTB file's max ID.
             for(unsigned id=1;id<=65535;++id)if(g_items.typeExists(id)) {
                 const auto& type=g_items[id];HashExisting(hash,id);HashExisting(hash,type.clientID);
+                HashExisting(hash,type.floorChangeDown);HashExisting(hash,type.floorChangeNorth);HashExisting(hash,type.floorChangeSouth);HashExisting(hash,type.floorChangeEast);HashExisting(hash,type.floorChangeWest);HashExisting(hash,type.floorChange);
                 HashExisting(hash,type.unpassable);HashExisting(hash,type.isGroundTile());HashExisting(hash,type.isFloorChange());HashExisting(hash,type.isTeleport());HashExisting(hash,type.ground_equivalent);
                 HashExisting(hash,type.isWall);HashExisting(hash,type.isBorder);HashExisting(hash,type.isDoor());HashExisting(hash,type.isContainer());HashExisting(hash,type.isDepot());HashExisting(hash,type.isMetaItem());HashExisting(hash,type.brush?type.brush->getID():0);
                 HashExisting(hash,type.sprite?type.sprite->width:0);HashExisting(hash,type.sprite?type.sprite->height:0);
